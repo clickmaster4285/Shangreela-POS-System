@@ -45,6 +45,13 @@ const DEFAULT_PERMISSIONS: PermissionsConfig = {
   },
 };
 
+const STORAGE_KEYS = {
+  user: 'shirazre_user',
+  users: 'shirazre_users',
+  permissions: 'shirazre_permissions',
+  creds: 'shirazre_creds',
+} as const;
+
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -63,29 +70,26 @@ function withDomainAliases(input: Record<string, Credential>) {
   const out: Record<string, Credential> = { ...input };
 
   for (const [email, cred] of Object.entries(input)) {
-    if (email.endsWith('@Shiraz Restaurant.com')) {
-      out[email.replace(/@Shiraz Restaurant\.com$/, '@Shiraz Restaurant.com')] = cred;
-    }
-    if (email.endsWith('@Shiraz Restaurant.com')) {
-      out[email.replace(/@Shiraz Restaurant\.com$/, '@Shiraz Restaurant.com')] = cred;
-    }
+    // Preserve access if domain changed over time.
+    if (email.endsWith('@shiraz.com')) out[email.replace(/@shiraz\.com$/, '@shirazre.com')] = cred;
+    if (email.endsWith('@shirazre.com')) out[email.replace(/@shirazre\.com$/, '@shiraz.com')] = cred;
   }
 
   return out;
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@Shiraz Restaurant.com', role: 'admin', avatar: '' },
-  { id: '2', name: 'John Cashier', email: 'cashier@Shiraz Restaurant.com', role: 'cashier', avatar: '' },
-  { id: '3', name: 'Sarah Waiter', email: 'waiter@Shiraz Restaurant.com', role: 'waiter', avatar: '' },
-  { id: '4', name: 'Ali HR', email: 'hr@Shiraz Restaurant.com', role: 'hr', avatar: '' },
+  { id: '1', name: 'Admin User', email: 'admin@shirazre.com', role: 'admin', avatar: '' },
+  { id: '2', name: 'John Cashier', email: 'cashier@shirazre.com', role: 'cashier', avatar: '' },
+  { id: '3', name: 'Sarah Waiter', email: 'waiter@shirazre.com', role: 'waiter', avatar: '' },
+  { id: '4', name: 'Ali HR', email: 'hr@shirazre.com', role: 'hr', avatar: '' },
 ];
 
 const CREDENTIALS: Record<string, Credential> = {
-  'admin@Shiraz Restaurant.com': { password: 'admin123', userId: '1' },
-  'cashier@Shiraz Restaurant.com': { password: 'cashier123', userId: '2' },
-  'waiter@Shiraz Restaurant.com': { password: 'waiter123', userId: '3' },
-  'hr@Shiraz Restaurant.com': { password: 'hr123', userId: '4' },
+  'admin@shirazre.com': { password: 'admin123', userId: '1' },
+  'cashier@shirazre.com': { password: 'cashier123', userId: '2' },
+  'waiter@shirazre.com': { password: 'waiter123', userId: '3' },
+  'hr@shirazre.com': { password: 'hr123', userId: '4' },
 };
 
 interface AuthContextType {
@@ -107,44 +111,56 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_user');
+    const saved =
+      localStorage.getItem(STORAGE_KEYS.user) ??
+      localStorage.getItem('Shiraz_user') ??
+      localStorage.getItem('Shiraz Restaurant_user');
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed && parsed.id && parsed.email && parsed.role) return { ...parsed, email: normalizeEmail(parsed.email) };
-      localStorage.removeItem('Shiraz Restaurant_user');
+      localStorage.removeItem(STORAGE_KEYS.user);
       return null;
     } catch {
-      localStorage.removeItem('Shiraz Restaurant_user');
+      localStorage.removeItem(STORAGE_KEYS.user);
       return null;
     }
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_users');
+    const saved =
+      localStorage.getItem(STORAGE_KEYS.users) ??
+      localStorage.getItem('Shiraz_users') ??
+      localStorage.getItem('Shiraz Restaurant_users');
     return saved ? normalizeUsers(JSON.parse(saved)) : DEFAULT_USERS;
   });
 
   const [permissions, setPermissions] = useState<PermissionsConfig>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_permissions');
+    const saved =
+      localStorage.getItem(STORAGE_KEYS.permissions) ??
+      localStorage.getItem('Shiraz_permissions') ??
+      localStorage.getItem('Shiraz Restaurant_permissions');
     return saved ? JSON.parse(saved) : DEFAULT_PERMISSIONS;
   });
 
   const [creds, setCreds] = useState<Record<string, Credential>>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_creds');
+    const saved =
+      localStorage.getItem(STORAGE_KEYS.creds) ??
+      localStorage.getItem('Shiraz_creds') ??
+      localStorage.getItem('Shiraz Restaurant_creds');
     const fromStorage = saved ? withDomainAliases(normalizeCreds(JSON.parse(saved))) : {};
     // Ensure defaults exist, but keep any customized stored creds
     return { ...CREDENTIALS, ...fromStorage };
   });
 
   useEffect(() => {
-    if (user) localStorage.setItem('Shiraz Restaurant_user', JSON.stringify(user));
-    else localStorage.removeItem('Shiraz Restaurant_user');
+    if (user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+    else localStorage.removeItem(STORAGE_KEYS.user);
   }, [user]);
 
-  useEffect(() => { localStorage.setItem('Shiraz Restaurant_users', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('Shiraz Restaurant_permissions', JSON.stringify(permissions)); }, [permissions]);
-  useEffect(() => { localStorage.setItem('Shiraz Restaurant_creds', JSON.stringify(creds)); }, [creds]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.permissions, JSON.stringify(permissions)); }, [permissions]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.creds, JSON.stringify(creds)); }, [creds]);
 
   const login = (email: string, password: string): string | null => {
     const cred = creds[normalizeEmail(email)];

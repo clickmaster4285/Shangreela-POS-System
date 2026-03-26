@@ -31,10 +31,10 @@ export default function Login() {
   };
 
   const quickUsers = [
-    { label: 'Admin', em: 'admin@Shiraz Restaurant.com', pw: 'admin123', color: 'bg-primary/10 text-primary border-primary/20', avatar: staffAdmin },
-    { label: 'Cashier', em: 'cashier@Shiraz Restaurant.com', pw: 'cashier123', color: 'bg-success/10 text-success border-success/20', avatar: staffCashier },
-    { label: 'Waiter', em: 'waiter@Shiraz Restaurant.com', pw: 'waiter123', color: 'bg-warning/10 text-warning border-warning/20', avatar: staffWaiter },
-    { label: 'HR', em: 'hr@Shiraz Restaurant.com', pw: 'hr123', color: 'bg-accent/30 text-accent-foreground border-accent/40', avatar: staffAdmin },
+    { label: 'Admin', em: 'admin@shirazre.com', pw: 'admin123', color: 'bg-primary/10 text-primary border-primary/20', avatar: staffAdmin },
+    { label: 'Cashier', em: 'cashier@shirazre.com', pw: 'cashier123', color: 'bg-success/10 text-success border-success/20', avatar: staffCashier },
+    { label: 'Waiter', em: 'waiter@shirazre.com', pw: 'waiter123', color: 'bg-warning/10 text-warning border-warning/20', avatar: staffWaiter },
+    { label: 'HR', em: 'hr@shirazre.com', pw: 'hr123', color: 'bg-accent/30 text-accent-foreground border-accent/40', avatar: staffAdmin },
   ];
 
   return (
