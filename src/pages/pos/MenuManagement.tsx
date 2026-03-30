@@ -7,15 +7,38 @@ export default function MenuManagement() {
   const [items, setItems] = useState<MenuItem[]>(initialItems);
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', image: '' });
+  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '' });
 
-  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '', image: '' }); setEditing(null); setShowForm(true); };
-  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, image: item.image }); setEditing(item); setShowForm(true); };
+  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '' }); setEditing(null); setShowForm(true); };
+  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description }); setEditing(item); setShowForm(true); };
 
   const save = () => {
     if (!form.name || !form.price) return;
-    if (editing) { setItems(prev => prev.map(i => i.id === editing.id ? { ...i, ...form, price: parseFloat(form.price) } : i)); toast.success('Item updated'); }
-    else { setItems(prev => [...prev, { id: Date.now().toString(), ...form, price: parseFloat(form.price), available: true, perishable: false }]); toast.success('Item added'); }
+    if (editing) {
+      setItems(prev =>
+        prev.map(i =>
+          i.id === editing.id
+            ? { ...i, name: form.name, price: parseFloat(form.price), category: form.category, description: form.description }
+            : i
+        )
+      );
+      toast.success('Item updated');
+    } else {
+      setItems(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          name: form.name,
+          price: parseFloat(form.price),
+          category: form.category,
+          description: form.description,
+          image: '',
+          available: true,
+          perishable: false,
+        },
+      ]);
+      toast.success('Item added');
+    }
     setShowForm(false);
   };
 
@@ -52,7 +75,6 @@ export default function MenuManagement() {
               {menuCategories.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
             </select>
             <textarea className={`${inputClass} resize-none h-20`} placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
-            <input className={inputClass} placeholder="Image URL" value={form.image} onChange={e => setForm({...form, image: e.target.value})} />
             <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
               {editing ? 'Update' : 'Add'} Item
             </button>
@@ -75,12 +97,9 @@ export default function MenuManagement() {
             {items.map(item => (
               <tr key={item.id} className="border-b border-border/50 last:border-0">
                 <td className="py-3 px-2">
-                  <div className="flex items-center gap-3">
-                    <img src={item.image} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
-                    <div>
-                      <p className="font-medium text-foreground">{item.name}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">{item.description}</p>
-                    </div>
+                  <div>
+                    <p className="font-medium text-foreground">{item.name}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{item.description}</p>
                   </div>
                 </td>
                 <td className="py-3 px-2 text-muted-foreground">{item.category}</td>

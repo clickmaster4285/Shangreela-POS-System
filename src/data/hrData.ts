@@ -68,16 +68,16 @@ export interface ShiftBlock {
 const today = new Date().toISOString().split('T')[0];
 
 export const defaultEmployees: Employee[] = [
-  { id: '1', employeeId: 'EMP-001', name: 'Muhammad Ali', phone: '0300-1111111', email: 'ali@Shiraz Restaurant.com', role: 'Head Chef', department: 'Kitchen', joinDate: '2022-01-15', salary: 80000, status: 'active' },
-  { id: '2', employeeId: 'EMP-002', name: 'Ahmed Hassan', phone: '0301-2222222', email: 'ahmed@Shiraz Restaurant.com', role: 'Sous Chef', department: 'Kitchen', joinDate: '2022-06-01', salary: 55000, status: 'active' },
-  { id: '3', employeeId: 'EMP-003', name: 'Fatima Noor', phone: '0302-3333333', email: 'fatima@Shiraz Restaurant.com', role: 'Cashier', department: 'Front', joinDate: '2023-02-10', salary: 35000, status: 'active' },
-  { id: '4', employeeId: 'EMP-004', name: 'Usman Khan', phone: '0303-4444444', email: 'usman@Shiraz Restaurant.com', role: 'Waiter', department: 'Front', joinDate: '2023-05-20', salary: 28000, status: 'active' },
-  { id: '5', employeeId: 'EMP-005', name: 'Sara Malik', phone: '0304-5555555', email: 'sara@Shiraz Restaurant.com', role: 'Waiter', department: 'Front', joinDate: '2023-07-15', salary: 28000, status: 'active' },
-  { id: '6', employeeId: 'EMP-006', name: 'Bilal Raza', phone: '0305-6666666', email: 'bilal@Shiraz Restaurant.com', role: 'BBQ Chef', department: 'Kitchen', joinDate: '2022-09-01', salary: 50000, status: 'active' },
-  { id: '7', employeeId: 'EMP-007', name: 'Ayesha Tariq', phone: '0306-7777777', email: 'ayesha@Shiraz Restaurant.com', role: 'Manager', department: 'Management', joinDate: '2021-11-01', salary: 90000, status: 'active' },
-  { id: '8', employeeId: 'EMP-008', name: 'Zain Aslam', phone: '0307-8888888', email: 'zain@Shiraz Restaurant.com', role: 'Helper', department: 'Kitchen', joinDate: '2024-01-10', salary: 22000, status: 'active' },
-  { id: '9', employeeId: 'EMP-009', name: 'Hamza Shah', phone: '0308-9999999', email: 'hamza@Shiraz Restaurant.com', role: 'Delivery Boy', department: 'Front', joinDate: '2024-03-01', salary: 25000, status: 'active' },
-  { id: '10', employeeId: 'EMP-010', name: 'Nadia Iqbal', phone: '0309-0000000', email: 'nadia@Shiraz Restaurant.com', role: 'Tandoor Chef', department: 'Kitchen', joinDate: '2023-01-15', salary: 40000, status: 'active' },
+  { id: '1', employeeId: 'EMP-001', name: 'Muhammad Ali', phone: '0300-1111111', email: 'ali@shirazre.com', role: 'Head Chef', department: 'Kitchen', joinDate: '2022-01-15', salary: 80000, status: 'active' },
+  { id: '2', employeeId: 'EMP-002', name: 'Ahmed Hassan', phone: '0301-2222222', email: 'ahmed@shirazre.com', role: 'Sous Chef', department: 'Kitchen', joinDate: '2022-06-01', salary: 55000, status: 'active' },
+  { id: '3', employeeId: 'EMP-003', name: 'Fatima Noor', phone: '0302-3333333', email: 'fatima@shirazre.com', role: 'Cashier', department: 'Front', joinDate: '2023-02-10', salary: 35000, status: 'active' },
+  { id: '4', employeeId: 'EMP-004', name: 'Usman Khan', phone: '0303-4444444', email: 'usman@shirazre.com', role: 'Waiter', department: 'Front', joinDate: '2023-05-20', salary: 28000, status: 'active' },
+  { id: '5', employeeId: 'EMP-005', name: 'Sara Malik', phone: '0304-5555555', email: 'sara@shirazre.com', role: 'Waiter', department: 'Front', joinDate: '2023-07-15', salary: 28000, status: 'active' },
+  { id: '6', employeeId: 'EMP-006', name: 'Bilal Raza', phone: '0305-6666666', email: 'bilal@shirazre.com', role: 'BBQ Chef', department: 'Kitchen', joinDate: '2022-09-01', salary: 50000, status: 'active' },
+  { id: '7', employeeId: 'EMP-007', name: 'Ayesha Tariq', phone: '0306-7777777', email: 'ayesha@shirazre.com', role: 'Manager', department: 'Management', joinDate: '2021-11-01', salary: 90000, status: 'active' },
+  { id: '8', employeeId: 'EMP-008', name: 'Zain Aslam', phone: '0307-8888888', email: 'zain@shirazre.com', role: 'Helper', department: 'Kitchen', joinDate: '2024-01-10', salary: 22000, status: 'active' },
+  { id: '9', employeeId: 'EMP-009', name: 'Hamza Shah', phone: '0308-9999999', email: 'hamza@shirazre.com', role: 'Delivery Boy', department: 'Front', joinDate: '2024-03-01', salary: 25000, status: 'active' },
+  { id: '10', employeeId: 'EMP-010', name: 'Nadia Iqbal', phone: '0309-0000000', email: 'nadia@shirazre.com', role: 'Tandoor Chef', department: 'Kitchen', joinDate: '2023-01-15', salary: 40000, status: 'active' },
 ];
 
 export const defaultAttendance: AttendanceRecord[] = [

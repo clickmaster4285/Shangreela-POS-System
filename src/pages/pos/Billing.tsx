@@ -3,6 +3,7 @@ import { sampleOrders } from '@/data/mockData';
 import { CreditCard, Banknote, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
+import { computePakistanTaxTotals, PKR_FURTHER_TAX_RATE, PKR_GST_RATE } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Billing() {
@@ -13,8 +14,10 @@ export default function Billing() {
 
   const subtotal = selectedOrder.items.reduce((s, i) => s + i.menuItem.price * i.quantity, 0);
   const discountAmt = subtotal * (discount / 100);
-  const tax = (subtotal - discountAmt) * 0.1;
-  const total = subtotal - discountAmt + tax;
+  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount } = computePakistanTaxTotals(
+    subtotal,
+    discountAmt
+  );
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -61,7 +64,7 @@ export default function Billing() {
         {/* Receipt */}
         <div className="pos-card">
           <div className="text-center mb-4 pb-4 border-b border-border border-dashed">
-            <h2 className="font-serif text-xl font-bold text-foreground">Shiraz Restaurant Restaurant</h2>
+            <h2 className="font-serif text-xl font-bold text-foreground">Shiraz Restaurant</h2>
             <p className="text-xs text-muted-foreground">123 Royal Avenue, Islamabad</p>
             <p className="text-xs text-muted-foreground">Tel: +92 51 1234567</p>
           </div>
@@ -84,8 +87,11 @@ export default function Billing() {
           <div className="space-y-1.5 text-sm mb-4">
             <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
             {discount > 0 && <div className="flex justify-between text-success"><span>Discount ({discount}%)</span><span>-{fmt(discountAmt)}</span></div>}
-            <div className="flex justify-between text-muted-foreground"><span>Tax (10%)</span><span>{fmt(tax)}</span></div>
-            <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border"><span>Total</span><span>{fmt(total)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>{fmt(gstAmount)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>Further tax ({Math.round(PKR_FURTHER_TAX_RATE * 100)}%)</span><span>{fmt(furtherTaxAmount)}</span></div>
+            <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
+            <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border"><span>Total</span><span>{fmt(grandTotal)}</span></div>
           </div>
 
           {/* Discount */}
@@ -126,7 +132,7 @@ export default function Billing() {
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
                 items: selectedOrder.items, subtotal, discount: discountAmt, discountPercent: discount,
-                tax, total, paymentMethod, customerName: selectedOrder.customerName,
+                paymentMethod, customerName: selectedOrder.customerName,
               });
               toast.success('Receipt sent to printer!');
             }} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-muted/80 transition-colors">
@@ -136,7 +142,7 @@ export default function Billing() {
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
                 items: selectedOrder.items, subtotal, discount: discountAmt, discountPercent: discount,
-                tax, total, paymentMethod, customerName: selectedOrder.customerName,
+                paymentMethod, customerName: selectedOrder.customerName,
               });
               toast.success('Payment processed!');
             }} className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors">

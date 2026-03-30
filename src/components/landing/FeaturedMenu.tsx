@@ -49,17 +49,12 @@ export default function FeaturedMenu() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass-card-elevated overflow-hidden hover-lift group"
+                className="glass-card-elevated hover-lift p-5"
               >
-                <div className="aspect-square overflow-hidden">
-                  <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                </div>
-                <div className="p-4">
-                  <span className="text-xs text-primary font-medium uppercase tracking-wider">{item.category}</span>
-                  <h3 className="font-serif text-lg font-semibold text-foreground mt-1">{item.name}</h3>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
-                  <p className="font-serif text-xl font-bold text-primary mt-3">{formatPKR(item.price)}</p>
-                </div>
+                <span className="text-xs text-primary font-medium uppercase tracking-wider">{item.category}</span>
+                <h3 className="font-serif text-lg font-semibold text-foreground mt-1">{item.name}</h3>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
+                <p className="font-serif text-xl font-bold text-primary mt-3">{formatPKR(item.price)}</p>
               </motion.div>
             ))}
           </motion.div>

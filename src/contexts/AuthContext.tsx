@@ -133,10 +133,6 @@ function normalizeCreds(input: Record<string, Credential>) {
   return Object.fromEntries(Object.entries(input).map(([email, v]) => [normalizeEmail(email), v]));
 }
 
-function normalizeUsers(input: User[]): User[] {
-  return input.map(u => ({ ...u, email: normalizeEmail(u.email), role: migrateRole(u.role as string) }));
-}
-
 function migrateRole(r: string): Role {
   const map: Record<string, Role> = {
     admin: 'superadmin',
@@ -148,6 +144,31 @@ function migrateRole(r: string): Role {
     waiter: 'fahad',
   };
   return map[r] ?? 'cashier';
+}
+
+function upgradeLegacyUser(u: User): User {
+  const normalizedEmail = normalizeEmail(u.email);
+  const role = migrateRole(u.role as string);
+
+  if (
+    role === 'superadmin' &&
+    (normalizedEmail === 'admin@shirazre.com' ||
+      normalizedEmail === 'admin@shiraz.com' ||
+      u.name === 'Admin User')
+  ) {
+    return {
+      ...u,
+      name: 'Superadmin',
+      email: 'superadmin@shirazre.com',
+      role,
+    };
+  }
+
+  return { ...u, email: normalizedEmail, role };
+}
+
+function normalizeUsers(input: User[]): User[] {
+  return input.map(u => upgradeLegacyUser(u));
 }
 
 function withDomainAliases(input: Record<string, Credential>) {
@@ -236,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const parsed = JSON.parse(saved);
       if (parsed && parsed.id && parsed.email && parsed.role) {
-        return { ...parsed, email: normalizeEmail(parsed.email), role: migrateRole(parsed.role) };
+        return upgradeLegacyUser(parsed as User);
       }
       localStorage.removeItem(STORAGE_KEYS.user);
       return null;
@@ -297,7 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!cred || cred.password !== password) return 'Invalid email or password';
     const foundUser = users.find(u => u.id === cred.userId);
     if (!foundUser) return 'User not found';
-    setUser({ ...foundUser, role: migrateRole(foundUser.role) });
+    setUser(upgradeLegacyUser(foundUser));
     return null;
   };
 

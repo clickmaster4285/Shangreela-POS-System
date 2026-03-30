@@ -1,19 +1,31 @@
-import { useState } from 'react';
-import { menuItems, menuCategories, type CartItem, type MenuItem } from '@/data/mockData';
+import { useMemo, useState, useCallback } from 'react';
+import { menuItems, type CartItem, type MenuItem } from '@/data/mockData';
+import { POSCategoryFolderGrid, POSFolderContent, categoryLabelToDataCategory } from '@/components/pos/Form';
 import { Plus, Minus, Trash2, ShoppingBag, Printer, Pause, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { printReceipt } from '@/utils/printReceipt';
+import { computePakistanTaxTotals, PKR_FURTHER_TAX_RATE, PKR_GST_RATE } from '@/utils/pakistanTax';
 
 export default function POSScreen() {
   const { hasAction } = useAuth();
-  const [category, setCategory] = useState('All');
+  /** `null` = full-screen category folders; otherwise open that folder’s items */
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
   const [noteItem, setNoteItem] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
 
-  const filtered = category === 'All' ? menuItems : menuItems.filter(i => i.category === category);
+  const itemCount = useCallback((label: string) => {
+    if (label === 'All') return menuItems.length;
+    return menuItems.filter(i => i.category === categoryLabelToDataCategory(label)).length;
+  }, []);
+
+  const folderItems = useMemo(() => {
+    if (!openFolder) return [];
+    if (openFolder === 'All') return menuItems;
+    return menuItems.filter(i => i.category === categoryLabelToDataCategory(openFolder));
+  }, [openFolder]);
 
   const addToCart = (item: MenuItem) => {
     setCart(prev => {
@@ -28,8 +40,8 @@ export default function POSScreen() {
   };
 
   const subtotal = cart.reduce((s, c) => s + c.menuItem.price * c.quantity, 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const discountAmt = 0;
+  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(subtotal, discountAmt);
 
   const saveNote = () => {
     if (noteItem) {
@@ -41,44 +53,36 @@ export default function POSScreen() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-7rem)]">
-      {/* Left: Categories */}
-      <div className="lg:w-24 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto scrollbar-thin shrink-0">
-        {menuCategories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`px-3 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
-              category === cat ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Center: Menu grid */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-          {filtered.map(item => (
-            <button
-              key={item.id}
-              onClick={() => addToCart(item)}
-              className="pos-card text-left group"
-              disabled={!item.available}
-            >
-              <div className="aspect-[4/3] rounded-xl overflow-hidden mb-2">
-                <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+      {/* Full-screen category folders OR items inside the selected folder */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        {openFolder === null ? (
+          <POSCategoryFolderGrid itemCount={itemCount} onOpenFolder={setOpenFolder} />
+        ) : (
+          <POSFolderContent title={openFolder} onBack={() => setOpenFolder(null)}>
+            {folderItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No items in this category.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                {folderItems.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => addToCart(item)}
+                    className="pos-card text-left p-3 rounded-xl border border-border hover:border-primary/35 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                    disabled={!item.available}
+                  >
+                    <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.category}</p>
+                    <p className="font-serif text-base font-bold text-primary mt-2">Rs. {item.price.toLocaleString()}</p>
+                  </button>
+                ))}
               </div>
-              <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
-              <p className="text-xs text-muted-foreground">{item.category}</p>
-              <p className="font-serif text-base font-bold text-primary mt-1">Rs. {item.price.toLocaleString()}</p>
-            </button>
-          ))}
-        </div>
+            )}
+          </POSFolderContent>
+        )}
       </div>
 
       {/* Right: Cart */}
-      <div className="lg:w-80 flex flex-col pos-card p-0 overflow-hidden">
+      <div className="lg:w-80 flex flex-col pos-card p-0 overflow-hidden relative">
         {/* Order type */}
         <div className="p-3 border-b border-border flex gap-1">
           {(['dine-in', 'takeaway', 'delivery'] as const).map(t => (
@@ -149,10 +153,16 @@ export default function POSScreen() {
             <span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Tax (10%)</span><span>Rs. {Math.round(tax).toLocaleString()}</span>
+            <span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-base font-bold text-foreground">
-            <span>Total</span><span>Rs. {Math.round(total).toLocaleString()}</span>
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Further tax ({Math.round(PKR_FURTHER_TAX_RATE * 100)}%)</span><span>Rs. {furtherTaxAmount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
+            <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/60">
+            <span>Total</span><span>Rs. {grandTotal.toLocaleString()}</span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 pt-2">
@@ -165,7 +175,7 @@ export default function POSScreen() {
             <button onClick={() => {
               if(cart.length) {
                 const orderId = `ORD-${Date.now().toString().slice(-4)}`;
-                printReceipt({ orderId, orderType, items: cart, subtotal, discount: 0, discountPercent: 0, tax, total });
+                printReceipt({ orderId, orderType, items: cart, subtotal, discount: 0, discountPercent: 0 });
                 toast.success('Bill printed');
               }
             }} className="py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium hover:bg-muted/80 transition-colors flex items-center justify-center gap-1">
