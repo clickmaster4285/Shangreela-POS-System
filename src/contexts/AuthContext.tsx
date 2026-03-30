@@ -1,6 +1,15 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
-export type Role = 'admin' | 'cashier' | 'waiter' | 'hr';
+export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier';
+
+export const ROLE_LABELS: Record<Role, string> = {
+  superadmin: 'Superadmin',
+  hassaan: 'Hassaan shb',
+  fahad: 'Fahad shb',
+  cashier: 'Cashier',
+};
+
+export const MANAGER_ROLES: Role[] = ['superadmin', 'hassaan', 'fahad'];
 
 export interface User {
   id: string;
@@ -10,8 +19,36 @@ export interface User {
   avatar?: string;
 }
 
-export type PageKey = 'dashboard' | 'terminal' | 'orders' | 'tables' | 'kitchen' | 'billing' | 'menu' | 'reports' | 'users' | 'inventory' | 'hr' | 'delivery' | 'analytics';
-export type ActionKey = 'apply_discount' | 'void_order' | 'edit_menu' | 'print_bill' | 'hold_order' | 'change_table_status';
+export type PageKey =
+  | 'dashboard'
+  | 'terminal'
+  | 'orders'
+  | 'tables'
+  | 'kitchen'
+  | 'billing'
+  | 'menu'
+  | 'reports'
+  | 'users'
+  | 'inventory'
+  | 'hr'
+  | 'delivery'
+  | 'analytics'
+  | 'printers'
+  | 'postabs'
+  | 'giftcards'
+  | 'fbr'
+  | 'tax'
+  | 'mobileapp'
+  | 'outdoordelivery';
+
+export type ActionKey =
+  | 'apply_discount'
+  | 'void_order'
+  | 'edit_menu'
+  | 'print_bill'
+  | 'hold_order'
+  | 'change_table_status';
+
 export type DataKey = 'view_revenue' | 'view_all_orders' | 'view_reports' | 'view_staff';
 
 export interface RolePermissions {
@@ -22,26 +59,60 @@ export interface RolePermissions {
 
 export type PermissionsConfig = Record<Role, RolePermissions>;
 
+const ALL_PAGE_KEYS: PageKey[] = [
+  'dashboard',
+  'terminal',
+  'orders',
+  'tables',
+  'kitchen',
+  'billing',
+  'menu',
+  'reports',
+  'users',
+  'inventory',
+  'hr',
+  'delivery',
+  'analytics',
+  'printers',
+  'postabs',
+  'giftcards',
+  'fbr',
+  'tax',
+  'mobileapp',
+  'outdoordelivery',
+];
+
+const MANAGER_ACTIONS: ActionKey[] = [
+  'apply_discount',
+  'void_order',
+  'edit_menu',
+  'print_bill',
+  'hold_order',
+  'change_table_status',
+];
+
+const MANAGER_DATA: DataKey[] = ['view_revenue', 'view_all_orders', 'view_reports', 'view_staff'];
+
 const DEFAULT_PERMISSIONS: PermissionsConfig = {
-  admin: {
-    pageAccess: ['dashboard', 'terminal', 'orders', 'tables', 'kitchen', 'billing', 'menu', 'reports', 'users', 'inventory', 'hr', 'delivery', 'analytics'],
-    actionPermissions: ['apply_discount', 'void_order', 'edit_menu', 'print_bill', 'hold_order', 'change_table_status'],
-    dataVisibility: ['view_revenue', 'view_all_orders', 'view_reports', 'view_staff'],
+  superadmin: {
+    pageAccess: [...ALL_PAGE_KEYS],
+    actionPermissions: [...MANAGER_ACTIONS],
+    dataVisibility: [...MANAGER_DATA],
+  },
+  hassaan: {
+    pageAccess: [...ALL_PAGE_KEYS],
+    actionPermissions: [...MANAGER_ACTIONS],
+    dataVisibility: [...MANAGER_DATA],
+  },
+  fahad: {
+    pageAccess: [...ALL_PAGE_KEYS],
+    actionPermissions: [...MANAGER_ACTIONS],
+    dataVisibility: [...MANAGER_DATA],
   },
   cashier: {
-    pageAccess: ['terminal', 'orders', 'billing'],
-    actionPermissions: ['print_bill', 'apply_discount'],
+    pageAccess: ['terminal', 'orders', 'tables', 'billing', 'delivery', 'giftcards'],
+    actionPermissions: ['print_bill', 'apply_discount', 'hold_order', 'change_table_status'],
     dataVisibility: ['view_all_orders'],
-  },
-  waiter: {
-    pageAccess: ['terminal', 'orders', 'tables', 'delivery'],
-    actionPermissions: ['hold_order', 'change_table_status'],
-    dataVisibility: [],
-  },
-  hr: {
-    pageAccess: ['dashboard', 'hr', 'reports'],
-    actionPermissions: [],
-    dataVisibility: ['view_staff', 'view_reports'],
   },
 };
 
@@ -62,35 +133,81 @@ function normalizeCreds(input: Record<string, Credential>) {
   return Object.fromEntries(Object.entries(input).map(([email, v]) => [normalizeEmail(email), v]));
 }
 
-function normalizeUsers(input: User[]) {
-  return input.map(u => ({ ...u, email: normalizeEmail(u.email) }));
+function normalizeUsers(input: User[]): User[] {
+  return input.map(u => ({ ...u, email: normalizeEmail(u.email), role: migrateRole(u.role as string) }));
+}
+
+function migrateRole(r: string): Role {
+  const map: Record<string, Role> = {
+    admin: 'superadmin',
+    superadmin: 'superadmin',
+    hassaan: 'hassaan',
+    fahad: 'fahad',
+    cashier: 'cashier',
+    hr: 'hassaan',
+    waiter: 'fahad',
+  };
+  return map[r] ?? 'cashier';
 }
 
 function withDomainAliases(input: Record<string, Credential>) {
   const out: Record<string, Credential> = { ...input };
-
   for (const [email, cred] of Object.entries(input)) {
-    // Preserve access if domain changed over time.
     if (email.endsWith('@shiraz.com')) out[email.replace(/@shiraz\.com$/, '@shirazre.com')] = cred;
     if (email.endsWith('@shirazre.com')) out[email.replace(/@shirazre\.com$/, '@shiraz.com')] = cred;
   }
-
   return out;
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@shirazre.com', role: 'admin', avatar: '' },
-  { id: '2', name: 'John Cashier', email: 'cashier@shirazre.com', role: 'cashier', avatar: '' },
-  { id: '3', name: 'Sarah Waiter', email: 'waiter@shirazre.com', role: 'waiter', avatar: '' },
-  { id: '4', name: 'Ali HR', email: 'hr@shirazre.com', role: 'hr', avatar: '' },
+  { id: '1', name: 'Superadmin', email: 'superadmin@shirazre.com', role: 'superadmin', avatar: '' },
+  { id: '2', name: 'Hassaan shb', email: 'hassaan@shirazre.com', role: 'hassaan', avatar: '' },
+  { id: '3', name: 'Fahad shb', email: 'fahad@shirazre.com', role: 'fahad', avatar: '' },
+  { id: '4', name: 'Cashier', email: 'cashier@shirazre.com', role: 'cashier', avatar: '' },
 ];
 
 const CREDENTIALS: Record<string, Credential> = {
+  'superadmin@shirazre.com': { password: 'super123', userId: '1' },
+  'hassaan@shirazre.com': { password: 'hassaan123', userId: '2' },
+  'fahad@shirazre.com': { password: 'fahad123', userId: '3' },
+  'cashier@shirazre.com': { password: 'cashier123', userId: '4' },
+  // Legacy demo logins (map to migrated users if still in storage)
   'admin@shirazre.com': { password: 'admin123', userId: '1' },
-  'cashier@shirazre.com': { password: 'cashier123', userId: '2' },
-  'waiter@shirazre.com': { password: 'waiter123', userId: '3' },
-  'hr@shirazre.com': { password: 'hr123', userId: '4' },
 };
+
+function uniq<T>(arr: T[]): T[] {
+  return Array.from(new Set(arr));
+}
+
+function mergeRolePermissions(base: RolePermissions, saved?: Partial<RolePermissions> | null): RolePermissions {
+  if (!saved?.pageAccess?.length) return base;
+  const extraPages = base.pageAccess.filter(p => !saved.pageAccess!.includes(p));
+  const extraActions = base.actionPermissions.filter(a => !(saved.actionPermissions ?? []).includes(a));
+  const extraData = base.dataVisibility.filter(d => !(saved.dataVisibility ?? []).includes(d));
+  return {
+    pageAccess: uniq([...saved.pageAccess, ...extraPages]) as PageKey[],
+    actionPermissions: uniq([...(saved.actionPermissions ?? []), ...extraActions]) as ActionKey[],
+    dataVisibility: uniq([...(saved.dataVisibility ?? []), ...extraData]) as DataKey[],
+  };
+}
+
+function migratePermissionsFromStorage(parsed: Record<string, RolePermissions>): PermissionsConfig {
+  const remapped: Record<string, RolePermissions> = { ...parsed };
+  if (parsed.admin && !parsed.superadmin) {
+    remapped.superadmin = parsed.admin;
+    delete remapped.admin;
+  }
+  if (parsed.hr && !parsed.hassaan) remapped.hassaan = parsed.hr;
+  if (parsed.waiter && !parsed.fahad) remapped.fahad = parsed.waiter;
+
+  const roles: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier'];
+  const out = { ...DEFAULT_PERMISSIONS };
+  for (const role of roles) {
+    const saved = remapped[role];
+    out[role] = mergeRolePermissions(DEFAULT_PERMISSIONS[role], saved);
+  }
+  return out;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -118,7 +235,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
-      if (parsed && parsed.id && parsed.email && parsed.role) return { ...parsed, email: normalizeEmail(parsed.email) };
+      if (parsed && parsed.id && parsed.email && parsed.role) {
+        return { ...parsed, email: normalizeEmail(parsed.email), role: migrateRole(parsed.role) };
+      }
       localStorage.removeItem(STORAGE_KEYS.user);
       return null;
     } catch {
@@ -132,7 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.getItem(STORAGE_KEYS.users) ??
       localStorage.getItem('Shiraz_users') ??
       localStorage.getItem('Shiraz Restaurant_users');
-    return saved ? normalizeUsers(JSON.parse(saved)) : DEFAULT_USERS;
+    if (saved) return normalizeUsers(JSON.parse(saved));
+    return DEFAULT_USERS;
   });
 
   const [permissions, setPermissions] = useState<PermissionsConfig>(() => {
@@ -140,7 +260,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.getItem(STORAGE_KEYS.permissions) ??
       localStorage.getItem('Shiraz_permissions') ??
       localStorage.getItem('Shiraz Restaurant_permissions');
-    return saved ? JSON.parse(saved) : DEFAULT_PERMISSIONS;
+    if (!saved) return DEFAULT_PERMISSIONS;
+    try {
+      return migratePermissionsFromStorage(JSON.parse(saved));
+    } catch {
+      return DEFAULT_PERMISSIONS;
+    }
   });
 
   const [creds, setCreds] = useState<Record<string, Credential>>(() => {
@@ -149,7 +274,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.getItem('Shiraz_creds') ??
       localStorage.getItem('Shiraz Restaurant_creds');
     const fromStorage = saved ? withDomainAliases(normalizeCreds(JSON.parse(saved))) : {};
-    // Ensure defaults exist, but keep any customized stored creds
     return { ...CREDENTIALS, ...fromStorage };
   });
 
@@ -158,16 +282,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(STORAGE_KEYS.user);
   }, [user]);
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.permissions, JSON.stringify(permissions)); }, [permissions]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.creds, JSON.stringify(creds)); }, [creds]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
+  }, [users]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.permissions, JSON.stringify(permissions));
+  }, [permissions]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.creds, JSON.stringify(creds));
+  }, [creds]);
 
   const login = (email: string, password: string): string | null => {
     const cred = creds[normalizeEmail(email)];
     if (!cred || cred.password !== password) return 'Invalid email or password';
     const foundUser = users.find(u => u.id === cred.userId);
     if (!foundUser) return 'User not found';
-    setUser(foundUser);
+    setUser({ ...foundUser, role: migrateRole(foundUser.role) });
     return null;
   };
 
@@ -177,19 +307,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPageAccess = (page: PageKey) => {
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (MANAGER_ROLES.includes(user.role)) return true;
     return permissions[user.role].pageAccess.includes(page);
   };
 
   const hasAction = (action: ActionKey) => {
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (MANAGER_ROLES.includes(user.role)) return true;
     return permissions[user.role].actionPermissions.includes(action);
   };
 
   const hasDataAccess = (data: DataKey) => {
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (MANAGER_ROLES.includes(user.role)) return true;
     return permissions[user.role].dataVisibility.includes(data);
   };
 
@@ -197,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addUser = (newUser: Omit<User, 'id'>, password: string) => {
     const id = Date.now().toString();
-    const u = { ...newUser, id, email: normalizeEmail(newUser.email) };
+    const u = { ...newUser, id, email: normalizeEmail(newUser.email), role: migrateRole(newUser.role) };
     setUsers(prev => [...prev, u]);
     setCreds(prev => ({ ...prev, [normalizeEmail(newUser.email)]: { password, userId: id } }));
   };
@@ -215,7 +345,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, users, permissions, login, logout, hasPageAccess, hasAction, hasDataAccess, updatePermissions, addUser, removeUser, currentPermissions }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        users,
+        permissions,
+        login,
+        logout,
+        hasPageAccess,
+        hasAction,
+        hasDataAccess,
+        updatePermissions,
+        addUser,
+        removeUser,
+        currentPermissions,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

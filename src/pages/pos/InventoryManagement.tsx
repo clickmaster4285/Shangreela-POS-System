@@ -21,6 +21,7 @@ export default function InventoryManagement() {
   });
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('All');
+  const [perishableOnly, setPerishableOnly] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [adjustQty, setAdjustQty] = useState('');
@@ -44,8 +45,11 @@ export default function InventoryManagement() {
   const filtered = inventory.filter(i => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase());
     const matchCat = catFilter === 'All' || i.category === catFilter;
-    return matchSearch && matchCat;
+    const matchPerishable = !perishableOnly || i.perishable;
+    return matchSearch && matchCat && matchPerishable;
   });
+
+  const perishableCount = inventory.filter(i => i.perishable).length;
 
   const handleAdjust = () => {
     if (!adjustItem || !adjustQty) return;
@@ -110,14 +114,14 @@ export default function InventoryManagement() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-serif text-xl font-bold text-foreground">Inventory Management</h1>
+        <h1 className="font-serif text-xl font-bold text-foreground">Inventory management</h1>
         <button onClick={() => setShowAddForm(true)} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
           <Plus className="w-4 h-4" /> Add Item
         </button>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><Package className="w-3.5 h-3.5" /> Total Items</div>
           <p className="text-2xl font-bold text-foreground">{inventory.length}</p>
@@ -133,6 +137,10 @@ export default function InventoryManagement() {
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-destructive text-xs mb-1"><AlertTriangle className="w-3.5 h-3.5" /> Expired</div>
           <p className="text-2xl font-bold text-destructive">{expiredItems.length}</p>
+        </div>
+        <div className="bg-card rounded-2xl p-4 border border-border col-span-2 lg:col-span-1">
+          <div className="flex items-center gap-2 text-orange-600 text-xs mb-1"><Archive className="w-3.5 h-3.5" /> Perishable SKUs</div>
+          <p className="text-2xl font-bold text-foreground">{perishableCount}</p>
         </div>
       </div>
 
@@ -159,6 +167,10 @@ export default function InventoryManagement() {
               <option value="All">All Categories</option>
               {inventoryCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            <label className="flex items-center gap-2 text-sm text-foreground whitespace-nowrap">
+              <input type="checkbox" checked={perishableOnly} onChange={e => setPerishableOnly(e.target.checked)} className="rounded" />
+              Perishable only
+            </label>
           </div>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
             <div className="overflow-x-auto">

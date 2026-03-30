@@ -55,6 +55,16 @@ export interface LeaveBalance {
   emergency: number;
 }
 
+export interface ShiftBlock {
+  id: string;
+  label: string;
+  start: string;
+  end: string;
+  supervisorName: string;
+  staffCount: number;
+  notes?: string;
+}
+
 const today = new Date().toISOString().split('T')[0];
 
 export const defaultEmployees: Employee[] = [
@@ -99,6 +109,12 @@ export const defaultLeaveBalances: LeaveBalance[] = [
   { employeeId: '8', sick: 6, casual: 5, annual: 8, emergency: 2 },
   { employeeId: '9', sick: 6, casual: 5, annual: 8, emergency: 2 },
   { employeeId: '10', sick: 8, casual: 6, annual: 10, emergency: 2 },
+];
+
+export const defaultShifts: ShiftBlock[] = [
+  { id: '1', label: 'Opening', start: '08:00', end: '16:00', supervisorName: 'Hassaan shb', staffCount: 6, notes: 'Floor + outdoor prep' },
+  { id: '2', label: 'Evening', start: '16:00', end: '00:00', supervisorName: 'Fahad shb', staffCount: 8, notes: 'Peak dining + delivery' },
+  { id: '3', label: 'Night close', start: '00:00', end: '03:00', supervisorName: 'Fahad shb', staffCount: 3, notes: 'Stock lock & cash drop' },
 ];
 
 export const defaultSalaryRecords: SalaryRecord[] = defaultEmployees.map((emp, i) => ({

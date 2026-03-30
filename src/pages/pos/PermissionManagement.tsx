@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth, type Role, type PageKey, type ActionKey, type DataKey, type PermissionsConfig, type RolePermissions } from '@/contexts/AuthContext';
+import { useAuth, ROLE_LABELS, type Role, type PageKey, type ActionKey, type DataKey, type PermissionsConfig, type RolePermissions } from '@/contexts/AuthContext';
 import { Shield, User, Plus, Trash2, X, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,6 +17,13 @@ const ALL_PAGES: { key: PageKey; label: string }[] = [
   { key: 'hr', label: 'HR Management' },
   { key: 'delivery', label: 'Delivery Tracking' },
   { key: 'analytics', label: 'Sales Analytics' },
+  { key: 'printers', label: 'Printers (×3)' },
+  { key: 'postabs', label: 'POS tabs (×3)' },
+  { key: 'giftcards', label: 'Gift & loyalty' },
+  { key: 'fbr', label: 'FBR POS' },
+  { key: 'tax', label: 'Tax details' },
+  { key: 'mobileapp', label: 'Mobile app' },
+  { key: 'outdoordelivery', label: 'Outdoor delivery report' },
 ];
 
 const ALL_ACTIONS: { key: ActionKey; label: string }[] = [
@@ -36,11 +43,13 @@ const ALL_DATA: { key: DataKey; label: string }[] = [
 ];
 
 const roleBadge: Record<Role, string> = {
-  admin: 'bg-primary/10 text-primary',
+  superadmin: 'bg-primary/10 text-primary',
+  hassaan: 'bg-secondary/20 text-secondary-foreground',
+  fahad: 'bg-accent/30 text-accent-foreground',
   cashier: 'bg-success/10 text-success',
-  waiter: 'bg-warning/10 text-warning',
-  hr: 'bg-accent/30 text-accent-foreground',
 };
+
+const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier'];
 
 export default function PermissionManagement() {
   const { users, permissions, updatePermissions, addUser, removeUser, user: currentUser } = useAuth();
@@ -84,7 +93,7 @@ export default function PermissionManagement() {
     updatePermissions(updated);
     setEditingRole(null);
     setDraft(null);
-    toast.success(`${editingRole} permissions updated`);
+    toast.success(`${ROLE_LABELS[editingRole]} permissions updated`);
   };
 
   const handleAddUser = () => {
@@ -127,10 +136,11 @@ export default function PermissionManagement() {
             <input className={inputClass} placeholder="Email" type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
             <input className={inputClass} placeholder="Password" type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
             <select className={inputClass} value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as Role })}>
-              <option value="cashier">Cashier</option>
-              <option value="waiter">Waiter</option>
-              <option value="hr">HR</option>
-              <option value="admin">Admin</option>
+              {ROLES_ORDER.map(r => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </option>
+              ))}
             </select>
             <button onClick={handleAddUser} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
               Add Staff
@@ -141,7 +151,7 @@ export default function PermissionManagement() {
 
       {/* Role permission cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {(['admin', 'cashier', 'waiter', 'hr'] as Role[]).map(role => (
+        {ROLES_ORDER.map(role => (
           <div key={role} className="pos-card">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -149,11 +159,11 @@ export default function PermissionManagement() {
                   <Shield className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground capitalize">{role}</p>
+                  <p className="font-semibold text-foreground">{ROLE_LABELS[role]}</p>
                   <p className="text-xs text-muted-foreground">{users.filter(u => u.role === role).length} staff</p>
                 </div>
               </div>
-              {role !== 'admin' && (
+              {role !== 'superadmin' && (
                 <button onClick={() => startEdit(role)} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary/20 transition-colors">
                   Edit
                 </button>
@@ -182,7 +192,7 @@ export default function PermissionManagement() {
         <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto space-y-5" style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="flex justify-between items-center">
-              <h3 className="font-serif text-lg font-bold capitalize">Edit {editingRole} Permissions</h3>
+              <h3 className="font-serif text-lg font-bold">Edit {ROLE_LABELS[editingRole]} permissions</h3>
               <button onClick={() => { setEditingRole(null); setDraft(null); }}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
 
@@ -272,7 +282,7 @@ export default function PermissionManagement() {
                 </td>
                 <td className="py-3 px-2 text-muted-foreground">{u.email}</td>
                 <td className="py-3 px-2">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${roleBadge[u.role]}`}>{u.role}</span>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge[u.role]}`}>{ROLE_LABELS[u.role]}</span>
                 </td>
                 <td className="py-3 px-2 text-right">
                   {u.id !== currentUser?.id && (

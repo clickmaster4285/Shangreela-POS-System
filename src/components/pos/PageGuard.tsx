@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth, type PageKey } from '@/contexts/AuthContext';
+import { useAuth, MANAGER_ROLES, type PageKey } from '@/contexts/AuthContext';
 import { ShieldX } from 'lucide-react';
 
 interface Props {
@@ -21,9 +21,37 @@ const pageToRoute: Record<PageKey, string> = {
   hr: '/pos/hr',
   delivery: '/pos/delivery',
   analytics: '/pos/analytics',
+  printers: '/pos/printers',
+  postabs: '/pos/pos-tabs',
+  giftcards: '/pos/gift-loyalty',
+  fbr: '/pos/fbr',
+  tax: '/pos/tax',
+  mobileapp: '/pos/mobile-app',
+  outdoordelivery: '/pos/outdoor-delivery-report',
 };
 
-const allPages: PageKey[] = ['dashboard', 'terminal', 'orders', 'tables', 'kitchen', 'billing', 'menu', 'reports', 'users', 'inventory', 'hr', 'delivery', 'analytics'];
+const allPages: PageKey[] = [
+  'dashboard',
+  'terminal',
+  'orders',
+  'tables',
+  'kitchen',
+  'billing',
+  'menu',
+  'reports',
+  'users',
+  'inventory',
+  'hr',
+  'delivery',
+  'analytics',
+  'printers',
+  'postabs',
+  'giftcards',
+  'fbr',
+  'tax',
+  'mobileapp',
+  'outdoordelivery',
+];
 
 export default function PageGuard({ page, children }: Props) {
   const { user, hasPageAccess, permissions } = useAuth();
@@ -34,7 +62,7 @@ export default function PageGuard({ page, children }: Props) {
   if (!hasPageAccess(page)) {
     // If landing on default /pos route without dashboard access, redirect to first accessible page
     const firstAccessible = allPages.find(p => {
-      if (user.role === 'admin') return true;
+      if (MANAGER_ROLES.includes(user.role)) return true;
       return permissions[user.role].pageAccess.includes(p);
     });
 

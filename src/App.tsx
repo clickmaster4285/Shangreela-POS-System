@@ -22,6 +22,13 @@ import DeliveryTracking from "./pages/pos/DeliveryTracking.tsx";
 import SalesAnalytics from "./pages/pos/SalesAnalytics.tsx";
 import Login from "./pages/pos/Login.tsx";
 import PageGuard from "./components/pos/PageGuard.tsx";
+import PrinterIntegration from "./pages/pos/PrinterIntegration.tsx";
+import POSTabsIntegration from "./pages/pos/POSTabsIntegration.tsx";
+import GiftLoyaltyCards from "./pages/pos/GiftLoyaltyCards.tsx";
+import FBRIntegration from "./pages/pos/FBRIntegration.tsx";
+import TaxDetails from "./pages/pos/TaxDetails.tsx";
+import MobileApp from "./pages/pos/MobileApp.tsx";
+import OutdoorDeliveryReport from "./pages/pos/OutdoorDeliveryReport.tsx";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +56,13 @@ const App = () => (
               <Route path="hr" element={<PageGuard page="hr"><HRManagement /></PageGuard>} />
               <Route path="delivery" element={<PageGuard page="delivery"><DeliveryTracking /></PageGuard>} />
               <Route path="analytics" element={<PageGuard page="analytics"><SalesAnalytics /></PageGuard>} />
+              <Route path="printers" element={<PageGuard page="printers"><PrinterIntegration /></PageGuard>} />
+              <Route path="pos-tabs" element={<PageGuard page="postabs"><POSTabsIntegration /></PageGuard>} />
+              <Route path="gift-loyalty" element={<PageGuard page="giftcards"><GiftLoyaltyCards /></PageGuard>} />
+              <Route path="fbr" element={<PageGuard page="fbr"><FBRIntegration /></PageGuard>} />
+              <Route path="tax" element={<PageGuard page="tax"><TaxDetails /></PageGuard>} />
+              <Route path="mobile-app" element={<PageGuard page="mobileapp"><MobileApp /></PageGuard>} />
+              <Route path="outdoor-delivery-report" element={<PageGuard page="outdoordelivery"><OutdoorDeliveryReport /></PageGuard>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

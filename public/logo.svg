@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="The Royal Kitchen logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E9C46A"/>
+      <stop offset="0.55" stop-color="#F4A261"/>
+      <stop offset="1" stop-color="#E76F51"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+      <feOffset dx="0" dy="3" result="off"/>
+      <feColorMatrix in="off" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .28 0" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="18" y="18" width="220" height="220" rx="48" fill="#12100F"/>
+  <rect x="18" y="18" width="220" height="220" rx="48" fill="url(#g)" opacity="0.12"/>
+
+  <!-- Crown -->
+  <g filter="url(#soft)" transform="translate(0,2)">
+    <path d="M64 118l24 22 40-52 40 52 24-22 16 58H48l16-58z" fill="url(#g)"/>
+    <path d="M64 118l24 22 40-52 40 52 24-22" fill="none" stroke="#FFE9B5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+    <circle cx="88" cy="140" r="6" fill="#FFE9B5" opacity="0.75"/>
+    <circle cx="128" cy="120" r="7" fill="#FFE9B5" opacity="0.9"/>
+    <circle cx="168" cy="140" r="6" fill="#FFE9B5" opacity="0.75"/>
+  </g>
+
+  <!-- Monogram -->
+  <text x="128" y="206" text-anchor="middle" font-family="ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif" font-size="40" font-weight="700" fill="url(#g)" letter-spacing="2">
+    RK
+  </text>
+</svg>

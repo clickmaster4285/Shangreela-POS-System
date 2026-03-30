@@ -1,7 +1,32 @@
 import { NavLink, Outlet, Link, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Monitor, ClipboardList, Grid3X3, ChefHat, Receipt, UtensilsCrossed, BarChart3, Users, ArrowLeft, Menu, X, LogOut, Package, UserCog, Truck, TrendingUp } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Monitor,
+  ClipboardList,
+  Grid3X3,
+  ChefHat,
+  Receipt,
+  UtensilsCrossed,
+  BarChart3,
+  Users,
+  ArrowLeft,
+  Menu,
+  X,
+  LogOut,
+  Package,
+  UserCog,
+  Truck,
+  TrendingUp,
+  Printer,
+  LayoutGrid,
+  Gift,
+  Landmark,
+  Percent,
+  Smartphone,
+  MapPinned,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useAuth, type PageKey } from '@/contexts/AuthContext';
+import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
 import Logo from '@/components/branding/Logo';
 
 const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page: PageKey; end?: boolean }[] = [
@@ -17,14 +42,21 @@ const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page:
   { to: '/pos/delivery', icon: Truck, label: 'Delivery', page: 'delivery' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports', page: 'reports' },
   { to: '/pos/analytics', icon: TrendingUp, label: 'Analytics', page: 'analytics' },
+  { to: '/pos/printers', icon: Printer, label: 'Printers (×3)', page: 'printers' },
+  { to: '/pos/pos-tabs', icon: LayoutGrid, label: 'POS tabs (×3)', page: 'postabs' },
+  { to: '/pos/gift-loyalty', icon: Gift, label: 'Gift & loyalty', page: 'giftcards' },
+  { to: '/pos/fbr', icon: Landmark, label: 'FBR POS', page: 'fbr' },
+  { to: '/pos/tax', icon: Percent, label: 'Tax details', page: 'tax' },
+  { to: '/pos/mobile-app', icon: Smartphone, label: 'Mobile app', page: 'mobileapp' },
+  { to: '/pos/outdoor-delivery-report', icon: MapPinned, label: 'Outdoor delivery', page: 'outdoordelivery' },
   { to: '/pos/users', icon: Users, label: 'Users & Permissions', page: 'users' },
 ];
 
 const roleBadge: Record<string, string> = {
-  admin: 'bg-primary/20 text-primary-foreground',
+  superadmin: 'bg-primary/20 text-primary-foreground',
+  hassaan: 'bg-secondary/30 text-secondary-foreground',
+  fahad: 'bg-accent/30 text-accent-foreground',
   cashier: 'bg-success/20 text-success',
-  waiter: 'bg-warning/20 text-warning',
-  hr: 'bg-accent/30 text-accent-foreground',
 };
 
 export default function POSLayout() {
@@ -54,7 +86,7 @@ export default function POSLayout() {
           <div className="bg-sidebar-accent/50 rounded-xl p-3">
             <p className="text-sm font-medium text-sidebar-foreground truncate">{user.name}</p>
             <div className="flex items-center gap-2 mt-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${roleBadge[user.role]}`}>{user.role}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${roleBadge[user.role] ?? 'bg-muted'}`}>{ROLE_LABELS[user.role]}</span>
             </div>
           </div>
         </div>
@@ -107,7 +139,7 @@ export default function POSLayout() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${roleBadge[user.role]}`}>{user.role}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${roleBadge[user.role] ?? 'bg-muted'}`}>{ROLE_LABELS[user.role]}</span>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-4 lg:p-6">

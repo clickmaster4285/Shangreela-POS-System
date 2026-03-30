@@ -1,9 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, AlertTriangle, CheckCircle, XCircle, Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { defaultEmployees, defaultAttendance, defaultLeaveRequests, defaultLeaveBalances, defaultSalaryRecords, type Employee, type AttendanceRecord, type LeaveRequest, type LeaveBalance, type SalaryRecord } from '@/data/hrData';
+import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer } from 'lucide-react';
+import {
+  defaultEmployees,
+  defaultAttendance,
+  defaultLeaveRequests,
+  defaultLeaveBalances,
+  defaultSalaryRecords,
+  defaultShifts,
+  type Employee,
+  type AttendanceRecord,
+  type LeaveRequest,
+  type LeaveBalance,
+  type SalaryRecord,
+  type ShiftBlock,
+} from '@/data/hrData';
 import { toast } from 'sonner';
 
-type Tab = 'employees' | 'attendance' | 'leaves' | 'salary';
+type Tab = 'employees' | 'attendance' | 'shifts' | 'leaves' | 'salary';
 
 export default function HRManagement() {
   const [tab, setTab] = useState<Tab>('employees');
@@ -27,6 +40,7 @@ export default function HRManagement() {
     const saved = localStorage.getItem('Shiraz Restaurant_salary');
     return saved ? JSON.parse(saved) : defaultSalaryRecords;
   });
+  const [shifts] = useState<ShiftBlock[]>(defaultShifts);
   const [search, setSearch] = useState('');
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
@@ -104,14 +118,15 @@ export default function HRManagement() {
   const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
     { key: 'employees', label: 'Employees', icon: Users },
     { key: 'attendance', label: 'Attendance', icon: Calendar },
+    { key: 'shifts', label: 'Shifts', icon: Timer },
     { key: 'leaves', label: 'Leaves', icon: FileText },
-    { key: 'salary', label: 'Salary', icon: DollarSign },
+    { key: 'salary', label: 'Payroll', icon: DollarSign },
   ];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-serif text-xl font-bold text-foreground">HR Management</h1>
+        <h1 className="font-serif text-xl font-bold text-foreground">HR, shifts & payroll</h1>
         <button onClick={() => setShowAddEmployee(true)} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
           <UserPlus className="w-4 h-4" /> Add Employee
         </button>
@@ -247,6 +262,27 @@ export default function HRManagement() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Shifts Tab */}
+      {tab === 'shifts' && (
+        <div className="grid gap-3 md:grid-cols-3">
+          {shifts.map(s => (
+            <div key={s.id} className="bg-card rounded-2xl border border-border p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">{s.label}</h3>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {s.start} – {s.end}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Supervisor: <span className="font-medium text-foreground">{s.supervisorName}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">Staff on shift: {s.staffCount}</p>
+              {s.notes && <p className="text-xs text-primary/80">{s.notes}</p>}
+            </div>
+          ))}
         </div>
       )}
 

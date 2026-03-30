@@ -32,10 +32,22 @@ export interface CartItem {
   notes: string;
 }
 
+export interface FloorInfo {
+  id: string;
+  name: string;
+}
+
+export const floors: FloorInfo[] = [
+  { id: 'ground', name: 'Ground floor' },
+  { id: 'first', name: 'First floor' },
+  { id: 'outdoor', name: 'Outdoor' },
+];
+
 export interface TableInfo {
   id: number;
   name: string;
   seats: number;
+  floorId: string;
   status: 'available' | 'occupied' | 'reserved';
   currentOrder?: string;
 }
@@ -238,16 +250,18 @@ export const menuItems: MenuItem[] = [
 ];
 
 export const tables: TableInfo[] = [
-  { id: 1, name: 'Table 1', seats: 2, status: 'available' },
-  { id: 2, name: 'Table 2', seats: 2, status: 'occupied', currentOrder: 'ORD-001' },
-  { id: 3, name: 'Table 3', seats: 4, status: 'available' },
-  { id: 4, name: 'Table 4', seats: 4, status: 'reserved' },
-  { id: 5, name: 'Table 5', seats: 6, status: 'occupied', currentOrder: 'ORD-002' },
-  { id: 6, name: 'Table 6', seats: 6, status: 'available' },
-  { id: 7, name: 'Table 7', seats: 8, status: 'available' },
-  { id: 8, name: 'Table 8', seats: 4, status: 'occupied', currentOrder: 'ORD-003' },
-  { id: 9, name: 'VIP 1', seats: 10, status: 'reserved' },
-  { id: 10, name: 'VIP 2', seats: 12, status: 'available' },
+  { id: 1, name: 'Table 1', seats: 2, floorId: 'ground', status: 'available' },
+  { id: 2, name: 'Table 2', seats: 2, floorId: 'ground', status: 'occupied', currentOrder: 'ORD-001' },
+  { id: 3, name: 'Table 3', seats: 4, floorId: 'ground', status: 'available' },
+  { id: 4, name: 'Table 4', seats: 4, floorId: 'ground', status: 'reserved' },
+  { id: 5, name: 'Table 5', seats: 6, floorId: 'first', status: 'occupied', currentOrder: 'ORD-002' },
+  { id: 6, name: 'Table 6', seats: 6, floorId: 'first', status: 'available' },
+  { id: 7, name: 'Table 7', seats: 8, floorId: 'first', status: 'available' },
+  { id: 8, name: 'Table 8', seats: 4, floorId: 'first', status: 'occupied', currentOrder: 'ORD-003' },
+  { id: 9, name: 'VIP 1', seats: 10, floorId: 'first', status: 'reserved' },
+  { id: 10, name: 'VIP 2', seats: 12, floorId: 'outdoor', status: 'available' },
+  { id: 11, name: 'Patio A', seats: 4, floorId: 'outdoor', status: 'available' },
+  { id: 12, name: 'Patio B', seats: 4, floorId: 'outdoor', status: 'occupied', currentOrder: 'ORD-004' },
 ];
 
 export const sampleOrders: Order[] = [
