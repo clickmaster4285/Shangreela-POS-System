@@ -433,6 +433,7 @@ export default function POSScreen() {
                 if (cart.length) {
                   toast.success('Order cashed out');
                   setCart([]);
+                  setSelectedTableId(null);
                 }
               }}
               className={`py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors ${!hasAction('hold_order') && !hasAction('print_bill') ? 'col-span-3' : !hasAction('hold_order') || !hasAction('print_bill') ? 'col-span-2' : ''}`}
