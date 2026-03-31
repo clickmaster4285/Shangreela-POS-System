@@ -21,6 +21,7 @@ export default function POSScreen() {
   const [pakistaniSub, setPakistaniSub] = useState<PakistaniSubfolder | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [activeFloorId, setActiveFloorId] = useState<string>(floors[0]?.id ?? 'ground');
@@ -376,8 +377,29 @@ export default function POSScreen() {
           <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
             <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/60">
-            <span>Total</span><span>Rs. {grandTotal.toLocaleString()}</span>
+          <div className="flex justify-between items-center pt-1 border-t border-border/60">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Payment method
+              </span>
+              <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
+                {(['cash', 'card'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPaymentMethod(m)}
+                    className={`px-2.5 py-1 rounded-full capitalize transition-colors ${
+                      paymentMethod === m
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {m === 'cash' ? 'Cash' : 'Credit card'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="text-base font-bold text-foreground">Rs. {grandTotal.toLocaleString()}</span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 pt-2">
@@ -398,6 +420,7 @@ export default function POSScreen() {
                   subtotal,
                   discount: 0,
                   discountPercent: 0,
+                  paymentMethod,
                 });
                 toast.success('Bill printed');
               }
@@ -406,10 +429,15 @@ export default function POSScreen() {
             </button>
             )}
             <button
-              onClick={() => { if(cart.length) { toast.success('Order placed!'); setCart([]); } }}
+              onClick={() => {
+                if (cart.length) {
+                  toast.success('Order cashed out');
+                  setCart([]);
+                }
+              }}
               className={`py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors ${!hasAction('hold_order') && !hasAction('print_bill') ? 'col-span-3' : !hasAction('hold_order') || !hasAction('print_bill') ? 'col-span-2' : ''}`}
             >
-              Place Order
+              Cashout
             </button>
           </div>
         </div>
