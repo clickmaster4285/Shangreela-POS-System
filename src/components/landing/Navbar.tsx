@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Logo from '@/components/branding/Logo';
+import { BrandHeader } from '@/components/branding/BrandHeader';
 
 const navLinks = [
   { label: 'Home', href: '#hero' },
@@ -23,13 +23,8 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-20">
-        <button onClick={() => scrollTo('#hero')} className="inline-flex items-center">
-          <Logo
-            size={40}
-            iconClassName="shrink-0"
-            textClassName="text-xl lg:text-2xl text-primary"
-            className="text-primary"
-          />
+        <button onClick={() => scrollTo('#hero')} type="button" className="inline-flex min-w-0 items-center text-left">
+          <BrandHeader variant="landing" />
         </button>
 
         <div className="hidden md:flex items-center gap-8">

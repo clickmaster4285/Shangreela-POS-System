@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
-import Logo from '@/components/branding/Logo';
+import { BrandHeader } from '@/components/branding/BrandHeader';
 
 const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page: PageKey; end?: boolean }[] = [
   { to: '/pos', icon: LayoutDashboard, label: 'Dashboard', page: 'dashboard', end: true },
@@ -74,9 +74,9 @@ export default function POSLayout() {
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-56 bg-sidebar flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="h-14 px-4 flex items-center justify-between border-b border-sidebar-border shrink-0">
-          <Link to="/" className="inline-flex items-center">
-            <Logo size={34} className="text-sidebar-foreground" textClassName="text-lg text-sidebar-foreground" />
+        <div className="min-h-14 px-3 py-2.5 flex items-center justify-between border-b border-sidebar-border shrink-0">
+          <Link to="/" className="inline-flex min-w-0 items-center max-w-[calc(100%-2rem)]">
+            <BrandHeader variant="sidebar" />
           </Link>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-sidebar-foreground"><X className="w-5 h-5" /></button>
         </div>
@@ -132,9 +132,8 @@ export default function POSLayout() {
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden mr-3 text-foreground">
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
-              <Logo size={22} showText={false} />
-              Shiraz Restaurant POS System
+            <span className="inline-flex min-w-0 items-center text-muted-foreground">
+              <BrandHeader variant="header" />
             </span>
           </div>
           <div className="flex items-center gap-2">
