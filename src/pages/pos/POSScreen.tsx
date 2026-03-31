@@ -73,7 +73,17 @@ export default function POSScreen() {
   };
 
   const updateQty = (id: string, delta: number) => {
-    setCart(prev => prev.map(c => c.menuItem.id === id ? { ...c, quantity: Math.max(0, c.quantity + delta) } : c).filter(c => c.quantity > 0));
+    setCart(prev =>
+      prev
+        .map(c =>
+          c.menuItem.id === id ? { ...c, quantity: Math.max(0, c.quantity + delta) } : c
+        )
+        .filter(c => c.quantity > 0)
+    );
+  };
+
+  const removeItem = (id: string) => {
+    setCart(prev => prev.filter(c => c.menuItem.id !== id));
   };
 
   const subtotal = cart.reduce((s, c) => s + c.menuItem.price * c.quantity, 0);
@@ -166,46 +176,88 @@ export default function POSScreen() {
                   : 'No table selected'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowTablePicker(true)}
-              className="shrink-0 px-3 py-1.5 rounded-lg border border-border bg-card text-[11px] font-medium text-foreground hover:border-primary/60 hover:bg-primary/5 transition-colors"
-            >
-              {selectedTable ? 'Change table' : 'Select table'}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedTable && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTableId(null)}
+                  className="text-[11px] text-muted-foreground hover:text-destructive underline-offset-2 hover:underline"
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowTablePicker(true)}
+                className="px-3 py-1.5 rounded-lg border border-border bg-card text-[11px] font-medium text-foreground hover:border-primary/60 hover:bg-primary/5 transition-colors"
+              >
+                {selectedTable ? 'Change table' : 'Select table'}
+              </button>
+            </div>
           </div>
         )}
 
         {/* Items */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin">
           {cart.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
               <p className="text-sm">Cart is empty</p>
             </div>
           ) : cart.map(c => (
-            <div key={c.menuItem.id} className="bg-muted/50 rounded-xl p-3">
-              <div className="flex justify-between items-start">
+            <div
+              key={c.menuItem.id}
+              className="rounded-2xl border border-border bg-muted/60 px-3 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+            >
+              <div className="flex justify-between items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{c.menuItem.name}</p>
-                  <p className="text-xs text-muted-foreground">Rs. {c.menuItem.price.toLocaleString()}</p>
-                  {c.notes && <p className="text-xs text-primary italic mt-0.5">📝 {c.notes}</p>}
+                  <p className="text-[13px] font-semibold text-foreground truncate">{c.menuItem.name}</p>
+                  <p className="text-[11px] text-muted-foreground">Rs. {c.menuItem.price.toLocaleString()}</p>
+                  {c.notes && (
+                    <p className="text-[11px] text-primary mt-0.5 line-clamp-2">
+                      <span className="font-semibold">Note:</span> {c.notes}
+                    </p>
+                  )}
                 </div>
-                <button onClick={() => { setNoteItem(c.menuItem.id); setNoteText(c.notes); }} className="text-muted-foreground hover:text-primary p-1">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <button
+                    onClick={() => removeItem(c.menuItem.id)}
+                    className="text-muted-foreground hover:text-destructive/90 p-1 rounded-full hover:bg-destructive/10 transition-colors"
+                    aria-label="Remove item"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNoteItem(c.menuItem.id);
+                      setNoteText(c.notes);
+                    }}
+                    className="text-muted-foreground hover:text-primary p-1 rounded-full hover:bg-primary/5 transition-colors"
+                    aria-label="Add note"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => updateQty(c.menuItem.id, -1)} className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors">
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/60">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => updateQty(c.menuItem.id, -1)}
+                    className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
+                  >
                     {c.quantity === 1 ? <Trash2 className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
                   </button>
-                  <span className="text-sm font-semibold w-6 text-center">{c.quantity}</span>
-                  <button onClick={() => updateQty(c.menuItem.id, 1)} className="w-7 h-7 rounded-lg bg-card border border-border flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors">
+                  <span className="text-sm font-semibold min-w-[1.75rem] text-center">{c.quantity}</span>
+                  <button
+                    onClick={() => updateQty(c.menuItem.id, 1)}
+                    className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+                  >
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
-                <span className="text-sm font-bold text-foreground">Rs. {(c.menuItem.price * c.quantity).toLocaleString()}</span>
+                <span className="text-sm font-semibold text-foreground">
+                  Rs. {(c.menuItem.price * c.quantity).toLocaleString()}
+                </span>
               </div>
             </div>
           ))}
