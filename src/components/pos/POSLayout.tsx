@@ -28,6 +28,7 @@ import {
 import { useState } from 'react';
 import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
 import { BrandHeader } from '@/components/branding/BrandHeader';
+import Logo from '@/components/branding/Logo';
 
 const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page: PageKey; end?: boolean }[] = [
   { to: '/pos', icon: LayoutDashboard, label: 'Dashboard', page: 'dashboard', end: true },
@@ -132,13 +133,18 @@ export default function POSLayout() {
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden mr-3 text-foreground">
               <Menu className="w-5 h-5" />
             </button>
-            <span className="inline-flex min-w-0 items-center text-muted-foreground">
-              <BrandHeader variant="header" />
+            <span className="text-xs text-muted-foreground inline-flex min-w-0 items-center gap-2">
+              <div className="inline-flex items-center gap-2 shrink-0">
+                <Logo size={22} showText={false} className="shrink-0" iconClassName="shrink-0" />
+              </div>
+              <span className="truncate font-normal">Shangreela Heights Shinwari BBQ Restaurant</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${roleBadge[user.role] ?? 'bg-muted'}`}>{ROLE_LABELS[user.role]}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-muted text-muted-foreground border border-border">
+              {ROLE_LABELS[user.role]}
+            </span>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-4 lg:p-6">
