@@ -1,6 +1,12 @@
 import { useMemo, useState, useCallback } from 'react';
 import { menuItems, type CartItem, type MenuItem } from '@/data/mockData';
-import { POSCategoryFolderGrid, POSFolderContent, categoryLabelToDataCategory } from '@/components/pos/Form';
+import {
+  POSCategoryFolderGrid,
+  POSFolderContent,
+  POSPakistaniSubGrid,
+  categoryLabelToDataCategory,
+  type PakistaniSubfolder,
+} from '@/components/pos/Form';
 import { Plus, Minus, Trash2, ShoppingBag, Printer, Pause, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +17,8 @@ export default function POSScreen() {
   const { hasAction } = useAuth();
   /** `null` = full-screen category folders; otherwise open that folder’s items */
   const [openFolder, setOpenFolder] = useState<string | null>(null);
+  /** Inside **Pakistani**: pick Karahi or Handi before showing items */
+  const [pakistaniSub, setPakistaniSub] = useState<PakistaniSubfolder | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
   const [noteItem, setNoteItem] = useState<string | null>(null);
@@ -18,14 +26,35 @@ export default function POSScreen() {
 
   const itemCount = useCallback((label: string) => {
     if (label === 'All') return menuItems.length;
+    if (label === 'Pakistani') {
+      return menuItems.filter(i => i.category === 'Karahi' || i.category === 'Handi').length;
+    }
     return menuItems.filter(i => i.category === categoryLabelToDataCategory(label)).length;
   }, []);
 
   const folderItems = useMemo(() => {
     if (!openFolder) return [];
     if (openFolder === 'All') return menuItems;
+    if (openFolder === 'Pakistani') {
+      if (!pakistaniSub) return [];
+      return menuItems.filter(i => i.category === pakistaniSub);
+    }
     return menuItems.filter(i => i.category === categoryLabelToDataCategory(openFolder));
-  }, [openFolder]);
+  }, [openFolder, pakistaniSub]);
+
+  const openTopFolder = useCallback((label: string) => {
+    setOpenFolder(label);
+    setPakistaniSub(null);
+  }, []);
+
+  const handleFolderBack = useCallback(() => {
+    if (openFolder === 'Pakistani' && pakistaniSub) {
+      setPakistaniSub(null);
+      return;
+    }
+    setOpenFolder(null);
+    setPakistaniSub(null);
+  }, [openFolder, pakistaniSub]);
 
   const addToCart = (item: MenuItem) => {
     setCart(prev => {
@@ -56,9 +85,20 @@ export default function POSScreen() {
       {/* Full-screen category folders OR items inside the selected folder */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {openFolder === null ? (
-          <POSCategoryFolderGrid itemCount={itemCount} onOpenFolder={setOpenFolder} />
+          <POSCategoryFolderGrid itemCount={itemCount} onOpenFolder={openTopFolder} />
+        ) : openFolder === 'Pakistani' && pakistaniSub === null ? (
+          <POSFolderContent title="Pakistani" onBack={handleFolderBack}>
+            <POSPakistaniSubGrid itemCount={itemCount} onOpenSubfolder={setPakistaniSub} />
+          </POSFolderContent>
         ) : (
-          <POSFolderContent title={openFolder} onBack={() => setOpenFolder(null)}>
+          <POSFolderContent
+            title={
+              openFolder === 'Pakistani' && pakistaniSub
+                ? `Pakistani › ${pakistaniSub}`
+                : openFolder
+            }
+            onBack={handleFolderBack}
+          >
             {folderItems.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">No items in this category.</p>
             ) : (

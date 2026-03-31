@@ -3,8 +3,7 @@ export const FORM_MENU_CATEGORIES = [
   'All',
   'Shinwari',
   'BBQ',
-  'Karahi',
-  'Handi',
+  'Pakistani',
   'Chinese',
   'Rice',
   'Noodles',
@@ -20,7 +19,12 @@ export const FORM_MENU_CATEGORIES = [
   'Platters',
 ] as const;
 
+/** Subfolders inside the Pakistani folder (data categories on `MenuItem`). */
+export const PAKISTANI_SUBFOLDERS = ['Karahi', 'Handi'] as const;
+
 export type FormMenuCategory = (typeof FORM_MENU_CATEGORIES)[number];
+
+export type PakistaniSubfolder = (typeof PAKISTANI_SUBFOLDERS)[number];
 
 /** Maps sidebar label to `MenuItem.category` in mock data (some labels differ). */
 export function categoryLabelToDataCategory(label: string): string {
