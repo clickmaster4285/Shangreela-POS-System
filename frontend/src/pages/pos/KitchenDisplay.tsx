@@ -62,6 +62,7 @@ export default function KitchenDisplay() {
               <div>
                 <p className="font-semibold text-foreground text-lg">{order.id}</p>
                 <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • Table ${order.table}` : ''}</p>
+                {order.orderTaker && <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker}</p>}
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />

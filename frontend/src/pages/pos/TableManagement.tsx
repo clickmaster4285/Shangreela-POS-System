@@ -47,6 +47,16 @@ export default function TableManagement() {
   const [tablesState, setTablesState] = useState<TableInfo[]>([]);
   const [floorId, setFloorId] = useState<string>('all');
 
+  const [selectedTables, setSelectedTables] = useState<Set<number>>(new Set());
+  const [bulkModal, setBulkModal] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    count: '5',
+    startNumber: '',
+    floorId: '',
+    seats: '4',
+    namePrefix: 'Table ',
+  });
+
   const load = () =>
     Promise.all([api<PaginatedResponse<{ id: string; key: string; name: string }>>('/floors?page=1&limit=200'), api<PaginatedResponse<{ id: string; number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500')]).then(([f, t]) => {
       if (f.items.length) setFloorsState(f.items.map(x => ({ id: x.key, name: x.name })));
@@ -170,6 +180,100 @@ export default function TableManagement() {
     toast.success('Table removed');
   };
 
+  const openBulkAdd = () => {
+    if (floorsState.length === 0) {
+      toast.error('Add a floor first');
+      return;
+    }
+    setBulkForm({
+      count: '5',
+      startNumber: String(nextTableId(tablesState)),
+      floorId: floorsState[0].id,
+      seats: '4',
+      namePrefix: 'Table ',
+    });
+    setBulkModal(true);
+  };
+
+  const saveBulkAdd = () => {
+    const count = parseInt(bulkForm.count, 10);
+    const startNumber = parseInt(bulkForm.startNumber, 10);
+    const seats = parseInt(bulkForm.seats, 10);
+    if (isNaN(count) || count < 1 || count > 50) {
+      toast.error('Enter a valid count (1-50)');
+      return;
+    }
+    if (isNaN(startNumber) || startNumber < 1) {
+      toast.error('Enter a valid starting number');
+      return;
+    }
+    if (isNaN(seats) || seats < 1) {
+      toast.error('Enter valid seats');
+      return;
+    }
+    if (!bulkForm.floorId || !floorsState.some(f => f.id === bulkForm.floorId)) {
+      toast.error('Select a valid floor');
+      return;
+    }
+    const tables = [];
+    for (let i = 0; i < count; i++) {
+      const number = startNumber + i;
+      if (tablesState.some(t => t.id === number)) {
+        toast.error(`Table ${number} already exists`);
+        return;
+      }
+      tables.push({
+        number,
+        name: `${bulkForm.namePrefix}${number}`,
+        seats,
+        floorKey: bulkForm.floorId,
+        status: 'available',
+      });
+    }
+    api('/tables/bulk', { method: 'POST', body: JSON.stringify({ tables }) }).then(() => {
+      load();
+      setBulkModal(false);
+      toast.success(`${count} tables added`);
+    }).catch(() => toast.error('Failed to add tables'));
+  };
+
+  const bulkDelete = () => {
+    if (selectedTables.size === 0) return;
+    if (!window.confirm(`Remove ${selectedTables.size} selected tables?`)) return;
+    api<PaginatedResponse<{ id: string; number: number }>>('/tables?page=1&limit=500').then(async rows => {
+      const ids = Array.from(selectedTables).map(num => {
+        const row = rows.items.find(x => x.number === num);
+        return row?.id;
+      }).filter(Boolean);
+      if (ids.length !== selectedTables.size) {
+        toast.error('Some tables not found');
+        return;
+      }
+      await api('/tables/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) });
+      setSelectedTables(new Set());
+      load();
+      toast.success(`${ids.length} tables removed`);
+    }).catch(() => toast.error('Failed to delete tables'));
+  };
+
+  const toggleSelectTable = (id: number) => {
+    const newSelected = new Set(selectedTables);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedTables(newSelected);
+  };
+
+  const selectAll = () => {
+    if (selectedTables.size === filteredTables.length) {
+      setSelectedTables(new Set());
+    } else {
+      setSelectedTables(new Set(filteredTables.map(t => t.id)));
+    }
+  };
+
   const filteredTables = useMemo(() => {
     if (floorId === 'all') return tablesState;
     return tablesState.filter(t => t.floorId === floorId);
@@ -192,6 +296,13 @@ export default function TableManagement() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-secondary transition-colors"
             >
               <Layers className="w-4 h-4" /> Add floor
+            </button>
+            <button
+              type="button"
+              onClick={openBulkAdd}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-border bg-card hover:bg-muted transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Bulk add tables
             </button>
             <button
               type="button"
@@ -258,6 +369,31 @@ export default function TableManagement() {
         ))}
       </div>
 
+      {canManage && filteredTables.length > 0 && (
+        <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-xl">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selectedTables.size === filteredTables.length && filteredTables.length > 0}
+              onChange={selectAll}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">
+              {selectedTables.size} of {filteredTables.length} selected
+            </span>
+          </div>
+          {selectedTables.size > 0 && (
+            <button
+              type="button"
+              onClick={bulkDelete}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Delete selected
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-4">
         {(['available', 'occupied', 'reserved'] as const).map(s => (
           <div key={s} className="flex items-center gap-2 text-xs text-muted-foreground capitalize">
@@ -269,6 +405,16 @@ export default function TableManagement() {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {filteredTables.map(table => (
           <div key={table.id} className="relative">
+            {canManage && (
+              <div className="absolute top-2 left-2 z-10">
+                <input
+                  type="checkbox"
+                  checked={selectedTables.has(table.id)}
+                  onChange={() => toggleSelectTable(table.id)}
+                  className="w-4 h-4"
+                />
+              </div>
+            )}
             {canManage && (
               <div className="absolute top-2 right-2 z-10 flex gap-0.5">
                 <button
@@ -326,6 +472,79 @@ export default function TableManagement() {
 
       {filteredTables.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">No tables in this view. {canManage ? 'Add a table or pick another floor.' : ''}</p>
+      )}
+
+      {/* Bulk add modal */}
+      {bulkModal && (
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setBulkModal(false)}>
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-lg" onClick={e => e.stopPropagation()}>
+            <h3 className="font-serif text-lg font-bold text-foreground">Bulk add tables</h3>
+            <div>
+              <label className="text-xs text-muted-foreground">Number of tables</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={bulkForm.count}
+                onChange={e => setBulkForm(p => ({ ...p, count: e.target.value }))}
+                className="mt-1 w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Starting table number</label>
+              <input
+                type="number"
+                min={1}
+                value={bulkForm.startNumber}
+                onChange={e => setBulkForm(p => ({ ...p, startNumber: e.target.value }))}
+                className="mt-1 w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Name prefix</label>
+              <input
+                value={bulkForm.namePrefix}
+                onChange={e => setBulkForm(p => ({ ...p, namePrefix: e.target.value }))}
+                placeholder="e.g. Table "
+                className="mt-1 w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Floor</label>
+                <select
+                  value={bulkForm.floorId}
+                  onChange={e => setBulkForm(p => ({ ...p, floorId: e.target.value }))}
+                  className="mt-1 w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+                >
+                  {floorsState.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Seats per table</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={bulkForm.seats}
+                  onChange={e => setBulkForm(p => ({ ...p, seats: e.target.value }))}
+                  className="mt-1 w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setBulkModal(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">
+                Cancel
+              </button>
+              <button type="button" onClick={saveBulkAdd} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">
+                Add tables
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Floor modal */}

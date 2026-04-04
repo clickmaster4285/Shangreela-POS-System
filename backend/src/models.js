@@ -50,6 +50,7 @@ const orderSchema = new mongoose.Schema(
     status: { type: String, enum: ["pending", "preparing", "ready", "completed"], required: true },
     table: Number,
     customerName: String,
+    orderTaker: String,
     notes: String,
     subtotal: Number,
     tax: Number,

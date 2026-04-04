@@ -24,6 +24,7 @@ export interface Order {
   notes: string;
   createdAt: string;
   customerName?: string;
+  orderTaker?: string;
 }
 
 export interface CartItem {

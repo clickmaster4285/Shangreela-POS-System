@@ -232,8 +232,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPermissions(migratePermissionsFromStorage(all as Record<string, RolePermissions>));
       const u = await api<PaginatedResponse<User>>('/users?page=1&limit=200');
       setUsers(normalizeUsers(u.items));
-    } catch {
-      setUser(null);
+    } catch (error) {
+      // Only clear user if there's actually no token
+      if (!localStorage.getItem('shirazre_token')) {
+        setUser(null);
+      }
+      // If token exists but session fetch failed, keep trying silently
+      // This handles temporary network issues
+      console.error('Session fetch failed:', error);
     } finally {
       setLoading(false);
     }
@@ -260,6 +266,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
+    setUsers(DEFAULT_USERS);
+    setPermissions(DEFAULT_PERMISSIONS);
   };
 
   const currentPermissions = user ? permissions[user.role] : null;

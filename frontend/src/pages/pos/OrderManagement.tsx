@@ -125,6 +125,7 @@ export default function OrderManagement() {
                 </div>
               ))}
             </div>
+            {order.orderTaker && <div className="text-[10px] text-muted-foreground">Order taker: {order.orderTaker}</div>}
 
             {order.notes && <p className="text-xs text-primary italic">📝 {order.notes}</p>}
 
