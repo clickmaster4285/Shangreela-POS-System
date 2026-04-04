@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { menuItems, menuCategories } from '@/data/mockData';
+import { menuCategories, type MenuItem } from '@/data/mockData';
+import { api, type PaginatedResponse } from '@/lib/api';
 
 export default function FeaturedMenu() {
   const [active, setActive] = useState('All');
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  useEffect(() => {
+    api<PaginatedResponse<MenuItem>>('/menu?page=1&limit=12')
+      .then((response) => setMenuItems(response.items))
+      .catch(() => {});
+  }, []);
   const filtered = active === 'All' ? menuItems : menuItems.filter(i => i.category === active);
   const formatPKR = (price: number) => `Rs. ${price.toLocaleString('en-PK')}`;
 

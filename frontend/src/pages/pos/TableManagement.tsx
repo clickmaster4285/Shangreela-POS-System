@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { floors as defaultFloors, tables as defaultTables, type FloorInfo, type TableInfo } from '@/data/mockData';
+import { type FloorInfo, type TableInfo } from '@/data/mockData';
 import { Users, Plus, Pencil, Trash2, Layers, LayoutGrid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, MANAGER_ROLES } from '@/contexts/AuthContext';
@@ -43,8 +43,8 @@ export default function TableManagement() {
   const navigate = useNavigate();
   const canManage = user ? MANAGER_ROLES.includes(user.role) : false;
 
-  const [floorsState, setFloorsState] = useState<FloorInfo[]>(defaultFloors.map(f => ({ ...f })));
-  const [tablesState, setTablesState] = useState<TableInfo[]>(defaultTables.map(t => ({ ...t })));
+  const [floorsState, setFloorsState] = useState<FloorInfo[]>([]);
+  const [tablesState, setTablesState] = useState<TableInfo[]>([]);
   const [floorId, setFloorId] = useState<string>('all');
 
   const load = () =>
@@ -87,7 +87,7 @@ export default function TableManagement() {
       return;
     }
     if (floorEditing) {
-      api('/floors', { method: 'POST', body: JSON.stringify({ key: floorEditing.id, name: n }) }).then(load);
+      api(`/floors/${floorEditing.id}`, { method: 'PUT', body: JSON.stringify({ key: floorEditing.id, name: n }) }).then(load);
       toast.success('Floor updated');
     } else {
       const id = newFloorId(n, floorsState);

@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer } from 'lucide-react';
 import {
-  defaultEmployees,
-  defaultAttendance,
-  defaultLeaveRequests,
-  defaultLeaveBalances,
-  defaultSalaryRecords,
-  defaultShifts,
   type Employee,
   type AttendanceRecord,
   type LeaveRequest,
@@ -21,27 +15,12 @@ type Tab = 'employees' | 'attendance' | 'shifts' | 'leaves' | 'salary';
 
 export default function HRManagement() {
   const [tab, setTab] = useState<Tab>('employees');
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_employees');
-    return saved ? JSON.parse(saved) : defaultEmployees;
-  });
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_attendance');
-    return saved ? JSON.parse(saved) : defaultAttendance;
-  });
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_leaves');
-    return saved ? JSON.parse(saved) : defaultLeaveRequests;
-  });
-  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_leave_balances');
-    return saved ? JSON.parse(saved) : defaultLeaveBalances;
-  });
-  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_salary');
-    return saved ? JSON.parse(saved) : defaultSalaryRecords;
-  });
-  const [shifts] = useState<ShiftBlock[]>(defaultShifts);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
+  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
+  const [shifts, setShifts] = useState<ShiftBlock[]>([]);
   const [search, setSearch] = useState('');
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
@@ -60,14 +39,16 @@ export default function HRManagement() {
       api<{ items: LeaveRequest[] }>('/hr/leaves'),
       api<{ items: LeaveBalance[] }>('/hr/leave-balances'),
       api<{ items: SalaryRecord[] }>('/hr/salary'),
+      api<{ items: ShiftBlock[] }>('/hr/shifts'),
     ])
-      .then(([employeesRes, attendanceRes, leavesRes, balancesRes, salaryRes]) => {
+      .then(([employeesRes, attendanceRes, leavesRes, balancesRes, salaryRes, shiftsRes]) => {
         setEmployees(employeesRes.items);
         setEmployeeMeta({ hasNext: employeesRes.pagination.hasNext, hasPrev: employeesRes.pagination.hasPrev });
         setAttendance(attendanceRes.items);
         setLeaveRequests(leavesRes.items);
         setLeaveBalances(balancesRes.items);
         setSalaryRecords(salaryRes.items);
+        setShifts(shiftsRes.items);
       })
       .catch(() => toast.error('Failed to load HR data'));
   }, [employeePage, search]);
@@ -78,7 +59,7 @@ export default function HRManagement() {
 
   const handleAddEmployee = () => {
     if (!newEmp.name || !newEmp.role || !newEmp.salary) return;
-    const empId = `EMP-${String(employees.length + 1).padStart(3, '0')}`;
+    const empId = `EMP-${Date.now().toString().slice(-6)}`;
     const emp: Employee = {
       id: Date.now().toString(),
       employeeId: empId,

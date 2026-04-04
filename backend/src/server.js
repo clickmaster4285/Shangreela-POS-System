@@ -4,7 +4,7 @@ const morgan = require("morgan");
 const { connectDb } = require("./db");
 const routes = require("./routes");
 const { port, frontendOrigin } = require("./config");
-const { seedUsersAndPermissions } = require("./startup");
+const { initializeSuperAdmin } = require("./utils/superadmin");
 
 const app = express();
 
@@ -15,7 +15,7 @@ app.use("/api", routes);
 
 async function boot() {
   await connectDb();
-  await seedUsersAndPermissions();
+  await initializeSuperAdmin();
   app.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
   });

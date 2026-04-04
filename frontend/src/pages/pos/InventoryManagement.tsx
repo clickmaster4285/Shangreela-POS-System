@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Plus, Minus, Trash2, RotateCcw, Search, Filter, Clock, TrendingDown, Archive, Truck } from 'lucide-react';
-import { defaultInventory, defaultInventoryLogs, defaultSuppliers, type InventoryItem, type InventoryLog, type Supplier, inventoryCategories, type InventoryCategory } from '@/data/inventoryData';
+import { type InventoryItem, type InventoryLog, type Supplier, inventoryCategories, type InventoryCategory } from '@/data/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
 
@@ -8,18 +8,9 @@ type Tab = 'stock' | 'logs' | 'suppliers' | 'alerts';
 
 export default function InventoryManagement() {
   const [tab, setTab] = useState<Tab>('stock');
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_inventory');
-    return saved ? JSON.parse(saved) : defaultInventory;
-  });
-  const [logs, setLogs] = useState<InventoryLog[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_inv_logs');
-    return saved ? JSON.parse(saved) : defaultInventoryLogs;
-  });
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem('Shiraz Restaurant_suppliers');
-    return saved ? JSON.parse(saved) : defaultSuppliers;
-  });
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [logs, setLogs] = useState<InventoryLog[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('All');
   const [perishableOnly, setPerishableOnly] = useState(false);

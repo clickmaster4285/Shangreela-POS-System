@@ -541,6 +541,9 @@ export default function POSScreen() {
           <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
             <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
           </div>
+          <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border/60">
+            <span>Total</span><span>Rs. {grandTotal.toLocaleString()}</span>
+          </div>
           {/* <div className="flex justify-between items-center pt-1 border-t border-border/60">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
