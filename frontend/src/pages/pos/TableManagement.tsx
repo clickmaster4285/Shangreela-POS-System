@@ -215,6 +215,7 @@ export default function TableManagement() {
       toast.error('Select a valid floor');
       return;
     }
+
     const tables = [];
     for (let i = 0; i < count; i++) {
       const number = startNumber + i;
@@ -230,23 +231,24 @@ export default function TableManagement() {
         status: 'available',
       });
     }
-    api('/tables/bulk', { method: 'POST', body: JSON.stringify({ tables }) }).then(() => {
-      load();
-      setBulkModal(false);
-      toast.success(`${count} tables added`);
-    }).catch(() => toast.error('Failed to add tables'));
+
+    api('/tables/bulk', { method: 'POST', body: JSON.stringify({ tables }) })
+      .then(() => {
+        load();
+        setBulkModal(false);
+        toast.success(`${count} tables added`);
+      })
+      .catch(() => toast.error('Failed to add tables'));
   };
 
   const bulkDelete = () => {
     if (selectedTables.size === 0) return;
     if (!window.confirm(`Remove ${selectedTables.size} selected tables?`)) return;
+
     api<PaginatedResponse<{ id: string; number: number }>>('/tables?page=1&limit=500').then(async rows => {
-      const ids = Array.from(selectedTables).map(num => {
-        const row = rows.items.find(x => x.number === num);
-        return row?.id;
-      }).filter(Boolean);
+      const ids = Array.from(selectedTables).map(num => rows.items.find(x => x.number === num)?.id).filter(Boolean) as string[];
       if (ids.length !== selectedTables.size) {
-        toast.error('Some tables not found');
+        toast.error('Some tables were not found');
         return;
       }
       await api('/tables/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) });
@@ -257,21 +259,21 @@ export default function TableManagement() {
   };
 
   const toggleSelectTable = (id: number) => {
-    const newSelected = new Set(selectedTables);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
+    const selection = new Set(selectedTables);
+    if (selection.has(id)) {
+      selection.delete(id);
     } else {
-      newSelected.add(id);
+      selection.add(id);
     }
-    setSelectedTables(newSelected);
+    setSelectedTables(selection);
   };
 
   const selectAll = () => {
     if (selectedTables.size === filteredTables.length) {
       setSelectedTables(new Set());
-    } else {
-      setSelectedTables(new Set(filteredTables.map(t => t.id)));
+      return;
     }
+    setSelectedTables(new Set(filteredTables.map(t => t.id)));
   };
 
   const filteredTables = useMemo(() => {
@@ -370,7 +372,7 @@ export default function TableManagement() {
       </div>
 
       {canManage && filteredTables.length > 0 && (
-        <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-muted/50 rounded-xl">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -410,7 +412,10 @@ export default function TableManagement() {
                 <input
                   type="checkbox"
                   checked={selectedTables.has(table.id)}
-                  onChange={() => toggleSelectTable(table.id)}
+                  onChange={e => {
+                    e.stopPropagation();
+                    toggleSelectTable(table.id);
+                  }}
                   className="w-4 h-4"
                 />
               </div>
@@ -443,7 +448,7 @@ export default function TableManagement() {
             )}
             <button
               type="button"
-              onClick={() => navigate('/pos/terminal')}
+              onClick={() => navigate(`/pos/terminal?table=${table.id}`)}
               className={`w-full pos-card border-2 text-center py-6 hover:scale-[1.02] transition-all ${statusStyles[table.status]}`}
             >
               <p className="font-serif text-lg font-bold text-foreground mb-1">{table.name}</p>

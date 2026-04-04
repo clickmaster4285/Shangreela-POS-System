@@ -4,14 +4,12 @@ import { api } from '@/lib/api';
 
 export default function TaxDetails() {
   const [salesTaxRate, setSalesTaxRate] = useState(16);
-  const [furtherTaxRate, setFurtherTaxRate] = useState(4);
   const [serviceChargeRate, setServiceChargeRate] = useState(10);
   const [withholdingLabel, setWithholdingLabel] = useState('As per FBR');
 
   useEffect(() => {
-    api<{ salesTaxRate: number; furtherTaxRate: number; serviceChargeRate: number; withholdingLabel: string }>('/settings/tax').then(r => {
+    api<{ salesTaxRate: number; serviceChargeRate: number; withholdingLabel: string }>('/settings/tax').then(r => {
       setSalesTaxRate(r.salesTaxRate ?? 16);
-      setFurtherTaxRate(r.furtherTaxRate ?? 4);
       setServiceChargeRate(r.serviceChargeRate ?? 10);
       setWithholdingLabel(r.withholdingLabel ?? 'As per FBR');
     });
@@ -19,7 +17,6 @@ export default function TaxDetails() {
 
   const rows = [
     { name: 'Sales tax (provincial)', rate: `${salesTaxRate}%`, applies: 'Taxable food & beverages (configurable by item)' },
-    { name: 'Further tax', rate: `${furtherTaxRate}%`, applies: 'Unregistered supplier scenarios (if applicable)' },
     { name: 'Service / service charge', rate: `${serviceChargeRate}%`, applies: 'Optional service charge on dine-in (before tax)' },
     { name: 'Withholding (WHT)', rate: withholdingLabel, applies: 'Corporate billing / invoice mode' },
   ];
@@ -67,12 +64,11 @@ export default function TaxDetails() {
       </div>
       <div className="pos-card p-4 grid sm:grid-cols-2 gap-3">
         <input type="number" value={salesTaxRate} onChange={e => setSalesTaxRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Sales tax %" />
-        <input type="number" value={furtherTaxRate} onChange={e => setFurtherTaxRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Further tax %" />
         <input type="number" value={serviceChargeRate} onChange={e => setServiceChargeRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Service charge %" />
         <input value={withholdingLabel} onChange={e => setWithholdingLabel(e.target.value)} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Withholding label" />
         <button
           type="button"
-          onClick={() => api('/settings/tax', { method: 'PUT', body: JSON.stringify({ salesTaxRate, furtherTaxRate, serviceChargeRate, withholdingLabel }) })}
+          onClick={() => api('/settings/tax', { method: 'PUT', body: JSON.stringify({ salesTaxRate, serviceChargeRate, withholdingLabel }) })}
           className="sm:col-span-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium"
         >
           Save tax settings

@@ -536,33 +536,6 @@ router.post("/tables", authRequired, async (req, res) => {
   res.status(201).json({ id: String(row._id) });
 });
 
-router.post("/tables/bulk", authRequired, async (req, res) => {
-  const tables = req.body.tables || [];
-  if (!Array.isArray(tables) || tables.length === 0) {
-    return res.status(400).json({ error: "Tables array is required" });
-  }
-  const created = [];
-  for (const table of tables) {
-    const { number, name, seats, floorKey, status } = table;
-    if (!number || !name || !seats || !floorKey) {
-      return res.status(400).json({ error: "Each table must have number, name, seats, and floorKey" });
-    }
-    const newTable = new Table({ number, name, seats, floorKey, status: status || "available" });
-    await newTable.save();
-    created.push({ id: String(newTable._id), number, name });
-  }
-  res.json({ created });
-});
-
-router.delete("/tables/bulk", authRequired, async (req, res) => {
-  const ids = req.body.ids || [];
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: "IDs array is required" });
-  }
-  await Table.deleteMany({ _id: { $in: ids } });
-  res.json({ deleted: ids.length });
-});
-
 router.put("/tables/:id", authRequired, async (req, res) => {
   const row = await Table.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
   res.json({ id: String(row._id) });
@@ -571,6 +544,38 @@ router.put("/tables/:id", authRequired, async (req, res) => {
 router.delete("/tables/:id", authRequired, async (req, res) => {
   await Table.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
+});
+
+router.post("/tables/bulk", authRequired, async (req, res) => {
+  const tables = req.body?.tables || [];
+  if (!Array.isArray(tables) || tables.length === 0) {
+    return res.status(400).json({ error: "Tables array is required" });
+  }
+
+  const created = [];
+  for (const table of tables) {
+    const { number, name, seats, floorKey, status } = table;
+    if (!number || !name || !seats || !floorKey) {
+      return res.status(400).json({ error: "Each table must include number, name, seats, and floorKey" });
+    }
+    const existing = await Table.findOne({ number });
+    if (existing) {
+      return res.status(409).json({ error: `Table ${number} already exists` });
+    }
+    const newTable = await Table.create({ number, name, seats, floorKey, status: status || "available" });
+    created.push({ id: String(newTable._id), number, name });
+  }
+
+  res.status(201).json({ created });
+});
+
+router.delete("/tables/bulk", authRequired, async (req, res) => {
+  const ids = req.body?.ids || [];
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "IDs array is required" });
+  }
+  const result = await Table.deleteMany({ _id: { $in: ids } });
+  res.json({ deleted: result.deletedCount });
 });
 
 router.get("/deliveries", authRequired, async (_req, res) => {
@@ -764,14 +769,14 @@ router.post("/integrations/fbr/test-connection", authRequired, async (_req, res)
 
 router.get("/settings/tax", authRequired, async (_req, res) => {
   let row = await TaxConfig.findOne({});
-  if (!row) row = await TaxConfig.create({ salesTaxRate: 16, furtherTaxRate: 4, serviceChargeRate: 10, withholdingLabel: "As per FBR" });
-  res.json({ id: String(row._id), salesTaxRate: row.salesTaxRate, furtherTaxRate: row.furtherTaxRate, serviceChargeRate: row.serviceChargeRate, withholdingLabel: row.withholdingLabel });
+  if (!row) row = await TaxConfig.create({ salesTaxRate: 16, serviceChargeRate: 10, withholdingLabel: "As per FBR" });
+  res.json({ id: String(row._id), salesTaxRate: row.salesTaxRate, serviceChargeRate: row.serviceChargeRate, withholdingLabel: row.withholdingLabel });
 });
 
 router.put("/settings/tax", authRequired, async (req, res) => {
   const existing = await TaxConfig.findOne({});
   const row = existing ? await TaxConfig.findByIdAndUpdate(existing._id, req.body || {}, { new: true }) : await TaxConfig.create(req.body || {});
-  res.json({ id: String(row._id), salesTaxRate: row.salesTaxRate, furtherTaxRate: row.furtherTaxRate, serviceChargeRate: row.serviceChargeRate, withholdingLabel: row.withholdingLabel });
+  res.json({ id: String(row._id), salesTaxRate: row.salesTaxRate, serviceChargeRate: row.serviceChargeRate, withholdingLabel: row.withholdingLabel });
 });
 
 router.get("/mobile/config", authRequired, async (_req, res) => {

@@ -9,10 +9,11 @@ import {
 } from '@/components/pos/Form';
 import { Plus, Minus, Trash2, ShoppingBag, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { computePakistanTaxTotals, PKR_FURTHER_TAX_RATE, PKR_GST_RATE } from '@/utils/pakistanTax';
+import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 
 export default function POSScreen() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -74,6 +75,17 @@ export default function POSScreen() {
       );
     }
   }, [tablesQuery.data]);
+
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const tableParam = searchParams.get('table');
+    const tableId = tableParam ? Number(tableParam) : null;
+    if (tableId && tables.some(t => t.id === tableId)) {
+      setSelectedTableId(tableId);
+      setOrderType('dine-in');
+    }
+  }, [searchParams, tables]);
+
   const [noteItem, setNoteItem] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
 
@@ -534,9 +546,6 @@ export default function POSScreen() {
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Further tax ({Math.round(PKR_FURTHER_TAX_RATE * 100)}%)</span><span>Rs. {furtherTaxAmount.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
             <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>

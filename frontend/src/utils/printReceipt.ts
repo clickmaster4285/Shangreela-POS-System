@@ -1,5 +1,5 @@
 import type { CartItem } from '@/data/mockData';
-import { computePakistanTaxTotals, PKR_FURTHER_TAX_RATE, PKR_GST_RATE } from '@/utils/pakistanTax';
+import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
 
 /** Config shown on printed tax invoices (align with FBR integration / business registration). */
 export const RECEIPT_BUSINESS = {
@@ -22,7 +22,7 @@ export interface ReceiptData {
   subtotal: number;
   discount: number;
   discountPercent: number;
-  /** Legacy: ignored; totals are computed with Pakistan GST + further tax */
+  /** Legacy: ignored; totals are computed with Pakistan GST only */
   tax?: number;
   total?: number;
   paymentMethod?: string;
@@ -48,8 +48,6 @@ export function printReceipt(data: ReceiptData) {
   );
 
   const gstPct = Math.round(PKR_GST_RATE * 100);
-  const ftPct = Math.round(PKR_FURTHER_TAX_RATE * 100);
-
   const receiptHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -197,13 +195,12 @@ export function printReceipt(data: ReceiptData) {
     }
     <tr class="sub"><td>Taxable value</td><td>${fmtPKR(taxableAmount)}</td></tr>
     <tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>
-    <tr class="sub"><td>Further tax (FBR) @ ${ftPct}%</td><td>${fmtPKR(furtherTaxAmount)}</td></tr>
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
   </table>
 
   <p class="tax-note">
-    Tax amounts are calculated on taxable value as per standard POS configuration (GST ${gstPct}% + further tax ${ftPct}%). Retain this invoice for FBR / SRB record. For integrated digital invoicing, verify via FBR portal when live API is enabled.
+    Tax amounts are calculated on taxable value as per standard POS configuration (GST ${gstPct}%). Retain this invoice for SRB / sales tax record. For integrated digital invoicing, verify via portal when live API is enabled.
   </p>
 
   ${data.paymentMethod ? `<div class="payment">Payment: ${esc(data.paymentMethod)}</div>` : ''}

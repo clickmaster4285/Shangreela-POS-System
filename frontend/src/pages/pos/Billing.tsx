@@ -3,12 +3,14 @@ import type { Order } from '@/data/mockData';
 import { CreditCard, Banknote, Printer, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
-import { computePakistanTaxTotals, PKR_FURTHER_TAX_RATE, PKR_GST_RATE } from '@/utils/pakistanTax';
+import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function Billing() {
   const { hasAction } = useAuth();
+  const queryClient = useQueryClient();
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
   const [discount, setDiscount] = useState(0);
@@ -150,7 +152,6 @@ export default function Billing() {
             {discount > 0 && <div className="flex justify-between text-success"><span>Discount ({discount}%)</span><span>-{fmt(discountAmt)}</span></div>}
             <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
             <div className="flex justify-between text-muted-foreground"><span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>{fmt(gstAmount)}</span></div>
-            <div className="flex justify-between text-muted-foreground"><span>Further tax ({Math.round(PKR_FURTHER_TAX_RATE * 100)}%)</span><span>{fmt(furtherTaxAmount)}</span></div>
             <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
             <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border">
               <span>Total</span><span>{fmt(grandTotal)}</span>
@@ -233,6 +234,7 @@ export default function Billing() {
                   .then(() => {
                     toast.success('Payment completed and receipt printed');
                     loadOrders();
+                    queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
                   })
                   .catch(() => toast.error('Payment failed'));
               } else {

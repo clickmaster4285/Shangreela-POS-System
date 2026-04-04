@@ -22,7 +22,7 @@ export default function KitchenDisplay() {
 
   const fetchOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
-      setOrders(r.items.filter(o => o.status !== 'completed'));
+      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'delivered'));
     });
 
   useEffect(() => {

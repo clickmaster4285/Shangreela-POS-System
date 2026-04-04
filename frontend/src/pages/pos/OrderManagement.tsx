@@ -8,6 +8,7 @@ const statusColors: Record<string, string> = {
   pending: 'bg-warning/10 text-warning border-warning/20',
   preparing: 'bg-primary/10 text-primary border-primary/20',
   ready: 'bg-success/10 text-success border-success/20',
+  delivered: 'bg-secondary/10 text-secondary border-secondary/20',
   completed: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -50,7 +51,11 @@ export default function OrderManagement() {
   };
 
   const nextStatus = (s: Order['status']): Order['status'] | null => {
-    const flow: Record<string, Order['status']> = { pending: 'preparing', preparing: 'ready', ready: 'completed' };
+    const flow: Record<string, Order['status']> = {
+      pending: 'preparing',
+      preparing: 'ready',
+      ready: 'delivered',
+    };
     return flow[s] || null;
   };
 
@@ -88,7 +93,7 @@ export default function OrderManagement() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
-          {['all', 'pending', 'preparing', 'ready', 'completed'].map(s => (
+          {['all', 'pending', 'preparing', 'ready', 'delivered', 'completed'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
               {s} {s !== 'all' && `(${orders.filter(o => o.status === s).length})`}
             </button>
