@@ -137,6 +137,9 @@ export default function OrderManagement() {
               <div>
                 <p className="font-semibold text-foreground">{order.id}</p>
                 <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • Table ${order.table}` : ''}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${statusColors[order.status]}`}>
                 {order.status}
@@ -151,7 +154,7 @@ export default function OrderManagement() {
                 </div>
               ))}
             </div>
-            {order.orderTaker && <div className="text-[10px] text-muted-foreground">Order taker: {order.orderTaker}</div>}
+            <div className="text-[10px] text-muted-foreground">Order taker: {order.orderTaker || 'Unknown'}</div>
 
             {order.notes && <p className="text-xs text-primary italic">📝 {order.notes}</p>}
 

@@ -33,6 +33,7 @@ export default function POSScreen() {
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');
   const [customItemQty, setCustomItemQty] = useState('1');
+  const [gstEnabled, setGstEnabled] = useState(true);
   const menuQuery = useQuery({
     queryKey: ['pos-menu-items'],
     queryFn: () => api<PaginatedResponse<MenuItem & { id: string }>>('/menu?limit=500&page=1'),
@@ -195,7 +196,7 @@ export default function POSScreen() {
 
   const subtotal = cart.reduce((s, c) => s + c.menuItem.price * c.quantity, 0);
   const discountAmt = 0;
-  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(subtotal, discountAmt);
+  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(subtotal, discountAmt, gstEnabled);
 
   const saveNote = () => {
     if (noteItem) {
@@ -545,7 +546,7 @@ export default function POSScreen() {
             <span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
+            <span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
             <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
@@ -553,30 +554,20 @@ export default function POSScreen() {
           <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border/60">
             <span>Total</span><span>Rs. {grandTotal.toLocaleString()}</span>
           </div>
-          {/* <div className="flex justify-between items-center pt-1 border-t border-border/60">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Payment method
-              </span>
-              <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-[11px]">
-                {(['cash', 'card'] as const).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setPaymentMethod(m)}
-                    className={`px-2.5 py-1 rounded-full capitalize transition-colors ${
-                      paymentMethod === m
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted'
-                    }`}
-                  >
-                    {m === 'cash' ? 'Cash' : 'Credit card'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <span className="text-base font-bold text-foreground">Rs. {grandTotal.toLocaleString()}</span>
-          </div> */}
+
+          {/* GST Checkbox */}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="gst-checkbox"
+              checked={gstEnabled}
+              onChange={(e) => setGstEnabled(e.target.checked)}
+              className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
+            />
+            <label htmlFor="gst-checkbox" className="text-xs text-muted-foreground cursor-pointer">
+              Include GST ({Math.round(PKR_GST_RATE * 100)}%)
+            </label>
+          </div>
 
           <div className="pt-2">
             {/* Hold button hidden for waiter-only flow */}
@@ -617,7 +608,7 @@ export default function POSScreen() {
                   const createOrAppend = async () => {
                     if (orderType === 'dine-in' && selectedTable?.id) {
                       const existing = await api<{ item: { dbId: string } | null }>(
-                        `/orders/open-by-table/${selectedTable.id}?includeCompleted=true`
+                        `/orders/open-by-table/${selectedTable.id}`
                       );
                       if (existing.item?.dbId) {
                         await api(`/orders/${existing.item.dbId}/add-items`, {

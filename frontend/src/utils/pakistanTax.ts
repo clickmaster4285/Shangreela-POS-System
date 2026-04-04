@@ -11,12 +11,12 @@ export type PakistanTaxBreakdown = {
 };
 
 /**
- * Pakistan-style breakdown: taxable value → GST @16%.
+ * Pakistan-style breakdown: taxable value → GST @16% (optional).
  * Rounds each tax line to whole rupees for receipt display.
  */
-export function computePakistanTaxTotals(subtotal: number, discountAmount: number): PakistanTaxBreakdown {
+export function computePakistanTaxTotals(subtotal: number, discountAmount: number, gstEnabled: boolean = true): PakistanTaxBreakdown {
   const taxableAmount = Math.max(0, Math.round(subtotal) - Math.round(discountAmount));
-  const gstAmount = Math.round(taxableAmount * PKR_GST_RATE);
+  const gstAmount = gstEnabled ? Math.round(taxableAmount * PKR_GST_RATE) : 0;
   const furtherTaxAmount = 0;
   const totalTaxAmount = gstAmount;
   const grandTotal = taxableAmount + totalTaxAmount;

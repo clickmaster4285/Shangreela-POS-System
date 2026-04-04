@@ -74,7 +74,10 @@ export default function KitchenDisplay() {
               <div>
                 <p className="font-semibold text-foreground text-lg">{order.id}</p>
                 <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • Table ${order.table}` : ''}</p>
-                {order.orderTaker && <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker}</p>}
+                <p className="text-xs text-muted-foreground">
+                  {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker || 'Unknown'}</p>
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />

@@ -130,9 +130,12 @@ exports.addItems = async (req, res) => {
 exports.payment = async (req, res) => {
   const row = await Order.findByIdAndUpdate(req.params.id, { status: "completed", paymentMethod: req.body.paymentMethod || "cash" }, { new: true });
   if (!row) return res.status(404).json({ message: "Order not found" });
+
+  // For dine-in orders, make table available after payment (no auto-creation of new order)
   if (row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
   }
+
   res.json({ ok: true });
 };
 

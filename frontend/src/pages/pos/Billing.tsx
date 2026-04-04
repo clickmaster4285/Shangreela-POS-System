@@ -15,6 +15,7 @@ export default function Billing() {
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  const [gstEnabled, setGstEnabled] = useState(true);
 
   const loadOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
@@ -48,7 +49,8 @@ export default function Billing() {
   const discountAmt = subtotal * (discount / 100);
   const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount } = computePakistanTaxTotals(
     subtotal,
-    discountAmt
+    discountAmt,
+    gstEnabled
   );
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -152,7 +154,7 @@ export default function Billing() {
             <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
             {discount > 0 && <div className="flex justify-between text-success"><span>Discount ({discount}%)</span><span>-{fmt(discountAmt)}</span></div>}
             <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
-            <div className="flex justify-between text-muted-foreground"><span>GST ({Math.round(PKR_GST_RATE * 100)}%)</span><span>{fmt(gstAmount)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
             <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
             <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border">
               <span>Total</span><span>{fmt(grandTotal)}</span>
@@ -174,6 +176,19 @@ export default function Billing() {
             </div>
           </div>
           )}
+
+          {/* GST Toggle */}
+          <div className="mb-4 rounded-xl border border-border/70 p-3">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={gstEnabled}
+                onChange={(e) => setGstEnabled(e.target.checked)}
+                className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
+              />
+              Include GST ({Math.round(PKR_GST_RATE * 100)}%)
+            </label>
+          </div>
 
           {/* Payment */}
           <div className="mb-4 rounded-xl border border-border/70 p-3">
