@@ -21,6 +21,7 @@ async function attachPermissions(req, res, next) {
   if (!req.user?.role) return next();
   const p = await Permission.findOne({ role: req.user.role }).lean();
   req.currentPermissions = p || null;
+  req.isSuperAdmin = req.user.role === "super-admin";
   next();
 }
 

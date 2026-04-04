@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { Order } from '@/data/mockData';
 import { toast } from 'sonner';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, X } from 'lucide-react';
 import { api, type PaginatedResponse } from '@/lib/api';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-warning/10 text-warning border-warning/20',
   preparing: 'bg-primary/10 text-primary border-primary/20',
   ready: 'bg-success/10 text-success border-success/20',
-  delivered: 'bg-secondary/10 text-secondary border-secondary/20',
+  served: 'bg-secondary/10 text-secondary border-secondary/20',
   completed: 'bg-muted text-muted-foreground border-border',
+  cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
 export default function OrderManagement() {
@@ -50,11 +51,31 @@ export default function OrderManagement() {
       .catch(err => toast.error(err instanceof Error ? err.message : 'Update failed'));
   };
 
+  const cancelOrder = (id: string) => {
+    const order = orders.find(o => o.id === id) as (Order & { dbId?: string }) | undefined;
+    if (!order?.dbId) return;
+    if (order.status === 'completed') {
+      toast.error('Cannot cancel a paid order');
+      return;
+    }
+    if (order.status === 'served') {
+      toast.error('Cannot cancel a served order');
+      return;
+    }
+    if (!confirm(`Cancel order ${id}? This action cannot be undone.`)) return;
+    api(`/orders/${order.dbId}/cancel`, { method: 'POST' })
+      .then(() => {
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'cancelled' } : o));
+        toast.success(`Order ${id} cancelled`);
+      })
+      .catch(err => toast.error(err instanceof Error ? err.message : 'Cancel failed'));
+  };
+
   const nextStatus = (s: Order['status']): Order['status'] | null => {
     const flow: Record<string, Order['status']> = {
       pending: 'preparing',
       preparing: 'ready',
-      ready: 'delivered',
+      ready: 'served',
     };
     return flow[s] || null;
   };
@@ -93,7 +114,7 @@ export default function OrderManagement() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
-          {['all', 'pending', 'preparing', 'ready', 'delivered', 'completed'].map(s => (
+          {['all', 'pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
               {s} {s !== 'all' && `(${orders.filter(o => o.status === s).length})`}
             </button>
@@ -134,16 +155,26 @@ export default function OrderManagement() {
 
             {order.notes && <p className="text-xs text-primary italic">📝 {order.notes}</p>}
 
-            <div className="flex justify-between items-center pt-2 border-t border-border">
+            <div className="flex justify-between items-center pt-2 border-t border-border gap-2">
               <p className="font-serif text-lg font-bold text-foreground">Rs. {order.total.toLocaleString()}</p>
-              {nextStatus(order.status) && (
-                <button
-                  onClick={() => updateStatus(order.id, nextStatus(order.status)!)}
-                  className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-medium hover:bg-secondary transition-colors capitalize"
-                >
-                  → {nextStatus(order.status)}
-                </button>
-              )}
+              <div className="flex gap-1">
+                {nextStatus(order.status) && (
+                  <button
+                    onClick={() => updateStatus(order.id, nextStatus(order.status)!)}
+                    className="bg-primary text-primary-foreground px-3 py-2 rounded-xl text-xs font-medium hover:bg-secondary transition-colors capitalize"
+                  >
+                    → {nextStatus(order.status)}
+                  </button>
+                )}
+                {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'served' && (
+                  <button
+                    onClick={() => cancelOrder(order.id)}
+                    className="bg-destructive/10 text-destructive px-3 py-2 rounded-xl text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" /> Cancel
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}

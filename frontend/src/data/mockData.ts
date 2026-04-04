@@ -15,7 +15,7 @@ export interface Order {
   id: string;
   items: CartItem[];
   type: 'dine-in' | 'takeaway' | 'delivery';
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'completed';
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   table?: number;
   total: number;
   tax: number;

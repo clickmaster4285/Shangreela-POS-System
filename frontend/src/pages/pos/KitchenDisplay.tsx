@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Order } from '@/data/mockData';
-import { Clock, ChefHat, CheckCircle } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
@@ -22,7 +22,7 @@ export default function KitchenDisplay() {
 
   const fetchOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
-      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'delivered'));
+      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'served'));
     });
 
   useEffect(() => {
@@ -38,6 +38,18 @@ export default function KitchenDisplay() {
         toast.success(`Order ${id} → ${status}`);
       })
       .catch(() => toast.error('Failed to update order status'));
+  };
+
+  const cancelOrder = (id: string) => {
+    const row = orders.find(o => o.id === id);
+    if (!row?.dbId) return;
+    if (!confirm(`Cancel order ${id}? Waiter/cashier will need to inform the customer.`)) return;
+    api(`/orders/${row.dbId}/cancel`, { method: 'POST' })
+      .then(() => {
+        setOrders(prev => prev.filter(o => o.id !== id));
+        toast.success(`Order ${id} cancelled`);
+      })
+      .catch(() => toast.error('Failed to cancel order'));
   };
 
   const getElapsed = () => {
@@ -96,6 +108,11 @@ export default function KitchenDisplay() {
               )}
               {order.status === 'ready' && (
                 <span className="flex-1 text-center py-2.5 text-xs font-medium text-success">✓ Ready for pickup</span>
+              )}
+              {order.status !== 'ready' && order.status !== 'served' && (
+                <button onClick={() => cancelOrder(order.id)} className="bg-destructive/10 text-destructive px-3 py-2.5 rounded-xl text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center justify-center gap-1.5">
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </button>
               )}
             </div>
           </div>

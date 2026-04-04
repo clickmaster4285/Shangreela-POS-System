@@ -669,8 +669,8 @@ router.get("/reports/outdoor-delivery", authRequired, async (_req, res) => {
     const supervisor = r.assignedRider || "Unassigned";
     const prev = map.get(supervisor) || { supervisor, shiftLabel: "Current", cashCollected: 0, cardDigital: 0, deliveriesCompleted: 0, codPending: 0 };
     prev.cashCollected += Number(r.total || 0);
-    if (r.status === "delivered") prev.deliveriesCompleted += 1;
-    if (r.status !== "delivered") prev.codPending += 1;
+    if (r.status === "served") prev.deliveriesCompleted += 1;
+    if (r.status !== "served") prev.codPending += 1;
     map.set(supervisor, prev);
   }
   res.json({ items: [...map.values()] });

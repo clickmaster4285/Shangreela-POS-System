@@ -136,6 +136,23 @@ exports.payment = async (req, res) => {
   res.json({ ok: true });
 };
 
+exports.cancel = async (req, res) => {
+  const row = await Order.findById(req.params.id);
+  if (!row) return res.status(404).json({ message: "Order not found" });
+  if (row.status === "completed") {
+    return res.status(400).json({ message: "Cannot cancel a completed/paid order" });
+  }
+  if (row.status === "served") {
+    return res.status(400).json({ message: "Cannot cancel a served order" });
+  }
+  row.status = "cancelled";
+  await row.save();
+  if (row.type === "dine-in" && row.table) {
+    await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+  }
+  res.json({ ok: true });
+};
+
 exports.remove = async (req, res) => {
   const row = await Order.findById(req.params.id);
   if (!row) return res.status(404).json({ message: "Order not found" });

@@ -18,13 +18,14 @@ export default function Billing() {
 
   const loadOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
-      setOrders(r.items);
+      const filteredOrders = r.items.filter(o => o.status !== 'cancelled');
+      setOrders(filteredOrders);
       setSelectedOrder(prev => {
         if (prev) {
-          const same = r.items.find(a => a.id === prev.id);
+          const same = filteredOrders.find(a => a.id === prev.id);
           if (same) return same;
         }
-        return r.items[0] ?? null;
+        return filteredOrders[0] ?? null;
       });
     });
 
