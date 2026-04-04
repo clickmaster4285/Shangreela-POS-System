@@ -2,12 +2,10 @@
   "name": "sherazi-pos-backend",
   "version": "1.0.0",
   "private": true,
-  "main": "src/server.js",
+  "main": "server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
-    "seed": "node src/seed/runSeed.js"
-  },
+    "dev": "nodemon server.js",
+    "start": "node server.js"  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
