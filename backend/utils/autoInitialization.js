@@ -3,7 +3,7 @@ const { MenuItem, User, Permission } = require("../models");
 const { MENU_ITEMS } = require("./menuSeedData");
 
 function menuDocsForInsert() {
-  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable, kitchenRequired }) => ({
+  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable }) => ({
     name,
     price,
     category,
@@ -11,7 +11,6 @@ function menuDocsForInsert() {
     description,
     available: available !== false,
     perishable: Boolean(perishable),
-    kitchenRequired: kitchenRequired !== false,
   }));
 }
 
@@ -117,49 +116,10 @@ async function initializeSuperAdmin() {
   console.log("✓ Super Admin user initialized (email: superadmin@shirazre.com, password: super123)");
 }
 
-async function initializeDefaultUsers() {
-  const defaultUsers = [
-    {
-      name: "Hassaan shb",
-      email: "hassaan@shirazre.com",
-      password: "hassaan123",
-      role: "hassaan",
-    },
-    {
-      name: "Fahad shb",
-      email: "fahad@shirazre.com",
-      password: "fahad123",
-      role: "fahad",
-    },
-    {
-      name: "Cashier",
-      email: "cashier@shirazre.com",
-      password: "cashier123",
-      role: "cashier",
-    },
-  ];
-
-  for (const userData of defaultUsers) {
-    const userExists = await User.findOne({ email: userData.email });
-    if (!userExists) {
-      const passwordHash = await bcrypt.hash(userData.password, 10);
-      await User.create({
-        name: userData.name,
-        email: userData.email,
-        passwordHash,
-        role: userData.role,
-        avatar: "",
-      });
-      console.log(`✓ ${userData.role} user initialized (email: ${userData.email}, password: ${userData.password})`);
-    }
-  }
-}
-
 async function runAutoInitialization() {
   await seedMenuIfEmpty();
   await initializeSuperAdminPermission();
   await initializeSuperAdmin();
-  await initializeDefaultUsers();
 }
 
-module.exports = { runAutoInitialization, seedMenuIfEmpty, initializeSuperAdmin, initializeSuperAdminPermission, initializeDefaultUsers };
+module.exports = { runAutoInitialization, seedMenuIfEmpty, initializeSuperAdmin, initializeSuperAdminPermission };

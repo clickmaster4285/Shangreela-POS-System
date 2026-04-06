@@ -19,6 +19,7 @@ const giftCardsRoutes = require("./giftCards.routes");
 const loyaltyRoutes = require("./loyalty.routes");
 const integrationsRoutes = require("./integrations.routes");
 const mobileRoutes = require("./mobile.routes");
+const expensesRoutes = require("./expenses.routes");
 
 const router = express.Router();
 
@@ -41,5 +42,6 @@ router.use("/gift-cards", giftCardsRoutes);
 router.use("/loyalty", loyaltyRoutes);
 router.use("/integrations", integrationsRoutes);
 router.use("/mobile", mobileRoutes);
+router.use("/expenses", expensesRoutes);
 
 module.exports = router;

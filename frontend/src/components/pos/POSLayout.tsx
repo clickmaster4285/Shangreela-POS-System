@@ -24,6 +24,7 @@ import {
   Percent,
   Smartphone,
   MapPinned,
+  DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
@@ -43,6 +44,7 @@ const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page:
   { to: '/pos/delivery', icon: Truck, label: 'Delivery', page: 'delivery' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports', page: 'reports' },
   { to: '/pos/analytics', icon: TrendingUp, label: 'Analytics', page: 'analytics' },
+  { to: '/pos/expenses', icon: DollarSign, label: 'Expenses', page: 'expenses' },
   { to: '/pos/printers', icon: Printer, label: 'Printers (×3)', page: 'printers' },
   { to: '/pos/pos-tabs', icon: LayoutGrid, label: 'POS tabs (×3)', page: 'postabs' },
   { to: '/pos/gift-loyalty', icon: Gift, label: 'Gift & loyalty', page: 'giftcards' },

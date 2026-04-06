@@ -1,14 +1,16 @@
-import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight } from 'lucide-react';
+import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 export default function POSDashboard() {
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
+
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard-overview'],
+    queryKey: ['dashboard-overview', dateRange],
     queryFn: async () => {
       const [s, d, w, t, r] = await Promise.all([
       api<{ revenue: number; totalOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number }>('/dashboard/summary'),
@@ -43,9 +45,20 @@ export default function POSDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Welcome back. Here's today's overview.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Welcome back. Here's your overview.</p>
+        </div>
+        <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
+          {(['today', 'week', 'month', 'year'] as const).map(r => (
+            <button key={r} onClick={() => setDateRange(r)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stats */}

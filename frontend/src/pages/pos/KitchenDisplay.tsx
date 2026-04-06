@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Order } from '@/data/mockData';
 import { Clock, ChefHat, CheckCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
-  const getLatestRequestItems = useCallback((order: Order) => {
+  const getLatestRequestItems = (order: Order) => {
     const items = (order.items || []) as Array<Order['items'][number] & { requestId?: string; requestAt?: string | Date }>;
     if (!items.length) return [];
     const latest = [...items]
@@ -16,22 +16,18 @@ export default function KitchenDisplay() {
         const db = new Date(String(b.requestAt || 0)).getTime();
         return db - da;
       })[0];
-    const requestItems = latest?.requestId ? items.filter(i => i.requestId === latest.requestId) : items;
-    return requestItems.filter(i => i.menuItem?.kitchenRequired === true);
-  }, []);
+    if (!latest?.requestId) return items;
+    return items.filter(i => i.requestId === latest.requestId);
+  };
 
-  const fetchOrders = useCallback(() =>
+  const fetchOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
-      setOrders(
-        r.items
-          .filter(o => o.status !== 'completed' && o.status !== 'served' && o.status !== 'cancelled')
-          .filter(o => getLatestRequestItems(o).length > 0)
-      );
-    }), [getLatestRequestItems]);
+      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'served'));
+    });
 
   useEffect(() => {
     fetchOrders().catch(() => toast.error('Failed to load kitchen queue'));
-  }, [fetchOrders]);
+  }, []);
 
   const updateStatus = (id: string, status: Order['status']) => {
     const row = orders.find(o => o.id === id);
@@ -78,10 +74,7 @@ export default function KitchenDisplay() {
               <div>
                 <p className="font-semibold text-foreground text-lg">{order.id}</p>
                 <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • Table ${order.table}` : ''}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker || 'Unknown'}</p>
+                {order.orderTaker && <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker}</p>}
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />

@@ -104,9 +104,12 @@ export default function Billing() {
                       : 'bg-muted/30 border-border hover:bg-muted/60 hover:border-primary/30'
                   }`}
                 >
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-4">
                     <span className="font-medium text-sm text-foreground">{o.id}</span>
-                    <span className="text-sm font-semibold text-foreground">Rs. {o.total.toLocaleString()}</span>
+                    <div className="text-right">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Bill</p>
+                      <p className="text-sm font-semibold text-foreground">Rs. {o.total.toLocaleString()}</p>
+                    </div>
                   </div>
                   <div className="mt-1.5 flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • Table ${o.table}` : ''}</span>
@@ -137,6 +140,10 @@ export default function Billing() {
               <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(selectedOrder.status)}`}>
                 {getBillStatusLabel(selectedOrder.status)}
               </span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Total bill</span>
+              <span>{fmt(grandTotal)}</span>
             </div>
           </div>
 

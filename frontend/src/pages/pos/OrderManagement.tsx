@@ -159,7 +159,10 @@ export default function OrderManagement() {
             {order.notes && <p className="text-xs text-primary italic">📝 {order.notes}</p>}
 
             <div className="flex justify-between items-center pt-2 border-t border-border gap-2">
-              <p className="font-serif text-lg font-bold text-foreground">Rs. {order.total.toLocaleString()}</p>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Total bill</p>
+                <p className="font-serif text-lg font-bold text-foreground">Rs. {order.total.toLocaleString()}</p>
+              </div>
               <div className="flex gap-1">
                 {nextStatus(order.status) && (
                   <button

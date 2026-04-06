@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { TrendingUp, DollarSign, Package, Percent, MapPinned, FileBarChart } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +9,10 @@ const pieColors = ['hsl(340,70%,21%)', 'hsl(340,60%,30%)', 'hsl(15,45%,81%)', 'h
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 export default function Reports() {
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
+
   const reportsQuery = useQuery({
-    queryKey: ['reports-dashboard'],
+    queryKey: ['reports-dashboard', dateRange],
     queryFn: async () => {
       const [w, t, tax] = await Promise.all([
       api<{ items: { day: string; revenue: number }[] }>('/reports/weekly-sales'),
@@ -28,56 +30,20 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Reporting</h1>
-        <p className="text-sm text-muted-foreground">Weekly sales, tax-oriented summaries, and links to specialised reports.</p>
-      </div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <Link
-          to="/pos/tax"
-          className="pos-card flex items-center gap-3 hover:border-primary/30 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Percent className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="font-semibold text-foreground text-sm">Tax details</p>
-            <p className="text-xs text-muted-foreground">Rates, components, receipt lines</p>
-          </div>
-        </Link>
-        <Link
-          to="/pos/outdoor-delivery-report"
-          className="pos-card flex items-center gap-3 hover:border-primary/30 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <MapPinned className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="font-semibold text-foreground text-sm">Outdoor delivery report</p>
-            <p className="text-xs text-muted-foreground">Shift supervisor · cash & deliveries</p>
-          </div>
-        </Link>
-        <Link
-          to="/pos/fbr"
-          className="pos-card flex items-center gap-3 hover:border-primary/30 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <FileBarChart className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="font-semibold text-foreground text-sm">FBR POS</p>
-            <p className="text-xs text-muted-foreground">Digital invoice integration status</p>
-          </div>
-        </Link>
-      </div>
-
-      <div className="pos-card">
-        <h3 className="font-semibold text-foreground text-sm mb-2">Tax snapshot (demo)</h3>
-        <p className="text-xs text-muted-foreground">
-          Estimated sales tax on weekly revenue ({formatPKR(totalRevenue)}):{' '}
-          <span className="font-semibold text-foreground">{formatPKR(Math.round(totalRevenue * (taxRate / 100)))}</span> at {taxRate}% (adjust in Tax details).
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">Reporting</h1>
+          <p className="text-sm text-muted-foreground">Sales, tax-oriented summaries, and expense tracking.</p>
+        </div>
+        <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
+          {(['today', 'week', 'month', 'year'] as const).map(r => (
+            <button key={r} onClick={() => setDateRange(r)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-4">
@@ -151,6 +117,18 @@ export default function Reports() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="pos-card">
+        <h3 className="font-semibold text-foreground text-sm mb-4">View Detailed Reports</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Link to="/pos/expenses" className="px-4 py-3 rounded-xl bg-primary/10 text-primary text-sm font-medium hover:bg-primary/15 transition-colors flex items-center gap-2">
+            <DollarSign className="w-4 h-4" /> Expenses
+          </Link>
+          <Link to="/pos/sales-analytics" className="px-4 py-3 rounded-xl bg-primary/10 text-primary text-sm font-medium hover:bg-primary/15 transition-colors flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" /> Sales Analytics
+          </Link>
         </div>
       </div>
     </div>

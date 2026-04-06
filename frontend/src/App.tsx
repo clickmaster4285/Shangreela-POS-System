@@ -29,6 +29,7 @@ import FBRIntegration from "./pages/pos/FBRIntegration.tsx";
 import TaxDetails from "./pages/pos/TaxDetails.tsx";
 import MobileApp from "./pages/pos/MobileApp.tsx";
 import OutdoorDeliveryReport from "./pages/pos/OutdoorDeliveryReport.tsx";
+import Expenses from "./pages/pos/Expenses.tsx";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="hr" element={<PageGuard page="hr"><HRManagement /></PageGuard>} />
               <Route path="delivery" element={<PageGuard page="delivery"><DeliveryTracking /></PageGuard>} />
               <Route path="analytics" element={<PageGuard page="analytics"><SalesAnalytics /></PageGuard>} />
+              <Route path="expenses" element={<PageGuard page="expenses"><Expenses /></PageGuard>} />
               <Route path="printers" element={<PageGuard page="printers"><PrinterIntegration /></PageGuard>} />
               <Route path="pos-tabs" element={<PageGuard page="postabs"><POSTabsIntegration /></PageGuard>} />
               <Route path="gift-loyalty" element={<PageGuard page="giftcards"><GiftLoyaltyCards /></PageGuard>} />

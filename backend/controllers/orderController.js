@@ -14,6 +14,20 @@ const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   }));
 };
 
+const calculateOrderTotals = (items = [], tax = 0, discount = 0) => {
+  const subtotal = Array.isArray(items)
+    ? items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.menuItem?.price || 0), 0)
+    : 0;
+  const taxAmount = Number(tax || 0);
+  const discountAmount = Number(discount || 0);
+  return {
+    subtotal,
+    tax: taxAmount,
+    discount: discountAmount,
+    total: Math.max(0, subtotal + taxAmount - discountAmount),
+  };
+};
+
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const where = {};
@@ -22,21 +36,24 @@ exports.list = async (req, res) => {
   const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
   res.json(
     buildPaginatedResponse({
-      items: items.map((o) => ({
-        id: o.code,
-        type: o.type,
-        status: o.status,
-        table: o.table,
-        items: o.items || [],
-        total: o.total,
-        tax: o.tax,
-        subtotal: o.subtotal,
-        discount: o.discount,
-        notes: o.notes || "",
-        createdAt: o.createdAt,
-        customerName: o.customerName || "",
-        dbId: String(o._id),
-      })),
+      items: items.map((o) => {
+        const totals = calculateOrderTotals(o.items || [], o.tax, o.discount);
+        return {
+          id: o.code,
+          type: o.type,
+          status: o.status,
+          table: o.table,
+          items: o.items || [],
+          total: totals.total,
+          tax: totals.tax,
+          subtotal: totals.subtotal,
+          discount: totals.discount,
+          notes: o.notes || "",
+          createdAt: o.createdAt,
+          customerName: o.customerName || "",
+          dbId: String(o._id),
+        };
+      }),
       total,
       page,
       limit,
@@ -56,9 +73,24 @@ exports.patchStatus = async (req, res) => {
 
 exports.create = async (req, res) => {
   const payload = req.body || {};
+
+  if (payload.type === "dine-in" && payload.table) {
+    const tableNumber = Number(payload.table);
+    const existingOrder = await Order.findOne({
+      table: tableNumber,
+      type: "dine-in",
+      status: { $nin: ["completed", "cancelled"] },
+    });
+    if (existingOrder) {
+      return res.status(400).json({ message: "This table already has an active order. Complete payment before creating a new order." });
+    }
+  }
+
   const code = payload.code || `ORD-${Date.now().toString().slice(-6)}`;
   const createdAt = new Date();
   const requestId = `${code}-R1`;
+  const items = stampItemsForKitchen(payload.items, requestId, createdAt);
+  const totals = calculateOrderTotals(items, payload.tax, payload.discount);
   const row = await Order.create({
     code,
     type: payload.type || "dine-in",
@@ -66,11 +98,11 @@ exports.create = async (req, res) => {
     table: payload.table,
     customerName: payload.customerName || "",
     notes: payload.notes || "",
-    subtotal: Number(payload.subtotal || 0),
-    tax: Number(payload.tax || 0),
-    discount: Number(payload.discount || 0),
-    total: Number(payload.total || 0),
-    items: stampItemsForKitchen(payload.items, requestId, createdAt),
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    discount: totals.discount,
+    total: totals.total,
+    items,
   });
   if (payload.type === "dine-in" && payload.table) {
     await Table.findOneAndUpdate({ number: Number(payload.table) }, { status: "occupied", currentOrder: code });
@@ -86,10 +118,11 @@ exports.openByTable = async (req, res) => {
     type: "dine-in",
   };
   if (!includeCompleted) {
-    where.status = { $nin: ["completed", "cancelled", "served"] };
+    where.status = { $nin: ["completed", "cancelled"] };
   }
   const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
   if (!row) return res.json({ item: null });
+  const totals = calculateOrderTotals(row.items || [], row.tax, row.discount);
   return res.json({
     item: {
       id: row.code,
@@ -98,10 +131,10 @@ exports.openByTable = async (req, res) => {
       status: row.status,
       table: row.table,
       items: row.items || [],
-      subtotal: row.subtotal || 0,
-      tax: row.tax || 0,
-      discount: row.discount || 0,
-      total: row.total || 0,
+      subtotal: totals.subtotal,
+      tax: totals.tax,
+      discount: totals.discount,
+      total: totals.total,
       notes: row.notes || "",
       customerName: row.customerName || "",
     },
@@ -120,10 +153,11 @@ exports.addItems = async (req, res) => {
   }, 1);
   const requestId = `${row.code}-R${requestNo + 1}`;
   row.items = [...(row.items || []), ...stampItemsForKitchen(incoming, requestId)];
-  row.subtotal = Number(req.body.subtotal || row.subtotal || 0);
-  row.tax = Number(req.body.tax || row.tax || 0);
-  row.discount = Number(req.body.discount || row.discount || 0);
-  row.total = Number(req.body.total || row.total || 0);
+  const totals = calculateOrderTotals(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount);
+  row.subtotal = totals.subtotal;
+  row.tax = totals.tax;
+  row.discount = totals.discount;
+  row.total = totals.total;
   row.notes = req.body.notes ?? row.notes;
   row.status = "pending";
   await row.save();

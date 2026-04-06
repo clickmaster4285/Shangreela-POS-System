@@ -23,4 +23,5 @@ module.exports = {
   FbrConfig: require("./fbrConfig"),
   TaxConfig: require("./taxConfig"),
   MobileConfig: require("./mobileConfig"),
+  Expense: require("./expense"),
 };
