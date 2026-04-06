@@ -14,17 +14,19 @@ export default function Reports() {
   const reportsQuery = useQuery({
     queryKey: ['reports-dashboard', dateRange],
     queryFn: async () => {
-      const [w, t, tax] = await Promise.all([
+      const [w, t, tax, s] = await Promise.all([
       api<{ items: { day: string; revenue: number }[] }>('/reports/weekly-sales'),
       api<{ items: { name: string; sold: number; revenue: number }[] }>('/reports/top-items'),
       api<{ salesTaxRate: number }>('/settings/tax'),
+      api<{ totalExpenses: number }>('/dashboard/summary'),
       ]);
-      return { weeklySalesData: w.items, topSellingItems: t.items, taxRate: tax.salesTaxRate };
+      return { weeklySalesData: w.items, topSellingItems: t.items, taxRate: tax.salesTaxRate, totalExpenses: s.totalExpenses };
     },
   });
   const weeklySalesData = reportsQuery.data?.weeklySalesData ?? [];
   const topSellingItems = reportsQuery.data?.topSellingItems ?? [];
   const taxRate = reportsQuery.data?.taxRate ?? 16;
+  const totalExpenses = reportsQuery.data?.totalExpenses ?? 0;
   const totalRevenue = useMemo(() => weeklySalesData.reduce((s, d) => s + d.revenue, 0), [weeklySalesData]);
   const totalSold = useMemo(() => topSellingItems.reduce((s, i) => s + i.sold, 0), [topSellingItems]);
 
@@ -50,6 +52,7 @@ export default function Reports() {
         {[
           { label: 'Weekly Revenue', value: formatPKR(totalRevenue), icon: DollarSign },
           { label: 'Items Sold', value: totalSold.toString(), icon: Package },
+          { label: 'Total Expenses', value: formatPKR(totalExpenses), icon: TrendingUp },
           { label: 'Avg Order', value: formatPKR(Math.round(totalRevenue / 48)), icon: TrendingUp },
         ].map(s => (
           <div key={s.label} className="pos-card flex items-center gap-4">

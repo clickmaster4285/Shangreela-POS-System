@@ -33,7 +33,7 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const receiptFile = req.file ? `/uploads/${req.file.filename}` : req.body.receiptFile || "";
+  const receiptFile = req.file ? `/uploads/expenses/${req.file.filename}` : req.body.receiptFile || "";
   const row = await Expense.create({
     category: req.body.category || "other",
     description: req.body.description || "",
@@ -59,7 +59,7 @@ exports.update = async (req, res) => {
 
   if (req.file) {
     if (expense.receiptFile) deleteFileIfExists(expense.receiptFile);
-    req.body.receiptFile = `/uploads/${req.file.filename}`;
+    req.body.receiptFile = `/uploads/expenses/${req.file.filename}`;
   }
 
   const row = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();

@@ -10,6 +10,7 @@ const employeeSchema = new mongoose.Schema(
     department: String,
     joinDate: String,
     salary: Number,
+    avatar: String,
     status: { type: String, default: "active" },
   },
   { timestamps: true }

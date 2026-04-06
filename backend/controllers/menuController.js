@@ -11,13 +11,28 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const payload = req.body || {};
+  const payload = {
+    ...req.body,
+    price: Number(req.body.price || 0),
+    kitchenRequired: req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true,
+    image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
+  };
   const row = await MenuItem.create(payload);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
 exports.update = async (req, res) => {
-  const row = await MenuItem.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+  const payload = {};
+  if (req.body.name !== undefined) payload.name = req.body.name;
+  if (req.body.price !== undefined) payload.price = Number(req.body.price || 0);
+  if (req.body.category !== undefined) payload.category = req.body.category;
+  if (req.body.description !== undefined) payload.description = req.body.description;
+  if (req.body.kitchenRequired !== undefined) payload.kitchenRequired = req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true;
+  if (req.body.image !== undefined) payload.image = req.body.image;
+  if (req.file) {
+    payload.image = `/uploads/menu/${req.file.filename}`;
+  }
+  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true });
   res.json({ ...row.toObject(), id: String(row._id) });
 };
 

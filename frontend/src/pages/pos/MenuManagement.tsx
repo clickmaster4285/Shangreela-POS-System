@@ -51,50 +51,73 @@ export default function MenuManagement() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
 
-  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' }); setEditing(null); setShowForm(true); };
-  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' }); setEditing(item); setShowForm(true); };
+  const cleanupImagePreview = () => {
+    if (imagePreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+  };
+
+  const openNew = () => {
+    cleanupImagePreview();
+    setImageFile(null);
+    setImagePreviewUrl('');
+    setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+    setEditing(null);
+    setShowForm(true);
+  };
+
+  const openEdit = (item: MenuItem) => {
+    cleanupImagePreview();
+    setImageFile(null);
+    setImagePreviewUrl('');
+    setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' });
+    setEditing(item);
+    setShowForm(true);
+  };
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === 'string') {
-        setForm(prev => ({ ...prev, image: result }));
-      }
-    };
-    reader.readAsDataURL(file);
+    cleanupImagePreview();
+    const url = URL.createObjectURL(file);
+    setImageFile(file);
+    setImagePreviewUrl(url);
+    setForm(prev => ({ ...prev, image: url }));
   };
+
+  useEffect(() => {
+    return () => {
+      cleanupImagePreview();
+    };
+  }, [imagePreviewUrl]);
 
   const save = () => {
     if (!form.name || !form.price) return;
-    const payload = {
-      name: form.name,
-      price: parseFloat(form.price),
-      category: form.category,
-      description: form.description,
-      image: form.image,
-      kitchenRequired: form.kitchenRequired,
-    };
-    if (editing) {
-      api(`/menu/${editing.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }).then(() => {
-        toast.success('Item updated');
-        fetchItems();
-      });
-    } else {
-      api('/menu', {
-        method: 'POST',
-        body: JSON.stringify({ ...payload, available: true, perishable: false }),
-      }).then(() => {
-        toast.success('Item added');
-        fetchItems();
-      });
+    const formData = new FormData();
+    formData.append('name', form.name);
+    formData.append('price', form.price);
+    formData.append('category', form.category);
+    formData.append('description', form.description);
+    formData.append('kitchenRequired', String(form.kitchenRequired));
+    formData.append('image', form.image || '');
+    if (imageFile) {
+      formData.set('image', imageFile);
     }
+
+    const request = editing
+      ? api(`/menu/${editing.id}`, { method: 'PUT', body: formData })
+      : api('/menu', { method: 'POST', body: formData });
+
+    request.then(() => {
+      toast.success(editing ? 'Item updated' : 'Item added');
+      fetchItems();
+    }).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to save item');
+    });
+
     setShowForm(false);
   };
 
@@ -213,7 +236,12 @@ export default function MenuManagement() {
                   <img src={form.image} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
                   <button
                     type="button"
-                    onClick={() => setForm(prev => ({ ...prev, image: '' }))}
+                    onClick={() => {
+                      cleanupImagePreview();
+                      setImageFile(null);
+                      setImagePreviewUrl('');
+                      setForm(prev => ({ ...prev, image: '' }));
+                    }}
                     className="absolute right-2 top-2 rounded-full bg-foreground/80 p-1 text-xs text-muted-foreground hover:text-foreground"
                   >
                     Remove

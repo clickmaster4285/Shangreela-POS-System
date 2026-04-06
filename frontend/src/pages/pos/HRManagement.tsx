@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer } from 'lucide-react';
+import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil } from 'lucide-react';
 import {
   type Employee,
   type AttendanceRecord,
@@ -56,30 +56,64 @@ export default function HRManagement() {
   const getEmployee = (id: string) => employees.find(e => e.id === id);
 
   const [newEmp, setNewEmp] = useState({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '' });
+  const [newEmpAvatar, setNewEmpAvatar] = useState<File | null>(null);
+  const [newEmpAvatarPreview, setNewEmpAvatarPreview] = useState('');
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
-  const handleAddEmployee = () => {
-    if (!newEmp.name || !newEmp.role || !newEmp.salary) return;
-    const empId = `EMP-${Date.now().toString().slice(-6)}`;
-    const emp: Employee = {
-      id: Date.now().toString(),
-      employeeId: empId,
-      name: newEmp.name,
-      phone: newEmp.phone,
-      email: newEmp.email,
-      role: newEmp.role,
-      department: newEmp.department,
-      joinDate: new Date().toISOString().split('T')[0],
-      salary: parseInt(newEmp.salary),
-      status: 'active',
-    };
-    api('/hr/employees', { method: 'POST', body: JSON.stringify(emp) })
-      .then(() => {
-        toast.success(`${emp.name} added as ${emp.role}`);
-        setEmployeePage(1);
-      })
-      .catch(() => toast.error('Failed to add employee'));
-    setShowAddEmployee(false);
+  const resetNewEmployeeForm = () => {
     setNewEmp({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '' });
+    setNewEmpAvatar(null);
+    if (newEmpAvatarPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(newEmpAvatarPreview);
+    }
+    setNewEmpAvatarPreview('');
+    setEditingEmployee(null);
+  };
+
+  const openEditEmployee = (emp: Employee) => {
+    setEditingEmployee(emp);
+    setNewEmp({
+      name: emp.name,
+      phone: emp.phone,
+      email: emp.email,
+      role: emp.role,
+      department: emp.department,
+      salary: String(emp.salary),
+    });
+    setNewEmpAvatar(null);
+    setNewEmpAvatarPreview(emp.avatar || '');
+    setShowAddEmployee(true);
+  };
+
+  const handleSaveEmployee = () => {
+    if (!newEmp.name || !newEmp.role || !newEmp.salary) return;
+    const formData = new FormData();
+    formData.append('name', newEmp.name);
+    formData.append('phone', newEmp.phone);
+    formData.append('email', newEmp.email);
+    formData.append('role', newEmp.role);
+    formData.append('department', newEmp.department);
+    formData.append('salary', newEmp.salary);
+    if (newEmpAvatar) formData.append('avatar', newEmpAvatar);
+
+    const request = editingEmployee
+      ? api(`/hr/employees/${editingEmployee.id}`, { method: 'PATCH', body: formData })
+      : api('/hr/employees', { method: 'POST', body: formData });
+
+    request
+      .then((result: Employee) => {
+        if (editingEmployee) {
+          setEmployees(prev => prev.map(emp => emp.id === result.id ? result : emp));
+          toast.success(`${result.name} updated successfully`);
+        } else {
+          toast.success(`${result.name} added as ${result.role}`);
+          setEmployeePage(1);
+        }
+      })
+      .catch(() => toast.error(`Failed to ${editingEmployee ? 'update' : 'add'} employee`));
+
+    setShowAddEmployee(false);
+    resetNewEmployeeForm();
   };
 
   const handleLeaveAction = (id: string, action: 'approved' | 'rejected') => {
@@ -118,6 +152,14 @@ export default function HRManagement() {
 
   const filteredEmployees = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.employeeId.toLowerCase().includes(search.toLowerCase()));
 
+  useEffect(() => {
+    return () => {
+      if (newEmpAvatarPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(newEmpAvatarPreview);
+      }
+    };
+  }, [newEmpAvatarPreview]);
+
   const todayAttendance = attendance;
   const presentCount = todayAttendance.filter(a => a.status === 'present').length;
   const lateCount = todayAttendance.filter(a => a.status === 'late').length;
@@ -136,7 +178,7 @@ export default function HRManagement() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="font-serif text-xl font-bold text-foreground">HR, shifts & payroll</h1>
-        <button onClick={() => setShowAddEmployee(true)} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
+        <button onClick={() => { setEditingEmployee(null); resetNewEmployeeForm(); setShowAddEmployee(true); }} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
           <UserPlus className="w-4 h-4" /> Add Employee
         </button>
       </div>
@@ -186,7 +228,13 @@ export default function HRManagement() {
                 <div key={emp.id} className="bg-card rounded-2xl border border-border overflow-hidden">
                   <button onClick={() => setExpandedEmployee(expanded ? null : emp.id)} className="w-full p-4 flex items-center justify-between text-left">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">{emp.name.split(' ').map(n => n[0]).join('')}</div>
+                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                        {emp.avatar ? (
+                          <img src={emp.avatar} alt={`${emp.name} avatar`} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{emp.name.split(' ').map(n => n[0]).join('')}</span>
+                        )}
+                      </div>
                       <div>
                         <p className="font-medium text-foreground">{emp.name}</p>
                         <p className="text-xs text-muted-foreground">{emp.employeeId} • {emp.role} • {emp.department}</p>
@@ -204,6 +252,11 @@ export default function HRManagement() {
                         <div><span className="text-muted-foreground">Email:</span> <span className="text-foreground font-medium">{emp.email}</span></div>
                         <div><span className="text-muted-foreground">Join Date:</span> <span className="text-foreground font-medium">{emp.joinDate}</span></div>
                         <div><span className="text-muted-foreground">Salary:</span> <span className="text-foreground font-medium">Rs {emp.salary.toLocaleString()}</span></div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button onClick={() => openEditEmployee(emp)} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary/20 transition-colors">
+                          <Pencil className="w-3.5 h-3.5 inline-block mr-1" /> Edit
+                        </button>
                       </div>
                       {bal && (
                         <div>
@@ -403,9 +456,38 @@ export default function HRManagement() {
 
       {/* Add Employee Modal */}
       {showAddEmployee && (
-        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setShowAddEmployee(false)}>
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }}>
           <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">Add Employee</h3>
+            <h3 className="font-serif text-lg font-bold text-foreground">{editingEmployee ? 'Edit Employee' : 'Add Employee'}</h3>
+            <div className="flex flex-col sm:flex-row gap-3 items-start">
+              <div className="w-24 h-24 rounded-3xl border border-border bg-muted overflow-hidden flex items-center justify-center">
+                {newEmpAvatarPreview ? (
+                  <img src={newEmpAvatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center text-xs text-muted-foreground px-2">Upload profile image</div>
+                )}
+              </div>
+              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-muted" htmlFor="employee-avatar-input">
+                Select photo
+                <input
+                  id="employee-avatar-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file) {
+                      if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
+                      setNewEmpAvatar(file);
+                      setNewEmpAvatarPreview(URL.createObjectURL(file));
+                    } else {
+                      setNewEmpAvatar(null);
+                      setNewEmpAvatarPreview('');
+                    }
+                  }}
+                />
+              </label>
+            </div>
             <input value={newEmp.name} onChange={e => setNewEmp(p => ({ ...p, name: e.target.value }))} placeholder="Full name" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
             <div className="grid grid-cols-2 gap-2">
               <input value={newEmp.phone} onChange={e => setNewEmp(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
@@ -421,8 +503,8 @@ export default function HRManagement() {
             </div>
             <input type="number" value={newEmp.salary} onChange={e => setNewEmp(p => ({ ...p, salary: e.target.value }))} placeholder="Monthly salary (Rs)" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setShowAddEmployee(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>
-              <button onClick={handleAddEmployee} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">Add Employee</button>
+              <button onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+              <button onClick={handleSaveEmployee} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">{editingEmployee ? 'Save Changes' : 'Add Employee'}</button>
             </div>
           </div>
         </div>

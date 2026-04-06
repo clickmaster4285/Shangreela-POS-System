@@ -1,15 +1,17 @@
-const { Order, MenuItem, InventoryItem, Employee } = require("../models");
+const { Order, MenuItem, InventoryItem, Employee, Expense } = require("../models");
 
 exports.summary = async (_req, res) => {
-  const [orders, menuCount, lowStock, staff, cancelledOrders] = await Promise.all([
+  const [orders, menuCount, lowStock, staff, cancelledOrders, expenses] = await Promise.all([
     Order.find({ status: { $ne: "cancelled" } }).lean(),
     MenuItem.countDocuments({}),
     InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$minStock"] } }),
     Employee.countDocuments({ status: "active" }),
     Order.countDocuments({ status: "cancelled" }),
+    Expense.find({}).lean(),
   ]);
   const revenue = orders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-  res.json({ revenue, totalOrders: orders.length, cancelledOrders, menuCount, lowStock, staff });
+  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  res.json({ revenue, totalOrders: orders.length, cancelledOrders, menuCount, lowStock, staff, totalExpenses, expenseCount: expenses.length });
 };
 
 exports.salesDaily = async (_req, res) => {

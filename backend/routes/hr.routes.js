@@ -1,10 +1,23 @@
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
 const { authRequired } = require("../middleware/middleware");
 const hrController = require("../controllers/hrController");
 
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, "..", "uploads", "staff"),
+    filename: (req, file, cb) => {
+      const safeName = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
+      cb(null, safeName);
+    },
+  }),
+});
+
 const router = express.Router();
 router.get("/employees", authRequired, hrController.listEmployees);
-router.post("/employees", authRequired, hrController.createEmployee);
+router.post("/employees", authRequired, upload.single("avatar"), hrController.createEmployee);
+router.patch("/employees/:id", authRequired, upload.single("avatar"), hrController.updateEmployee);
 router.get("/attendance", authRequired, hrController.getAttendanceByDate);
 router.get("/leaves", authRequired, hrController.listLeaves);
 router.patch("/leaves/:id/status", authRequired, hrController.patchLeaveStatus);

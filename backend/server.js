@@ -10,9 +10,16 @@ const { port, frontendOrigin } = require("./config/config");
 const app = express();
 
 const uploadsPath = path.join(__dirname, "uploads");
+const uploadSubfolders = ["expenses", "staff", "menu"];
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
 }
+uploadSubfolders.forEach((sub) => {
+  const folderPath = path.join(uploadsPath, sub);
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath, { recursive: true });
+  }
+});
 app.use("/uploads", express.static(uploadsPath));
 
 app.use(cors({ origin: frontendOrigin, credentials: true }));

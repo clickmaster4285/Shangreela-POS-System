@@ -13,7 +13,8 @@ export default function Billing() {
   const queryClient = useQueryClient();
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
-  const [discount, setDiscount] = useState(0);
+  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
+  const [discountValue, setDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
 
@@ -46,7 +47,9 @@ export default function Billing() {
   }
 
   const subtotal = selectedOrder.items.reduce((s, i) => s + i.menuItem.price * i.quantity, 0);
-  const discountAmt = subtotal * (discount / 100);
+  const discountAmt = discountMode === 'percent'
+    ? subtotal * (discountValue / 100)
+    : Math.min(Math.max(discountValue, 0), subtotal);
   const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount } = computePakistanTaxTotals(
     subtotal,
     discountAmt,
@@ -159,7 +162,12 @@ export default function Billing() {
 
           <div className="rounded-xl border border-border/70 p-3 space-y-2 text-sm mb-4 bg-card/60">
             <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
-            {discount > 0 && <div className="flex justify-between text-success"><span>Discount ({discount}%)</span><span>-{fmt(discountAmt)}</span></div>}
+            {discountAmt > 0 && (
+              <div className="flex justify-between text-success">
+                <span>Discount{discountMode === 'percent' ? ` (${discountValue}%)` : ''}</span>
+                <span>-{fmt(discountAmt)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
             <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
             <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
@@ -171,15 +179,52 @@ export default function Billing() {
           {/* Discount */}
           {hasAction('apply_discount') && (
           <div className="mb-4 rounded-xl border border-border/70 p-3">
-            <label className="text-xs text-muted-foreground mb-1 block">Discount %</label>
-            <div className="flex gap-2">
-              {[0, 5, 10, 15, 20].map(d => (
-                <button key={d} onClick={() => setDiscount(d)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${discount === d ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+              <div className="text-xs font-semibold text-muted-foreground">Discount</div>
+              <div className="inline-flex rounded-full bg-muted/50 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscountMode('percent');
+                    setDiscountValue(0);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${discountMode === 'percent' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {d}%
+                  Percent
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscountMode('amount');
+                    setDiscountValue(0);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${discountMode === 'amount' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Amount
+                </button>
+              </div>
+            </div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              {discountMode === 'percent' ? 'Discount %' : 'Discount amount'}
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="number"
+                min="0"
+                value={discountValue}
+                onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
+                className="w-full sm:w-32 bg-background border border-border rounded-xl px-3 py-2 text-sm"
+              />
+              {discountMode === 'percent' && (
+                <div className="flex gap-2 flex-wrap">
+                  {[0, 5, 10, 15, 20].map(d => (
+                    <button key={d} type="button" onClick={() => setDiscountValue(d)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${discountValue === d ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                      {d}%
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           )}
@@ -200,17 +245,19 @@ export default function Billing() {
           {/* Payment */}
           <div className="mb-4 rounded-xl border border-border/70 p-3">
             <label className="text-xs text-muted-foreground mb-1 block">Payment Method</label>
-            <div className="flex gap-2">
-              <button onClick={() => setPaymentMethod('cash')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${paymentMethod === 'cash' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-              >
-                <Banknote className="w-4 h-4" /> Cash
-              </button>
-              <button onClick={() => setPaymentMethod('card')}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all ${paymentMethod === 'card' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-              >
-                <CreditCard className="w-4 h-4" /> Card
-              </button>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-medium ${paymentMethod === 'cash' ? 'text-foreground' : 'text-muted-foreground'}`}>Cash</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={paymentMethod === 'card'}
+                  onChange={() => setPaymentMethod(paymentMethod === 'card' ? 'cash' : 'card')}
+                />
+                <div className="w-14 h-8 rounded-full border border-border bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/40 peer-checked:bg-primary"></div>
+                <div className="absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-6"></div>
+              </label>
+              <span className={`text-xs font-medium ${paymentMethod === 'card' ? 'text-foreground' : 'text-muted-foreground'}`}>Card</span>
             </div>
           </div>
 
@@ -235,7 +282,9 @@ export default function Billing() {
             <button onClick={() => {
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
-                items: selectedOrder.items, subtotal, discount: discountAmt, discountPercent: discount,
+                items: selectedOrder.items, subtotal,
+                discount: discountMode === 'amount' ? discountValue : 0,
+                discountPercent: discountMode === 'percent' ? discountValue : 0,
                 paymentMethod, customerName: selectedOrder.customerName,
               });
               toast.success('Receipt sent to printer!');
@@ -249,7 +298,9 @@ export default function Billing() {
               }
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
-                items: selectedOrder.items, subtotal, discount: discountAmt, discountPercent: discount,
+                items: selectedOrder.items, subtotal,
+                discount: discountMode === 'amount' ? discountValue : 0,
+                discountPercent: discountMode === 'percent' ? discountValue : 0,
                 paymentMethod, customerName: selectedOrder.customerName,
               });
               if (selectedOrder.dbId) {

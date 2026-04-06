@@ -10,7 +10,12 @@ exports.listEmployees = async (req, res) => {
 };
 
 exports.createEmployee = async (req, res) => {
-  const row = await Employee.create(req.body || {});
+  const payload = {
+    ...req.body,
+    salary: Number(req.body.salary || 0),
+    avatar: req.file ? `/uploads/staff/${req.file.filename}` : req.body.avatar || undefined,
+  };
+  const row = await Employee.create(payload);
   await LeaveBalance.create({ employeeId: String(row._id), sick: 8, casual: 6, annual: 10, emergency: 2 });
   await SalaryRecord.create({
     employeeId: String(row._id),
@@ -23,6 +28,19 @@ exports.createEmployee = async (req, res) => {
     status: "pending",
   });
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
+};
+
+exports.updateEmployee = async (req, res) => {
+  const updateData = {
+    ...req.body,
+    salary: req.body.salary !== undefined ? Number(req.body.salary || 0) : undefined,
+  };
+  if (req.file) {
+    updateData.avatar = `/uploads/staff/${req.file.filename}`;
+  }
+  const row = await Employee.findByIdAndUpdate(req.params.id, updateData, { new: true }).lean();
+  if (!row) return res.status(404).json({ message: 'Employee not found' });
+  res.json({ ...row, id: String(row._id) });
 };
 
 exports.getAttendanceByDate = async (req, res) => {

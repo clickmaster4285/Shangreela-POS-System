@@ -5,7 +5,7 @@ const expenseController = require('../controllers/expenseController');
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: path.join(__dirname, '../uploads'),
+    destination: path.join(__dirname, '../uploads/expenses'),
     filename: (req, file, cb) => {
       const timestamp = Date.now();
       const safeName = file.originalname.replace(/\s+/g, '_');
