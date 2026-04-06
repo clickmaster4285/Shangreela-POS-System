@@ -100,26 +100,59 @@ async function initializeSuperAdminPermission() {
   await initializeRolePermissions();
 }
 
-async function initializeSuperAdmin() {
-  const superAdminExists = await User.findOne({ role: "superadmin" });
-  if (superAdminExists) return;
+async function initializeUsers() {
+  const users = [
+    {
+      role: "superadmin",
+      name: "Super Admin",
+      email: "superadmin@shirazre.com",
+      password: "super123",
+      avatar: "",
+    },
+    {
+      role: "hassaan",
+      name: "Hassaan",
+      email: "hassaan@shirazre.com",
+      password: "hassaan123",
+      avatar: "",
+    },
+    {
+      role: "fahad",
+      name: "Fahad",
+      email: "fahad@shirazre.com",
+      password: "fahad123",
+      avatar: "",
+    },
+    {
+      role: "cashier",
+      name: "Cashier",
+      email: "cashier@shirazre.com",
+      password: "cashier123",
+      avatar: "",
+    },
+  ];
 
-  const passwordHash = await bcrypt.hash("super123", 10);
-  await User.create({
-    name: "Super Admin",
-    email: "superadmin@shirazre.com",
-    passwordHash,
-    role: "superadmin",
-    avatar: "",
-  });
+  for (const userConfig of users) {
+    const existingUser = await User.findOne({ email: userConfig.email });
+    if (existingUser) continue;
 
-  console.log("✓ Super Admin user initialized (email: superadmin@shirazre.com, password: super123)");
+    const passwordHash = await bcrypt.hash(userConfig.password, 10);
+    await User.create({
+      name: userConfig.name,
+      email: userConfig.email,
+      passwordHash,
+      role: userConfig.role,
+      avatar: userConfig.avatar,
+    });
+
+    console.log(`✓ ${userConfig.role} user initialized (email: ${userConfig.email}, password: ${userConfig.password})`);
+  }
 }
 
 async function runAutoInitialization() {
   await seedMenuIfEmpty();
   await initializeSuperAdminPermission();
-  await initializeSuperAdmin();
+  await initializeUsers();
 }
 
-module.exports = { runAutoInitialization, seedMenuIfEmpty, initializeSuperAdmin, initializeSuperAdminPermission };
+module.exports = { runAutoInitialization, seedMenuIfEmpty, initializeUsers, initializeSuperAdminPermission };
