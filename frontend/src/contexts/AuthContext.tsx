@@ -218,45 +218,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const LEGACY_STORAGE_KEYS = ['shirazre_user', 'shirazre_permissions', 'shirazre_users', 'shirazre_creds'];
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(() => {
-    // Try to restore user from localStorage on initial load
-    try {
-      const stored = localStorage.getItem('shirazre_user');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   const [permissions, setPermissions] = useState<PermissionsConfig>(DEFAULT_PERMISSIONS);
 
+  const clearLegacyStorage = () => {
+    LEGACY_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+  };
+
   const fetchSession = async () => {
     try {
+      clearLegacyStorage();
       const me = await api<{ user: User; permissions: RolePermissions | null }>('/auth/me');
-      const upgradedUser = upgradeLegacyUser(me.user);
-      setUser(upgradedUser);
-      localStorage.setItem('shirazre_user', JSON.stringify(upgradedUser));
+      setUser(upgradeLegacyUser(me.user));
       const all = await api<{ [key: string]: RolePermissions }>('/permissions');
       setPermissions(migratePermissionsFromStorage(all as Record<string, RolePermissions>));
       const u = await api<PaginatedResponse<User>>('/users?page=1&limit=200');
       setUsers(normalizeUsers(u.items));
     } catch (error) {
-      // If we have a stored user but API failed, keep the user (handles offline/network issues)
-      const storedUser = localStorage.getItem('shirazre_user');
-      if (storedUser && !user) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch {
-          // Invalid stored data, clear it
-          localStorage.removeItem('shirazre_user');
-        }
-      }
-      // If no token, clear user
+      // If no token, clear user and any legacy user data
       if (!localStorage.getItem('shirazre_token')) {
         setUser(null);
-        localStorage.removeItem('shirazre_user');
       }
       console.error('Session fetch failed:', error);
     } finally {
@@ -275,9 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email: normalizeEmail(email), password }),
       });
       setToken(payload.token);
-      const upgradedUser = upgradeLegacyUser(payload.user);
-      setUser(upgradedUser);
-      localStorage.setItem('shirazre_user', JSON.stringify(upgradedUser));
+      setUser(upgradeLegacyUser(payload.user));
       await fetchSession();
       return null;
     } catch (error) {
@@ -288,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('shirazre_user');
+    clearLegacyStorage();
     setUsers(DEFAULT_USERS);
     setPermissions(DEFAULT_PERMISSIONS);
   };
