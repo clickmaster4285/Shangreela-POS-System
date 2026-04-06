@@ -51,6 +51,7 @@ exports.list = async (req, res) => {
           notes: o.notes || "",
           createdAt: o.createdAt,
           customerName: o.customerName || "",
+          orderTaker: o.orderTaker || "",
           dbId: String(o._id),
         };
       }),
@@ -139,7 +140,7 @@ exports.create = async (req, res) => {
     status: payload.status || "pending",
     table: payload.table,
     customerName: payload.customerName || "",
-    orderTaker: req.user.name,
+    orderTaker: req.user.name || req.user.email || "Unknown",
     notes: payload.notes || "",
     subtotal: totals.subtotal,
     tax: totals.tax,
@@ -197,6 +198,7 @@ exports.openByTable = async (req, res) => {
       total: totals.total,
       notes: row.notes || "",
       customerName: row.customerName || "",
+      orderTaker: row.orderTaker || "",
     },
   });
 };
@@ -220,6 +222,9 @@ exports.addItems = async (req, res) => {
   row.total = totals.total;
   row.notes = req.body.notes ?? row.notes;
   row.status = "pending";
+  if (!row.orderTaker || row.orderTaker === "Unknown") {
+    row.orderTaker = req.user.name || req.user.email || "Unknown";
+  }
   await row.save();
   if (wasCompleted && row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
