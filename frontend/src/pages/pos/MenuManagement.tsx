@@ -1,64 +1,48 @@
 import { useCallback, useEffect, useState } from 'react';
-import { menuCategories, type MenuItem } from '@/data/mockData';
+import { type MenuItem } from '@/data/mockData';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+
+type MenuCategoriesResponse = { categories: string[] };
 
 export default function MenuManagement() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [categories, setCategories] = useState<string[]>(() => {
-    const base = menuCategories.filter(c => c !== 'All');
-    try {
-      const saved = localStorage.getItem('menu_custom_categories');
-      if (!saved) return base;
-
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return base;
-
-      const customCategories = parsed
-        .map(item => String(item).trim())
-        .filter(item => item.length > 0 && !base.includes(item));
-
-      return Array.from(new Set([...base, ...customCategories]));
-    } catch {
-      return base;
-    }
-  });
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [newCategory, setNewCategory] = useState('');
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
 
-  const saveCustomCategories = (updatedCategories: string[]) => {
-    const customOnly = updatedCategories.filter(c => !menuCategories.includes(c));
-    const normalizedCustom = Array.from(new Set(customOnly.map(item => item.trim()).filter(item => item.length > 0)));
-    localStorage.setItem('menu_custom_categories', JSON.stringify(normalizedCustom));
-  };
-
-  const mergeCategories = (current: string[], additional: string[]) => {
-    const known = new Set(current.map(item => item.trim()).filter(item => item.length > 0));
-    additional.forEach(item => {
-      const trimmed = item.trim();
-      if (trimmed.length > 0 && !known.has(trimmed)) {
-        known.add(trimmed);
-      }
-    });
-    return Array.from(known);
-  };
+  const fetchCategories = useCallback(async () => {
+    try {
+      setLoadingCategories(true);
+      const response = await api<MenuCategoriesResponse>('/menu/categories');
+      setCategories(response.categories);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load menu categories');
+    } finally {
+      setLoadingCategories(false);
+    }
+  }, []);
 
   const fetchItems = useCallback(async () => {
     try {
       const categoryQuery = categoryFilter !== 'All' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
       const response = await api<PaginatedResponse<MenuItem>>(`/menu?page=${page}&limit=${pageSize}${categoryQuery}`);
       setItems(response.items);
-      setCategories(prev => mergeCategories(prev, response.items.map(item => item.category)));
       setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load menu');
     }
   }, [page, pageSize, categoryFilter]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchItems();
@@ -112,13 +96,19 @@ export default function MenuManagement() {
       toast.error('Category already exists');
       return;
     }
-    const updated = [...categories, trimmed];
-    setCategories(updated);
-    saveCustomCategories(updated);
-    setNewCategory('');
-    setShowCategoryForm(false);
-    setCategoryFilter(trimmed);
-    toast.success('Category added');
+    
+    api('/menu/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name: trimmed }),
+    }).then(() => {
+      toast.success('Category added');
+      fetchCategories();
+      setNewCategory('');
+      setShowCategoryForm(false);
+      setCategoryFilter(trimmed);
+    }).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to add category');
+    });
   };
 
   const toggleAvailability = (id: string) => {

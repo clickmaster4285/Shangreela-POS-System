@@ -3,6 +3,8 @@ const { authRequired } = require("../middleware/middleware");
 const menuController = require("../controllers/menuController");
 
 const router = express.Router();
+router.get("/categories", authRequired, menuController.categories);
+router.post("/categories", authRequired, menuController.addCategory);
 router.get("/", authRequired, menuController.list);
 router.post("/", authRequired, menuController.create);
 router.put("/:id", authRequired, menuController.update);

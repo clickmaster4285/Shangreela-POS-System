@@ -2,6 +2,7 @@ module.exports = {
   User: require("./user"),
   Permission: require("./permission"),
   MenuItem: require("./menuItem"),
+  MenuCategory: require("./category"),
   Order: require("./order"),
   InventoryItem: require("./inventoryItem"),
   InventoryLog: require("./inventoryLog"),
