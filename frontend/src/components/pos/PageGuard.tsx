@@ -54,8 +54,17 @@ const allPages: PageKey[] = [
 ];
 
 export default function PageGuard({ page, children }: Props) {
-  const { user, hasPageAccess, permissions } = useAuth();
+  const { user, loading, hasPageAccess, permissions } = useAuth();
   const location = useLocation();
+
+  // Wait for auth to load before checking user
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   if (!user) return <Navigate to="/pos/login" replace />;
 

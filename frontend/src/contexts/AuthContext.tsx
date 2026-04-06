@@ -240,11 +240,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = await api<PaginatedResponse<User>>('/users?page=1&limit=200');
       setUsers(normalizeUsers(u.items));
     } catch (error) {
+      console.error('Session fetch failed:', error);
       // If no token, clear user and any legacy user data
       if (!localStorage.getItem('shirazre_token')) {
         setUser(null);
       }
-      console.error('Session fetch failed:', error);
     } finally {
       setLoading(false);
     }
