@@ -51,7 +51,6 @@ exports.list = async (req, res) => {
           notes: o.notes || "",
           createdAt: o.createdAt,
           customerName: o.customerName || "",
-          orderTaker: o.orderTaker || "",
           dbId: String(o._id),
         };
       }),
@@ -198,7 +197,6 @@ exports.openByTable = async (req, res) => {
       total: totals.total,
       notes: row.notes || "",
       customerName: row.customerName || "",
-      orderTaker: row.orderTaker || "",
     },
   });
 };

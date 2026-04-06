@@ -8,7 +8,6 @@ router.post("/", authRequired, orderController.create);
 router.get("/open-by-table/:tableNumber", authRequired, orderController.openByTable);
 router.patch("/:id/status", authRequired, orderController.patchStatus);
 router.patch("/:id/table", authRequired, orderController.changeTable);
-router.patch("/:id", authRequired, orderController.update);
 router.patch("/:id/add-items", authRequired, orderController.addItems);
 router.post("/:id/payment", authRequired, orderController.payment);
 router.post("/:id/cancel", authRequired, orderController.cancel);
