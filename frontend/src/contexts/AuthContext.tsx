@@ -220,25 +220,44 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    // Try to restore user from localStorage on initial load
+    try {
+      const stored = localStorage.getItem('shirazre_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   const [permissions, setPermissions] = useState<PermissionsConfig>(DEFAULT_PERMISSIONS);
 
   const fetchSession = async () => {
     try {
       const me = await api<{ user: User; permissions: RolePermissions | null }>('/auth/me');
-      setUser(upgradeLegacyUser(me.user));
+      const upgradedUser = upgradeLegacyUser(me.user);
+      setUser(upgradedUser);
+      localStorage.setItem('shirazre_user', JSON.stringify(upgradedUser));
       const all = await api<{ [key: string]: RolePermissions }>('/permissions');
       setPermissions(migratePermissionsFromStorage(all as Record<string, RolePermissions>));
       const u = await api<PaginatedResponse<User>>('/users?page=1&limit=200');
       setUsers(normalizeUsers(u.items));
     } catch (error) {
-      // Only clear user if there's actually no token
+      // If we have a stored user but API failed, keep the user (handles offline/network issues)
+      const storedUser = localStorage.getItem('shirazre_user');
+      if (storedUser && !user) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          // Invalid stored data, clear it
+          localStorage.removeItem('shirazre_user');
+        }
+      }
+      // If no token, clear user
       if (!localStorage.getItem('shirazre_token')) {
         setUser(null);
+        localStorage.removeItem('shirazre_user');
       }
-      // If token exists but session fetch failed, keep trying silently
-      // This handles temporary network issues
       console.error('Session fetch failed:', error);
     } finally {
       setLoading(false);
@@ -256,6 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email: normalizeEmail(email), password }),
       });
       setToken(payload.token);
+      const upgradedUser = upgradeLegacyUser(payload.user);
+      setUser(upgradedUser);
+      localStorage.setItem('shirazre_user', JSON.stringify(upgradedUser));
       await fetchSession();
       return null;
     } catch (error) {
@@ -266,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
+    localStorage.removeItem('shirazre_user');
     setUsers(DEFAULT_USERS);
     setPermissions(DEFAULT_PERMISSIONS);
   };
