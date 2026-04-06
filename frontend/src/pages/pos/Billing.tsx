@@ -285,6 +285,7 @@ export default function Billing() {
                 items: selectedOrder.items, subtotal,
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,
+                gstEnabled,
                 paymentMethod, customerName: selectedOrder.customerName,
               });
               toast.success('Receipt sent to printer!');
@@ -301,10 +302,11 @@ export default function Billing() {
                 items: selectedOrder.items, subtotal,
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,
+                gstEnabled,
                 paymentMethod, customerName: selectedOrder.customerName,
               });
               if (selectedOrder.dbId) {
-                api(`/orders/${selectedOrder.dbId}/payment`, { method: 'POST', body: JSON.stringify({ paymentMethod }) })
+                api(`/orders/${selectedOrder.dbId}/payment`, { method: 'POST', body: JSON.stringify({ paymentMethod, gstEnabled }) })
                   .then(() => {
                     toast.success('Payment completed and receipt printed');
                     loadOrders();

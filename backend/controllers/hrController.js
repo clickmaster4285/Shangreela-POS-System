@@ -13,6 +13,7 @@ exports.createEmployee = async (req, res) => {
   const payload = {
     ...req.body,
     salary: Number(req.body.salary || 0),
+    joinDate: req.body.joinDate || new Date().toISOString().slice(0, 10),
     avatar: req.file ? `/uploads/staff/${req.file.filename}` : req.body.avatar || undefined,
   };
   const row = await Employee.create(payload);

@@ -101,6 +101,8 @@ exports.create = async (req, res) => {
     subtotal: totals.subtotal,
     tax: totals.tax,
     discount: totals.discount,
+    gstEnabled: payload.gstEnabled ?? true,
+    paymentMethod: payload.paymentMethod || "cash",
     total: totals.total,
     items,
   });

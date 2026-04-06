@@ -55,13 +55,18 @@ export default function HRManagement() {
 
   const getEmployee = (id: string) => employees.find(e => e.id === id);
 
-  const [newEmp, setNewEmp] = useState({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '' });
+  const [newEmp, setNewEmp] = useState({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '', joinDate: new Date().toISOString().slice(0, 10) });
   const [newEmpAvatar, setNewEmpAvatar] = useState<File | null>(null);
   const [newEmpAvatarPreview, setNewEmpAvatarPreview] = useState('');
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000';
+  const getAvatarUrl = (avatar?: string) => {
+    if (!avatar) return '';
+    return avatar.startsWith('/uploads') ? `${BACKEND_BASE}${avatar}` : avatar;
+  };
 
   const resetNewEmployeeForm = () => {
-    setNewEmp({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '' });
+    setNewEmp({ name: '', phone: '', email: '', role: '', department: 'Kitchen', salary: '', joinDate: new Date().toISOString().slice(0, 10) });
     setNewEmpAvatar(null);
     if (newEmpAvatarPreview.startsWith('blob:')) {
       URL.revokeObjectURL(newEmpAvatarPreview);
@@ -79,6 +84,7 @@ export default function HRManagement() {
       role: emp.role,
       department: emp.department,
       salary: String(emp.salary),
+      joinDate: emp.joinDate || new Date().toISOString().slice(0, 10),
     });
     setNewEmpAvatar(null);
     setNewEmpAvatarPreview(emp.avatar || '');
@@ -93,6 +99,7 @@ export default function HRManagement() {
     formData.append('email', newEmp.email);
     formData.append('role', newEmp.role);
     formData.append('department', newEmp.department);
+    formData.append('joinDate', newEmp.joinDate);
     formData.append('salary', newEmp.salary);
     if (newEmpAvatar) formData.append('avatar', newEmpAvatar);
 
@@ -230,7 +237,7 @@ export default function HRManagement() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
                         {emp.avatar ? (
-                          <img src={emp.avatar} alt={`${emp.name} avatar`} className="w-full h-full object-cover" />
+                          <img src={getAvatarUrl(emp.avatar)} alt={`${emp.name} avatar`} className="w-full h-full object-cover" />
                         ) : (
                           <span>{emp.name.split(' ').map(n => n[0]).join('')}</span>
                         )}
@@ -462,7 +469,7 @@ export default function HRManagement() {
             <div className="flex flex-col sm:flex-row gap-3 items-start">
               <div className="w-24 h-24 rounded-3xl border border-border bg-muted overflow-hidden flex items-center justify-center">
                 {newEmpAvatarPreview ? (
-                  <img src={newEmpAvatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
+                  <img src={getAvatarUrl(newEmpAvatarPreview)} alt="Avatar preview" className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-center text-xs text-muted-foreground px-2">Upload profile image</div>
                 )}
@@ -501,7 +508,10 @@ export default function HRManagement() {
                 <option value="Management">Management</option>
               </select>
             </div>
-            <input type="number" value={newEmp.salary} onChange={e => setNewEmp(p => ({ ...p, salary: e.target.value }))} placeholder="Monthly salary (Rs)" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={newEmp.joinDate} onChange={e => setNewEmp(p => ({ ...p, joinDate: e.target.value }))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+              <input type="number" value={newEmp.salary} onChange={e => setNewEmp(p => ({ ...p, salary: e.target.value }))} placeholder="Monthly salary (Rs)" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+            </div>
             <div className="flex gap-2 pt-2">
               <button onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>
               <button onClick={handleSaveEmployee} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">{editingEmployee ? 'Save Changes' : 'Add Employee'}</button>

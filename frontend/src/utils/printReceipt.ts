@@ -22,6 +22,7 @@ export interface ReceiptData {
   subtotal: number;
   discount: number;
   discountPercent: number;
+  gstEnabled?: boolean;
   /** Legacy: ignored; totals are computed with Pakistan GST only */
   tax?: number;
   total?: number;
@@ -44,7 +45,8 @@ export function printReceipt(data: ReceiptData) {
   const discountAmt = data.discountPercent > 0 ? Math.round((data.subtotal * data.discountPercent) / 100) : Math.round(data.discount);
   const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(
     data.subtotal,
-    discountAmt
+    discountAmt,
+    data.gstEnabled ?? true
   );
 
   const gstPct = Math.round(PKR_GST_RATE * 100);
@@ -194,7 +196,7 @@ export function printReceipt(data: ReceiptData) {
         : ''
     }
     <tr class="sub"><td>Taxable value</td><td>${fmtPKR(taxableAmount)}</td></tr>
-    <tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>
+    ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
   </table>
