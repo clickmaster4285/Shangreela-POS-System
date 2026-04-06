@@ -13,7 +13,16 @@ export default function MenuManagement() {
     const base = menuCategories.filter(c => c !== 'All');
     try {
       const saved = localStorage.getItem('menu_custom_categories');
-      return saved ? Array.from(new Set([...base, ...JSON.parse(saved)])) : base;
+      if (!saved) return base;
+
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return base;
+
+      const customCategories = parsed
+        .map(item => String(item).trim())
+        .filter(item => item.length > 0 && !base.includes(item));
+
+      return Array.from(new Set([...base, ...customCategories]));
     } catch {
       return base;
     }
@@ -24,7 +33,19 @@ export default function MenuManagement() {
 
   const saveCustomCategories = (updatedCategories: string[]) => {
     const customOnly = updatedCategories.filter(c => !menuCategories.includes(c));
-    localStorage.setItem('menu_custom_categories', JSON.stringify(customOnly));
+    const normalizedCustom = Array.from(new Set(customOnly.map(item => item.trim()).filter(item => item.length > 0)));
+    localStorage.setItem('menu_custom_categories', JSON.stringify(normalizedCustom));
+  };
+
+  const mergeCategories = (current: string[], additional: string[]) => {
+    const known = new Set(current.map(item => item.trim()).filter(item => item.length > 0));
+    additional.forEach(item => {
+      const trimmed = item.trim();
+      if (trimmed.length > 0 && !known.has(trimmed)) {
+        known.add(trimmed);
+      }
+    });
+    return Array.from(known);
   };
 
   const fetchItems = async () => {
@@ -32,6 +53,7 @@ export default function MenuManagement() {
       const categoryQuery = categoryFilter !== 'All' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
       const response = await api<PaginatedResponse<MenuItem>>(`/menu?page=${page}&limit=${pageSize}${categoryQuery}`);
       setItems(response.items);
+      setCategories(prev => mergeCategories(prev, response.items.map(item => item.category)));
       setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load menu');
