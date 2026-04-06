@@ -247,12 +247,38 @@ export default function POSScreen() {
                   <button
                     key={item.id}
                     onClick={() => addToCart(item)}
-                    className="pos-card text-left p-3 rounded-xl border border-border hover:border-primary/35 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                    className={`${item.image ? 'group relative overflow-hidden rounded-[28px] border border-border bg-card/95 text-left shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated' : 'pos-card text-left p-3 rounded-xl border border-border hover:border-primary/35 transition-colors'} disabled:opacity-50 disabled:pointer-events-none`}
                     disabled={!item.available}
                   >
-                    <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.category}</p>
-                    <p className="font-serif text-base font-bold text-primary mt-2">Rs. {item.price.toLocaleString()}</p>
+                    {item.image ? (
+                      <>
+                        <div className="relative overflow-hidden bg-muted/30">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-40 w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-3">
+                            <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
+                              {item.category}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-2 px-4 py-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <h3 className="text-sm font-semibold text-foreground line-clamp-2">{item.name}</h3>
+                            <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">Rs. {item.price.toLocaleString()}</span>
+                          </div>
+                          <p className="text-xs leading-5 text-muted-foreground line-clamp-2">{item.description}</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.category}</p>
+                        <p className="font-serif text-base font-bold text-primary mt-2">Rs. {item.price.toLocaleString()}</p>
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>

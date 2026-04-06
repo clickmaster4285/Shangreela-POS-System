@@ -50,17 +50,38 @@ export default function MenuManagement() {
 
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true });
+  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
 
-  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true }); setEditing(null); setShowForm(true); };
-  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false }); setEditing(item); setShowForm(true); };
+  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' }); setEditing(null); setShowForm(true); };
+  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' }); setEditing(item); setShowForm(true); };
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        setForm(prev => ({ ...prev, image: result }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const save = () => {
     if (!form.name || !form.price) return;
+    const payload = {
+      name: form.name,
+      price: parseFloat(form.price),
+      category: form.category,
+      description: form.description,
+      image: form.image,
+      kitchenRequired: form.kitchenRequired,
+    };
     if (editing) {
       api(`/menu/${editing.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name: form.name, price: parseFloat(form.price), category: form.category, description: form.description, kitchenRequired: form.kitchenRequired }),
+        body: JSON.stringify(payload),
       }).then(() => {
         toast.success('Item updated');
         fetchItems();
@@ -68,16 +89,7 @@ export default function MenuManagement() {
     } else {
       api('/menu', {
         method: 'POST',
-        body: JSON.stringify({
-          name: form.name,
-          price: parseFloat(form.price),
-          category: form.category,
-          description: form.description,
-          image: '',
-          available: true,
-          perishable: false,
-          kitchenRequired: form.kitchenRequired,
-        }),
+        body: JSON.stringify({ ...payload, available: true, perishable: false }),
       }).then(() => {
         toast.success('Item added');
         fetchItems();
@@ -188,6 +200,27 @@ export default function MenuManagement() {
               />
               Send to kitchen
             </label>
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Item image</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                className={inputClass}
+              />
+              {form.image ? (
+                <div className="relative">
+                  <img src={form.image} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, image: '' }))}
+                    className="absolute right-2 top-2 rounded-full bg-foreground/80 p-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <textarea className={`${inputClass} resize-none h-20`} placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
               {editing ? 'Update' : 'Add'} Item
@@ -247,9 +280,16 @@ export default function MenuManagement() {
               <tr key={item.id} className="border-b border-border/50 last:border-0">
                 <td className="sticky left-0 z-0 bg-card py-3 px-2 text-muted-foreground">{(page - 1) * pageSize + index + 1}</td>
                 <td className="py-3 px-2">
-                  <div>
-                    <p className="font-medium text-foreground">{item.name}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{item.description}</p>
+                  <div className="flex items-center gap-3">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="h-12 w-12 rounded-lg object-cover border border-border" />
+                    ) : (
+                      <div className="h-12 w-12 rounded-lg bg-muted" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{item.name}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{item.description}</p>
+                    </div>
                   </div>
                 </td>
                 <td className="py-3 px-2 text-muted-foreground">{item.category}</td>

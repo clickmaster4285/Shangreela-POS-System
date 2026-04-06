@@ -56,12 +56,25 @@ export default function FeaturedMenu() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass-card-elevated hover-lift p-5"
+                className="glass-card-elevated hover-lift overflow-hidden"
               >
-                <span className="text-xs text-primary font-medium uppercase tracking-wider">{item.category}</span>
-                <h3 className="font-serif text-lg font-semibold text-foreground mt-1">{item.name}</h3>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
-                <p className="font-serif text-xl font-bold text-primary mt-3">{formatPKR(item.price)}</p>
+                {item.image ? (
+                  <div className="relative overflow-hidden h-44">
+                    <img src={item.image} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 ease-out hover:scale-105" />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
+                        {item.category}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex h-44 items-center justify-center bg-muted/70 text-sm text-muted-foreground">No image available</div>
+                )}
+                <div className="p-5">
+                  <h3 className="font-serif text-xl font-semibold text-foreground">{item.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{item.description}</p>
+                  <p className="font-serif text-2xl font-bold text-primary mt-4">{formatPKR(item.price)}</p>
+                </div>
               </motion.div>
             ))}
           </motion.div>
