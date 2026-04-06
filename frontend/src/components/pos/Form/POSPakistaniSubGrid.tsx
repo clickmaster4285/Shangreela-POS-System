@@ -10,12 +10,14 @@ type Props = {
  * Second level inside **Pakistani**: Karahi and Handi folders with item counts.
  */
 export function POSPakistaniSubGrid({ itemCount, onOpenSubfolder }: Props) {
+  const sortedSubfolders = [...PAKISTANI_SUBFOLDERS].sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <p className="text-sm text-muted-foreground mb-3 shrink-0">Open Karahi or Handi</p>
       <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 max-w-xl">
-          {PAKISTANI_SUBFOLDERS.map(sub => {
+          {sortedSubfolders.map(sub => {
             const count = itemCount(sub);
             return (
               <button

@@ -20,7 +20,7 @@ export const FORM_MENU_CATEGORIES = [
 ] as const;
 
 /** Subfolders inside the Pakistani folder (data categories on `MenuItem`). */
-export const PAKISTANI_SUBFOLDERS = ['Karahi', 'Handi'] as const;
+export const PAKISTANI_SUBFOLDERS = ['Handi', 'Karahi'] as const;
 
 export type FormMenuCategory = (typeof FORM_MENU_CATEGORIES)[number];
 

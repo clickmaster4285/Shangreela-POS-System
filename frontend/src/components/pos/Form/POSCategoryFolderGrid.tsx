@@ -2,6 +2,7 @@ import { FolderOpen } from 'lucide-react';
 import { FORM_MENU_CATEGORIES } from './categoryFilter';
 
 type Props = {
+  categories?: string[];
   itemCount: (categoryLabel: string) => number;
   onOpenFolder: (label: string) => void;
 };
@@ -9,13 +10,15 @@ type Props = {
 /**
  * Full-screen grid of category “folders”; opening one shows its items elsewhere.
  */
-export function POSCategoryFolderGrid({ itemCount, onOpenFolder }: Props) {
+export function POSCategoryFolderGrid({ categories, itemCount, onOpenFolder }: Props) {
+  const displayCategories = categories ?? Array.from(FORM_MENU_CATEGORIES);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <p className="text-sm text-muted-foreground mb-3 shrink-0">Select a category to open its menu</p>
       <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pb-2">
-          {FORM_MENU_CATEGORIES.map(cat => {
+          {displayCategories.map(cat => {
             const count = itemCount(cat);
             return (
               <button

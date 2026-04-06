@@ -92,8 +92,15 @@ export default function POSScreen() {
 
   const selectedTable: TableInfo | null = useMemo(
     () => (selectedTableId != null ? tables.find(t => t.id === selectedTableId) ?? null : null),
-    [selectedTableId]
+    [selectedTableId, tables]
   );
+
+  const categoryLabels = useMemo(() => {
+    const uniqueCategories = Array.from(new Set(menuItems.map(i => i.category))).sort((a, b) => a.localeCompare(b));
+    const hasPakistani = uniqueCategories.includes('Karahi') || uniqueCategories.includes('Handi');
+    const remaining = uniqueCategories.filter(c => c !== 'Karahi' && c !== 'Handi');
+    return hasPakistani ? ['All', 'Pakistani', ...remaining] : ['All', ...remaining];
+  }, [menuItems]);
 
   const itemCount = useCallback((label: string) => {
     if (label === 'All') return menuItems.length;
@@ -218,7 +225,7 @@ export default function POSScreen() {
       {/* Full-screen category folders OR items inside the selected folder */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {openFolder === null ? (
-          <POSCategoryFolderGrid itemCount={itemCount} onOpenFolder={openTopFolder} />
+          <POSCategoryFolderGrid categories={categoryLabels} itemCount={itemCount} onOpenFolder={openTopFolder} />
         ) : openFolder === 'Pakistani' && pakistaniSub === null ? (
           <POSFolderContent title="Pakistani" onBack={handleFolderBack}>
             <POSPakistaniSubGrid itemCount={itemCount} onOpenSubfolder={setPakistaniSub} />
