@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Calendar, Filter } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Calendar, Filter, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 
@@ -22,15 +22,17 @@ export default function SalesAnalytics() {
       api<{ items: { day: string; revenue: number }[] }>('/dashboard/revenue-weekly'),
       api<{ items: { hour: string; sales: number }[] }>('/dashboard/sales-daily'),
       api<{ items: { name: string; sold: number; revenue: number }[] }>('/dashboard/top-items'),
-      api<{ items: { type: 'dine-in' | 'delivery' | 'takeaway' }[] }>('/orders?page=1&limit=200&status=all&type=all'),
+      api<{ items: { type: 'dine-in' | 'delivery' | 'takeaway' | 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled' }[] }>('/orders?page=1&limit=200&status=all&type=all'),
       api<{ items: { name: string; value: number; revenue: number }[] }>('/analytics/order-type-breakdown'),
       api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
       ]);
+      const cancelledOrders = orders.items.filter((o: any) => o.status === 'cancelled').length;
       return {
         weeklySalesData: w.items,
         dailySalesData: d.items,
         topSellingItems: top.items,
-        sampleOrders: orders.items,
+        sampleOrders: orders.items.filter((o: any) => o.status !== 'cancelled'),
+        cancelledOrders,
         orderTypeData: typeData.items,
         monthlyTrend: month.items,
       };
@@ -43,6 +45,7 @@ export default function SalesAnalytics() {
   const dailySalesData = analyticsQuery.data?.dailySalesData ?? [];
   const topSellingItems = analyticsQuery.data?.topSellingItems ?? [];
   const sampleOrders = analyticsQuery.data?.sampleOrders ?? [];
+  const cancelledOrders = analyticsQuery.data?.cancelledOrders ?? 0;
   const orderTypeData = analyticsQuery.data?.orderTypeData ?? orderTypeDataDefault;
   const monthlyTrend = analyticsQuery.data?.monthlyTrend ?? [];
 
@@ -86,10 +89,11 @@ export default function SalesAnalytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Total Revenue', value: formatPKR(totalRevenue), icon: DollarSign, change: '+18.2%' },
           { label: 'Total Orders', value: totalOrders.toString(), icon: ShoppingCart, change: '+12.5%' },
+          { label: 'Cancelled Orders', value: String(cancelledOrders), icon: XCircle, change: '' },
           { label: 'Average Order', value: formatPKR(avgOrder), icon: TrendingUp, change: '+5.3%' },
           { label: 'Dine-in / Delivery / Takeaway', value: `${dineInCount} / ${deliveryCount} / ${takeawayCount}`, icon: Filter, change: '' },
         ].map(s => (

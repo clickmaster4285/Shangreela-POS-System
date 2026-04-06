@@ -1,18 +1,19 @@
 const { Order, MenuItem, InventoryItem, Employee } = require("../models");
 
 exports.summary = async (_req, res) => {
-  const [orders, menuCount, lowStock, staff] = await Promise.all([
-    Order.find({}).lean(),
+  const [orders, menuCount, lowStock, staff, cancelledOrders] = await Promise.all([
+    Order.find({ status: { $ne: "cancelled" } }).lean(),
     MenuItem.countDocuments({}),
     InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$minStock"] } }),
     Employee.countDocuments({ status: "active" }),
+    Order.countDocuments({ status: "cancelled" }),
   ]);
   const revenue = orders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-  res.json({ revenue, totalOrders: orders.length, menuCount, lowStock, staff });
+  res.json({ revenue, totalOrders: orders.length, cancelledOrders, menuCount, lowStock, staff });
 };
 
 exports.salesDaily = async (_req, res) => {
-  const orders = await Order.find({}).lean();
+  const orders = await Order.find({ status: { $ne: "cancelled" } }).lean();
   const buckets = new Map();
   for (let i = 9; i <= 20; i += 1) buckets.set(i, 0);
   for (const o of orders) {
@@ -30,7 +31,7 @@ exports.salesDaily = async (_req, res) => {
 exports.revenueWeekly = async (_req, res) => {
   const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const rows = labels.map((day) => ({ day, revenue: 0 }));
-  const orders = await Order.find({}).lean();
+  const orders = await Order.find({ status: { $ne: "cancelled" } }).lean();
   for (const o of orders) {
     const dayIdx = new Date(o.createdAt).getDay();
     rows[dayIdx].revenue += Number(o.total || 0);
@@ -39,7 +40,7 @@ exports.revenueWeekly = async (_req, res) => {
 };
 
 exports.topItems = async (_req, res) => {
-  const orders = await Order.find({}).lean();
+  const orders = await Order.find({ status: { $ne: "cancelled" } }).lean();
   const map = new Map();
   for (const o of orders) {
     for (const it of o.items || []) {
@@ -58,6 +59,6 @@ exports.topItems = async (_req, res) => {
 };
 
 exports.recentOrders = async (_req, res) => {
-  const items = await Order.find({}).sort({ createdAt: -1 }).limit(10).lean();
+  const items = await Order.find({ status: { $ne: "cancelled" } }).sort({ createdAt: -1 }).limit(10).lean();
   res.json({ items: items.map((o) => ({ id: o.code, type: o.type, status: o.status, total: o.total, table: o.table, items: o.items || [] })) });
 };

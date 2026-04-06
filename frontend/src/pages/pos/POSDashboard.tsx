@@ -1,4 +1,4 @@
-import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight } from 'lucide-react';
+import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useMemo } from 'react';
 import { api } from '@/lib/api';
@@ -11,7 +11,7 @@ export default function POSDashboard() {
     queryKey: ['dashboard-overview'],
     queryFn: async () => {
       const [s, d, w, t, r] = await Promise.all([
-      api<{ revenue: number; totalOrders: number; menuCount: number; lowStock: number; staff: number }>('/dashboard/summary'),
+      api<{ revenue: number; totalOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number }>('/dashboard/summary'),
       api<{ items: { hour: string; sales: number }[] }>('/dashboard/sales-daily'),
       api<{ items: { day: string; revenue: number }[] }>('/dashboard/revenue-weekly'),
       api<{ items: { name: string; sold: number; revenue: number }[] }>('/dashboard/top-items'),
@@ -21,7 +21,7 @@ export default function POSDashboard() {
     },
   });
 
-  const summary = dashboardQuery.data?.summary ?? { revenue: 0, totalOrders: 0, menuCount: 0, lowStock: 0, staff: 0 };
+  const summary = dashboardQuery.data?.summary ?? { revenue: 0, totalOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0 };
   const dailySalesData = dashboardQuery.data?.dailySalesData ?? [];
   const weeklySalesData = dashboardQuery.data?.weeklySalesData ?? [];
   const topSellingItems = dashboardQuery.data?.topSellingItems ?? [];
@@ -37,6 +37,7 @@ export default function POSDashboard() {
     { label: "Today's Revenue", value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
     { label: 'Active Orders', value: sampleOrders.filter(o => o.status !== 'completed').length.toString(), icon: ShoppingCart, change: '' },
     { label: 'Total Orders', value: String(summary.totalOrders), icon: TrendingUp, change: '' },
+    { label: 'Cancelled Orders', value: String(summary.cancelledOrders), icon: XCircle, change: '' },
     { label: 'Active Staff', value: String(summary.staff), icon: Users, change: '' },
   ];
 
