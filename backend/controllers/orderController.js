@@ -5,6 +5,10 @@ const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   const list = Array.isArray(items) ? items : [];
   return list.map((item) => ({
     ...item,
+    menuItem: {
+      ...(item.menuItem || {}),
+      kitchenRequired: item.menuItem?.kitchenRequired !== false,
+    },
     requestId,
     requestAt,
   }));

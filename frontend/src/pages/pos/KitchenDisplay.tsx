@@ -17,7 +17,7 @@ export default function KitchenDisplay() {
         return db - da;
       })[0];
     const requestItems = latest?.requestId ? items.filter(i => i.requestId === latest.requestId) : items;
-    return requestItems.filter(i => i.menuItem?.kitchenRequired !== false);
+    return requestItems.filter(i => i.menuItem?.kitchenRequired === true);
   }, []);
 
   const fetchOrders = useCallback(() =>

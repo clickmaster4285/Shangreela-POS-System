@@ -23,6 +23,7 @@ const orderSchema = new mongoose.Schema(
           name: String,
           price: Number,
           category: String,
+          kitchenRequired: { type: Boolean, default: true },
         },
       },
     ],
