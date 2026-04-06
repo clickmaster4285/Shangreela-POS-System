@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { menuCategories, type MenuItem } from '@/data/mockData';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,7 +48,7 @@ export default function MenuManagement() {
     return Array.from(known);
   };
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
       const categoryQuery = categoryFilter !== 'All' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
       const response = await api<PaginatedResponse<MenuItem>>(`/menu?page=${page}&limit=${pageSize}${categoryQuery}`);
@@ -58,25 +58,25 @@ export default function MenuManagement() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load menu');
     }
-  };
+  }, [page, pageSize, categoryFilter]);
 
   useEffect(() => {
     fetchItems();
-  }, [page, pageSize, categoryFilter]);
+  }, [fetchItems]);
 
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '' });
+  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true });
 
-  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '' }); setEditing(null); setShowForm(true); };
-  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description }); setEditing(item); setShowForm(true); };
+  const openNew = () => { setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true }); setEditing(null); setShowForm(true); };
+  const openEdit = (item: MenuItem) => { setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false }); setEditing(item); setShowForm(true); };
 
   const save = () => {
     if (!form.name || !form.price) return;
     if (editing) {
       api(`/menu/${editing.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name: form.name, price: parseFloat(form.price), category: form.category, description: form.description }),
+        body: JSON.stringify({ name: form.name, price: parseFloat(form.price), category: form.category, description: form.description, kitchenRequired: form.kitchenRequired }),
       }).then(() => {
         toast.success('Item updated');
         fetchItems();
@@ -92,6 +92,7 @@ export default function MenuManagement() {
           image: '',
           available: true,
           perishable: false,
+          kitchenRequired: form.kitchenRequired,
         }),
       }).then(() => {
         toast.success('Item added');
@@ -188,6 +189,15 @@ export default function MenuManagement() {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={form.kitchenRequired}
+                onChange={e => setForm({...form, kitchenRequired: e.target.checked})}
+                className="accent-primary"
+              />
+              Send to kitchen
+            </label>
             <textarea className={`${inputClass} resize-none h-20`} placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
               {editing ? 'Update' : 'Add'} Item
@@ -236,6 +246,7 @@ export default function MenuManagement() {
               <th className="sticky left-0 z-10 bg-card py-3 px-2 font-medium">#</th>
               <th className="py-3 px-2 font-medium">Item</th>
               <th className="py-3 px-2 font-medium">Category</th>
+              <th className="py-3 px-2 font-medium">Kitchen</th>
               <th className="py-3 px-2 font-medium">Price (PKR)</th>
               <th className="py-3 px-2 font-medium">Status</th>
               <th className="py-3 px-2 font-medium text-right">Actions</th>
@@ -252,6 +263,7 @@ export default function MenuManagement() {
                   </div>
                 </td>
                 <td className="py-3 px-2 text-muted-foreground">{item.category}</td>
+                <td className="py-3 px-2 text-sm font-medium text-foreground">{item.kitchenRequired !== false ? 'Yes' : 'No'}</td>
                 <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.price.toLocaleString()}</td>
                 <td className="py-3 px-2">
                   <button onClick={() => toggleAvailability(item.id)}

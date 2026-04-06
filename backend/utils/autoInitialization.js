@@ -3,7 +3,7 @@ const { MenuItem, User, Permission } = require("../models");
 const { MENU_ITEMS } = require("./menuSeedData");
 
 function menuDocsForInsert() {
-  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable }) => ({
+  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable, kitchenRequired }) => ({
     name,
     price,
     category,
@@ -11,6 +11,7 @@ function menuDocsForInsert() {
     description,
     available: available !== false,
     perishable: Boolean(perishable),
+    kitchenRequired: kitchenRequired !== false,
   }));
 }
 

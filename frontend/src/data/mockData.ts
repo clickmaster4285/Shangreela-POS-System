@@ -8,6 +8,7 @@ export interface MenuItem {
   description: string;
   available: boolean;
   perishable: boolean;
+  kitchenRequired?: boolean;
   expiryDays?: number;
 }
 

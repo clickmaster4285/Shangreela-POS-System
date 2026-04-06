@@ -9,6 +9,7 @@ const menuItemSchema = new mongoose.Schema(
     image: String,
     available: { type: Boolean, default: true },
     perishable: { type: Boolean, default: false },
+    kitchenRequired: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

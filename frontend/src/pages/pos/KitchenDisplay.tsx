@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Order } from '@/data/mockData';
 import { Clock, ChefHat, CheckCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
-  const getLatestRequestItems = (order: Order) => {
+  const getLatestRequestItems = useCallback((order: Order) => {
     const items = (order.items || []) as Array<Order['items'][number] & { requestId?: string; requestAt?: string | Date }>;
     if (!items.length) return [];
     const latest = [...items]
@@ -16,18 +16,22 @@ export default function KitchenDisplay() {
         const db = new Date(String(b.requestAt || 0)).getTime();
         return db - da;
       })[0];
-    if (!latest?.requestId) return items;
-    return items.filter(i => i.requestId === latest.requestId);
-  };
+    const requestItems = latest?.requestId ? items.filter(i => i.requestId === latest.requestId) : items;
+    return requestItems.filter(i => i.menuItem?.kitchenRequired !== false);
+  }, []);
 
-  const fetchOrders = () =>
+  const fetchOrders = useCallback(() =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
-      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'served'));
-    });
+      setOrders(
+        r.items
+          .filter(o => o.status !== 'completed' && o.status !== 'served')
+          .filter(o => getLatestRequestItems(o).length > 0)
+      );
+    }), [getLatestRequestItems]);
 
   useEffect(() => {
     fetchOrders().catch(() => toast.error('Failed to load kitchen queue'));
-  }, []);
+  }, [fetchOrders]);
 
   const updateStatus = (id: string, status: Order['status']) => {
     const row = orders.find(o => o.id === id);
