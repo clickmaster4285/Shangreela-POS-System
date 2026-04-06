@@ -3,7 +3,7 @@ const { Order, Delivery } = require("../models");
 exports.weeklySales = async (_req, res) => {
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const rows = labels.map((day) => ({ day, revenue: 0 }));
-  const orders = await Order.find({}).lean();
+  const orders = await Order.find({ status: { $ne: "cancelled" } }).lean();
   for (const o of orders) {
     const idx = (new Date(o.createdAt).getDay() + 6) % 7;
     rows[idx].revenue += Number(o.total || 0);
@@ -12,7 +12,7 @@ exports.weeklySales = async (_req, res) => {
 };
 
 exports.topItems = async (_req, res) => {
-  const orders = await Order.find({}).lean();
+  const orders = await Order.find({ status: { $ne: "cancelled" } }).lean();
   const map = new Map();
   for (const o of orders) {
     for (const i of o.items || []) {

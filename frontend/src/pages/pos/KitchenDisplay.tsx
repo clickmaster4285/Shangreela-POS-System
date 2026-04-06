@@ -24,7 +24,7 @@ export default function KitchenDisplay() {
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
       setOrders(
         r.items
-          .filter(o => o.status !== 'completed' && o.status !== 'served')
+          .filter(o => o.status !== 'completed' && o.status !== 'served' && o.status !== 'cancelled')
           .filter(o => getLatestRequestItems(o).length > 0)
       );
     }), [getLatestRequestItems]);
