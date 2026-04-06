@@ -80,22 +80,21 @@ export default function OrderManagement() {
     return flow[s] || null;
   };
 
-  const dineInCount = orders.filter(o => o.type === 'dine-in').length;
-  const deliveryCount = orders.filter(o => o.type === 'delivery').length;
-  const takeawayCount = orders.filter(o => o.type === 'takeaway').length;
+  const activeOrders = orders.filter(o => o.type !== 'delivery');
+  const dineInCount = activeOrders.filter(o => o.type === 'dine-in').length;
+  const takeawayCount = activeOrders.filter(o => o.type === 'takeaway').length;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
-        <p className="text-sm text-muted-foreground">Track and manage all orders.</p>
+        <p className="text-sm text-muted-foreground">Track and manage all dine-in and takeaway orders.</p>
       </div>
 
       {/* Order type summary */}
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         {[
           { label: 'Dine-in', count: dineInCount, color: 'text-primary' },
-          { label: 'Delivery', count: deliveryCount, color: 'text-warning' },
           { label: 'Takeaway', count: takeawayCount, color: 'text-success' },
         ].map(t => (
           <div key={t.label} className="pos-card flex items-center gap-4 cursor-pointer hover:border-primary/30" onClick={() => setTypeFilter(t.label.toLowerCase())}>
@@ -116,13 +115,13 @@ export default function OrderManagement() {
           <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
           {['all', 'pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
-              {s} {s !== 'all' && `(${orders.filter(o => o.status === s).length})`}
+              {s} {s !== 'all' && `(${activeOrders.filter(o => o.status === s).length})`}
             </button>
           ))}
         </div>
         <div className="flex gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground self-center mr-1">Type:</span>
-          {['all', 'dine-in', 'delivery', 'takeaway'].map(t => (
+          {['all', 'dine-in', 'takeaway'].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${typeFilter === t ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
               {t}
             </button>
@@ -131,7 +130,7 @@ export default function OrderManagement() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {orders.map(order => (
+        {activeOrders.map(order => (
           <div key={order.id} className="pos-card space-y-3">
             <div className="flex justify-between items-start">
               <div>

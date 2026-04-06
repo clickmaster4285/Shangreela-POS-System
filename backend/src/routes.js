@@ -383,6 +383,19 @@ router.post("/orders", authRequired, async (req, res) => {
       { status: "occupied", currentOrder: code }
     );
   }
+  if (payload.type === "delivery") {
+    await Delivery.create({
+      orderId: code,
+      customerName: payload.customerName || "",
+      phone: payload.phone || "",
+      address: payload.deliveryAddress || "",
+      items: Array.isArray(payload.items) ? payload.items.map((item) => item.menuItem?.name || "Unknown") : [],
+      total: Number(payload.total || 0),
+      status: "pending",
+      assignedRider: payload.assignedRider || "",
+      estimatedTime: payload.estimatedTime || "30 mins",
+    });
+  }
   res.status(201).json({ id: row.code, dbId: String(row._id) });
 });
 

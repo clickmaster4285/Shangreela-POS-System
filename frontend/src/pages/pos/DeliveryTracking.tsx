@@ -14,6 +14,7 @@ interface DeliveryOrder {
   status: DeliveryStatus;
   assignedRider: string;
   estimatedTime: string;
+  orderStatus?: string;
   createdAt: string;
 }
 
@@ -25,6 +26,13 @@ const statusConfig: Record<DeliveryStatus, { label: string; color: string; icon:
   out_for_delivery: { label: 'Out for Delivery', color: 'bg-primary/10 text-primary border-primary/20', icon: Truck },
   delivered: { label: 'Delivered', color: 'bg-success/10 text-success border-success/20', icon: CheckCircle2 },
 };
+
+const formatCookingStatus = (status: string | undefined) =>
+  status
+    ? status
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase())
+    : 'Unknown';
 
 export default function DeliveryTracking() {
   const [filter, setFilter] = useState<'all' | DeliveryStatus>('all');
@@ -104,8 +112,11 @@ export default function DeliveryTracking() {
             <div key={delivery.id} className="pos-card space-y-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="font-semibold text-foreground">{delivery.id}</p>
-                  <p className="text-xs text-muted-foreground">{delivery.orderId}</p>
+                  <p className="font-semibold text-foreground">{delivery.orderId}</p>
+                  <p className="text-xs text-muted-foreground">Order ID</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Kitchen status: <span className="text-foreground font-medium">{formatCookingStatus(delivery.orderStatus)}</span>
+                  </p>
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full border font-medium flex items-center gap-1 ${config.color}`}>
                   <StatusIcon className="w-3 h-3" />

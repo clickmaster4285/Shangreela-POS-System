@@ -1,5 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
-const { Order, Table } = require("../models");
+const { Order, Table, Delivery } = require("../models");
 
 const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   const list = Array.isArray(items) ? items : [];
@@ -109,6 +109,21 @@ exports.create = async (req, res) => {
   if (payload.type === "dine-in" && payload.table) {
     await Table.findOneAndUpdate({ number: Number(payload.table) }, { status: "occupied", currentOrder: code });
   }
+
+  if (payload.type === "delivery") {
+    await Delivery.create({
+      orderId: code,
+      customerName: payload.customerName || "",
+      phone: payload.phone || "",
+      address: payload.deliveryAddress || "",
+      items: Array.isArray(payload.items) ? payload.items.map((item) => item.menuItem?.name || "Unknown") : [],
+      total: totals.total,
+      status: "pending",
+      assignedRider: payload.assignedRider || "",
+      estimatedTime: payload.estimatedTime || "30 mins",
+    });
+  }
+
   res.status(201).json({ id: row.code, dbId: String(row._id) });
 };
 

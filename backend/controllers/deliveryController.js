@@ -1,5 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
-const { Delivery } = require("../models");
+const { Delivery, Order } = require("../models");
 
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
@@ -7,9 +7,18 @@ exports.list = async (req, res) => {
     Delivery.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Delivery.countDocuments({}),
   ]);
+
+  const orderCodes = rows.map((d) => d.orderId).filter(Boolean);
+  const orderStatuses = await Order.find({ code: { $in: orderCodes } }, { code: 1, status: 1 }).lean();
+  const statusByCode = new Map(orderStatuses.map((o) => [o.code, o.status]));
+
   res.json(
     buildPaginatedResponse({
-      items: rows.map((d) => ({ ...d, id: String(d._id) })),
+      items: rows.map((d) => ({
+        ...d,
+        orderStatus: statusByCode.get(d.orderId) || "pending",
+        id: String(d._id),
+      })),
       total,
       page,
       limit,

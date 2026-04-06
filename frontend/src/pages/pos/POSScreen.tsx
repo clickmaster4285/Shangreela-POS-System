@@ -27,6 +27,9 @@ export default function POSScreen() {
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [deliveryCustomerName, setDeliveryCustomerName] = useState('');
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [activeFloorId, setActiveFloorId] = useState<string>('ground');
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
@@ -350,6 +353,33 @@ export default function POSScreen() {
           </div>
         )}
 
+        {orderType === 'delivery' && (
+          <div className="px-3 pb-3 border-b border-border space-y-3 pt-3">
+            <p className="text-xs font-semibold text-foreground">Delivery details</p>
+            <input
+              type="text"
+              value={deliveryCustomerName}
+              onChange={e => setDeliveryCustomerName(e.target.value)}
+              placeholder="Customer name"
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+            />
+            <input
+              type="tel"
+              value={deliveryPhone}
+              onChange={e => setDeliveryPhone(e.target.value)}
+              placeholder="Phone number"
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+            />
+            <textarea
+              rows={3}
+              value={deliveryAddress}
+              onChange={e => setDeliveryAddress(e.target.value)}
+              placeholder="Delivery address"
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm resize-none"
+            />
+          </div>
+        )}
+
         {/* Items */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin">
           {cart.length === 0 ? (
@@ -637,6 +667,10 @@ export default function POSScreen() {
                     toast.error('Select a table first');
                     return;
                   }
+                  if (orderType === 'delivery' && (!deliveryCustomerName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim())) {
+                    toast.error('Enter customer name, phone, and delivery address');
+                    return;
+                  }
 
                   const createOrAppend = async () => {
                     if (orderType === 'dine-in' && selectedTable?.id) {
@@ -662,8 +696,11 @@ export default function POSScreen() {
                       method: 'POST',
                       body: JSON.stringify({
                         type: orderType,
-                        table: selectedTable?.id,
+                        table: orderType === 'dine-in' && selectedTable ? selectedTable.id : undefined,
                         status: 'pending',
+                        customerName: orderType === 'delivery' ? deliveryCustomerName.trim() : undefined,
+                        phone: orderType === 'delivery' ? deliveryPhone.trim() : undefined,
+                        deliveryAddress: orderType === 'delivery' ? deliveryAddress.trim() : undefined,
                         subtotal,
                         tax: totalTaxAmount,
                         discount: 0,
@@ -678,6 +715,11 @@ export default function POSScreen() {
                     .then(mode => {
                       toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen');
                       setCart([]);
+                      if (orderType === 'delivery') {
+                        setDeliveryCustomerName('');
+                        setDeliveryPhone('');
+                        setDeliveryAddress('');
+                      }
                     })
                     .catch(() => toast.error('Failed to save order'));
                 }
