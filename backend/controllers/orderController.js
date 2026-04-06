@@ -85,7 +85,9 @@ exports.openByTable = async (req, res) => {
     table: tableNumber,
     type: "dine-in",
   };
-  if (!includeCompleted) where.status = { $ne: "completed" };
+  if (!includeCompleted) {
+    where.status = { $nin: ["completed", "cancelled", "served"] };
+  }
   const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
   if (!row) return res.json({ item: null });
   return res.json({
