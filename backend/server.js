@@ -20,7 +20,7 @@ uploadSubfolders.forEach((sub) => {
     fs.mkdirSync(folderPath, { recursive: true });
   }
 });
-app.use("/uploads", express.static(uploadsPath));
+app.use("/uploads", express.static(uploadsPath));    
 
 app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
