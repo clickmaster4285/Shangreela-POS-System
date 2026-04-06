@@ -51,6 +51,7 @@ exports.list = async (req, res) => {
           notes: o.notes || "",
           createdAt: o.createdAt,
           customerName: o.customerName || "",
+          orderTaker: o.orderTaker || "",
           dbId: String(o._id),
         };
       }),
@@ -69,6 +70,48 @@ exports.patchStatus = async (req, res) => {
   const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
   if (!order) return res.status(404).json({ message: "Order not found" });
   res.json({ ok: true, id: String(order._id), status: order.status });
+};
+
+exports.changeTable = async (req, res) => {
+  const newTableNumber = Number(req.body.table);
+  if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
+    return res.status(400).json({ message: "Provide a valid table number." });
+  }
+
+  const order = await Order.findById(req.params.id);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (order.type !== "dine-in") {
+    return res.status(400).json({ message: "Only dine-in orders can be reassigned to a table." });
+  }
+  if (order.status === "completed" || order.status === "cancelled") {
+    return res.status(400).json({ message: "Cannot switch table for a completed or cancelled order." });
+  }
+
+  const currentTableNumber = Number(order.table || 0);
+  if (currentTableNumber === newTableNumber) {
+    return res.json({ ok: true, table: newTableNumber });
+  }
+
+  const targetTable = await Table.findOne({ number: newTableNumber });
+  if (!targetTable) {
+    return res.status(404).json({ message: "Target table not found." });
+  }
+  if (targetTable.status === "occupied" && targetTable.currentOrder !== order.code) {
+    return res.status(400).json({ message: "Target table is currently occupied." });
+  }
+
+  if (currentTableNumber) {
+    await Table.findOneAndUpdate(
+      { number: currentTableNumber, currentOrder: order.code },
+      { status: "available", currentOrder: "" }
+    );
+  }
+
+  await Table.findOneAndUpdate({ number: newTableNumber }, { status: "occupied", currentOrder: order.code });
+  order.table = newTableNumber;
+  await order.save();
+
+  res.json({ ok: true, table: newTableNumber });
 };
 
 exports.create = async (req, res) => {
@@ -97,6 +140,7 @@ exports.create = async (req, res) => {
     status: payload.status || "pending",
     table: payload.table,
     customerName: payload.customerName || "",
+    orderTaker: req.user.name,
     notes: payload.notes || "",
     subtotal: totals.subtotal,
     tax: totals.tax,
@@ -154,6 +198,7 @@ exports.openByTable = async (req, res) => {
       total: totals.total,
       notes: row.notes || "",
       customerName: row.customerName || "",
+      orderTaker: row.orderTaker || "",
     },
   });
 };
