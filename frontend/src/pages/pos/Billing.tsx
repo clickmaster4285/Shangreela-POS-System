@@ -50,7 +50,7 @@ export default function Billing() {
   const discountAmt = discountMode === 'percent'
     ? subtotal * (discountValue / 100)
     : Math.min(Math.max(discountValue, 0), subtotal);
-  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount } = computePakistanTaxTotals(
+  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = computePakistanTaxTotals(
     subtotal,
     discountAmt,
     gstEnabled
@@ -128,9 +128,9 @@ export default function Billing() {
         {/* Receipt */}
         <div className="pos-card p-5 shadow-sm">
           <div className="text-center mb-5 pb-4 border-b border-border border-dashed">
-            <h2 className="font-serif text-xl font-bold text-foreground">Shiraz Restaurant</h2>
-            <p className="text-xs text-muted-foreground">123 Royal Avenue, Islamabad</p>
-            <p className="text-xs text-muted-foreground">Tel: +92 51 1234567</p>
+            <h2 className="font-serif text-xl font-bold text-foreground">Shangreela Heights</h2>
+            <p className="text-xs text-muted-foreground">ling Mor Kahuta, Rawalpindi</p>
+            <p className="text-xs text-muted-foreground">Tel: +92 513314120 / +92 337-5454786</p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-2 text-sm mb-4">
@@ -169,6 +169,7 @@ export default function Billing() {
               </div>
             )}
             <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>Service charge (5%)</span><span>{fmt(serviceCharge)}</span></div>
             <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
             <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
             <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border">

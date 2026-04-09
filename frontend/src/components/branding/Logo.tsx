@@ -26,23 +26,23 @@ export default function Logo({
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          <linearGradient id="Shiraz Restaurant-g" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id="Shangreela Heights-g" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#5A0F22" />
             <stop offset="1" stopColor="#D8B6A4" />
           </linearGradient>
         </defs>
 
         <rect x="16" y="16" width="224" height="224" rx="56" fill="hsl(var(--deep-brown))" />
-        <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#Shiraz Restaurant-g)" opacity="0.12" />
+        <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#Shangreela Heights-g)" opacity="0.12" />
 
         <path
           d="M78 90l18 20 32-28 32 28 18-20 10 56H68l10-56z"
           fill="none"
-          stroke="url(#Shiraz Restaurant-g)"
+          stroke="url(#Shangreela Heights-g)"
           strokeWidth="10"
           strokeLinejoin="round"
         />
-        <path d="M78 146h100" stroke="url(#Shiraz Restaurant-g)" strokeWidth="10" strokeLinecap="round" />
+        <path d="M78 146h100" stroke="url(#Shangreela Heights-g)" strokeWidth="10" strokeLinecap="round" />
 
         <path
           d="M84 180c6 10 18 16 34 16 18 0 30-7 30-18 0-10-9-14-24-17l-10-2c-9-2-14-5-14-12 0-8 9-13 22-13 11 0 20 4 26 12"
@@ -62,7 +62,7 @@ export default function Logo({
       </svg>
 
       {showText ? (
-        <span className={`font-serif font-bold tracking-wide ${textClassName ?? ''}`}>Shiraz Restaurant</span>
+        <span className={`font-serif font-bold tracking-wide ${textClassName ?? ''}`}>Shangreela Heights</span>
       ) : null}
     </div>
   );

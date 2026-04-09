@@ -3,15 +3,15 @@ import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
 
 /** Config shown on printed tax invoices (align with FBR integration / business registration). */
 export const RECEIPT_BUSINESS = {
-  name: 'Shiraz Restaurant',
+  name: 'Shangreela Heights',
   tagline: 'Restaurant & Fine Dining',
-  address: '123 Royal Avenue, Islamabad',
-  city: 'Islamabad, Pakistan',
-  phone: '+92 51 1234567',
+  address: 'ling Mor Kahuta',
+  city: 'Rawalpindi, Pakistan',
+  phone: '+92 513314120 / +92 337-5454786',
   ntn: '1234567-8',
   strn: '12-34-5678-901-23',
   posRegistrationId: 'SRZ-POS-001',
-  website: 'www.shirazrestaurant.com',
+  website: 'www.shangreelheights.com',
 } as const;
 
 export interface ReceiptData {
@@ -23,7 +23,8 @@ export interface ReceiptData {
   discount: number;
   discountPercent: number;
   gstEnabled?: boolean;
-  /** Legacy: ignored; totals are computed with Pakistan GST only */
+  serviceCharge?: number;
+
   tax?: number;
   total?: number;
   paymentMethod?: string;
@@ -43,7 +44,7 @@ export function printReceipt(data: ReceiptData) {
   const fbrRef = `FBR-${data.orderId}-${now.getTime().toString().slice(-6)}`;
 
   const discountAmt = data.discountPercent > 0 ? Math.round((data.subtotal * data.discountPercent) / 100) : Math.round(data.discount);
-  const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(
+  const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, serviceCharge, grandTotal } = computePakistanTaxTotals(
     data.subtotal,
     discountAmt,
     data.gstEnabled ?? true
@@ -196,13 +197,14 @@ export function printReceipt(data: ReceiptData) {
         : ''
     }
     <tr class="sub"><td>Taxable value</td><td>${fmtPKR(taxableAmount)}</td></tr>
+    <tr class="sub"><td>Service charge @ 5%</td><td>${fmtPKR(serviceCharge)}</td></tr>
     ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
   </table>
 
   <p class="tax-note">
-    Tax amounts are calculated on taxable value as per standard POS configuration (GST ${gstPct}%). Retain this invoice for SRB / sales tax record. For integrated digital invoicing, verify via portal when live API is enabled.
+    Service charge @ 5% is applied on taxable value, then GST @ ${gstPct}% is applied on the total including service charge. Retain this invoice for SRB / sales tax record. For integrated digital invoicing, verify via portal when live API is enabled.
   </p>
 
   ${data.paymentMethod ? `<div class="payment">Payment: ${esc(data.paymentMethod)}</div>` : ''}

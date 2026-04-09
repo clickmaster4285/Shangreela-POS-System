@@ -31,7 +31,7 @@ export default function About() {
               A Legacy of <span className="text-primary">Culinary</span> Excellence
             </h2>
             <p className="text-muted-foreground leading-relaxed mb-8">
-              Founded in 2009, Shiraz Restaurant has been a beacon of fine dining, blending traditional recipes with modern culinary artistry. Our chefs craft each dish with passion, using only the freshest ingredients sourced from premium suppliers around the world.
+              Founded in 2009, Shangreela Heights has been a beacon of fine dining, blending traditional recipes with modern culinary artistry. Our chefs craft each dish with passion, using only the freshest ingredients sourced from premium suppliers around the world.
             </p>
 
             <div className="grid sm:grid-cols-3 gap-6">

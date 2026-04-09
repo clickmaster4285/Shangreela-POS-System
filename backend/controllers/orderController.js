@@ -28,6 +28,24 @@ const calculateOrderTotals = (items = [], tax = 0, discount = 0) => {
   };
 };
 
+const calculateGrandTotal = (items = [], tax = 0, discount = 0, gstEnabled = true) => {
+  const { subtotal, tax: taxAmount, discount: discountAmount, total: taxableTotal } = calculateOrderTotals(items, tax, discount);
+  const gstRate = 0.16;
+  const serviceChargeRate = 0.05;
+  const serviceCharge = Math.round(taxableTotal * serviceChargeRate);
+  const subtotalAfterService = taxableTotal + serviceCharge;
+  const gstAmount = gstEnabled ? Math.round(subtotalAfterService * gstRate) : 0;
+  const grandTotal = subtotalAfterService + gstAmount;
+  return {
+    subtotal,
+    tax: taxAmount,
+    discount: discountAmount,
+    gstAmount,
+    serviceCharge,
+    grandTotal,
+  };
+};
+
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const where = {};
@@ -37,18 +55,19 @@ exports.list = async (req, res) => {
   res.json(
     buildPaginatedResponse({
       items: items.map((o) => {
-        const totals = calculateOrderTotals(o.items || [], o.tax, o.discount);
+        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled);
         return {
           id: o.code,
           type: o.type,
           status: o.status,
           table: o.table,
           items: o.items || [],
-          total: totals.total,
+          total: totals.grandTotal,
           tax: totals.tax,
           subtotal: totals.subtotal,
           discount: totals.discount,
-          notes: o.notes || "",
+          gstAmount: totals.gstAmount,
+          serviceCharge: totals.serviceCharge,
           createdAt: o.createdAt,
           customerName: o.customerName || "",
           orderTaker: o.orderTaker || "",
