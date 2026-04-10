@@ -2,7 +2,7 @@ const { TaxConfig } = require("../models");
 
 exports.get = async (_req, res) => {
   let row = await TaxConfig.findOne({});
-  if (!row) row = await TaxConfig.create({ salesTaxRate: 16, serviceChargeRate: 10, withholdingLabel: "As per FBR" });
+  if (!row) row = await TaxConfig.create({ salesTaxRate: 16, serviceChargeRate: 5, withholdingLabel: "As per FBR" });
   res.json({ id: String(row._id), salesTaxRate: row.salesTaxRate, serviceChargeRate: row.serviceChargeRate, withholdingLabel: row.withholdingLabel });
 };
 

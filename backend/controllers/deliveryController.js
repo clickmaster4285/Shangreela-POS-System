@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { Delivery, Order } = require("../models");
 
 exports.list = async (req, res) => {
@@ -9,16 +10,32 @@ exports.list = async (req, res) => {
   ]);
 
   const orderCodes = rows.map((d) => d.orderId).filter(Boolean);
-  const orderStatuses = await Order.find({ code: { $in: orderCodes } }, { code: 1, status: 1 }).lean();
-  const statusByCode = new Map(orderStatuses.map((o) => [o.code, o.status]));
+  const orders = await Order.find({ code: { $in: orderCodes } }).lean();
+  const orderByCode = new Map(orders.map((o) => [o.code, o]));
+  const rates = await getEffectiveTaxRates();
 
   res.json(
     buildPaginatedResponse({
-      items: rows.map((d) => ({
-        ...d,
-        orderStatus: statusByCode.get(d.orderId) || "pending",
-        id: String(d._id),
-      })),
+      items: rows.map((d) => {
+        const linked = orderByCode.get(d.orderId);
+        const totals = linked
+          ? calculateGrandTotal(
+              linked.items || [],
+              linked.tax,
+              linked.discount,
+              linked.gstEnabled,
+              rates,
+              linked.type || "delivery"
+            )
+          : null;
+        const displayTotal = totals ? totals.grandTotal : Number(d.total) || 0;
+        return {
+          ...d,
+          orderStatus: linked?.status || "pending",
+          total: displayTotal,
+          id: String(d._id),
+        };
+      }),
       total,
       page,
       limit,

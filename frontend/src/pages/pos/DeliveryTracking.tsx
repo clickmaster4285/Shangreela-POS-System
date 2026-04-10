@@ -144,12 +144,14 @@ export default function DeliveryTracking() {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                Items: {delivery.items.join(', ')}
+                Items: {(delivery.items ?? []).join(', ')}
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-border">
                 <div>
-                  <p className="font-serif text-lg font-bold text-foreground">Rs. {delivery.total.toLocaleString()}</p>
+                  <p className="font-serif text-lg font-bold text-foreground">
+                    Rs. {Number(delivery.total ?? 0).toLocaleString()}
+                  </p>
                   <p className="text-xs text-muted-foreground">ETA: {delivery.estimatedTime}</p>
                 </div>
                 <div className="flex gap-1">

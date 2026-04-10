@@ -24,6 +24,10 @@ export interface ReceiptData {
   discountPercent: number;
   gstEnabled?: boolean;
   serviceCharge?: number;
+  /** e.g. 0.16 */
+  gstRate?: number;
+  /** e.g. 0.05 */
+  serviceChargeRate?: number;
 
   tax?: number;
   total?: number;
@@ -47,10 +51,15 @@ export function printReceipt(data: ReceiptData) {
   const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, serviceCharge, grandTotal } = computePakistanTaxTotals(
     data.subtotal,
     discountAmt,
-    data.gstEnabled ?? true
+    data.gstEnabled ?? true,
+    {
+      gstRate: data.gstRate ?? PKR_GST_RATE,
+      serviceChargeRate: data.serviceChargeRate,
+    },
+    { applyServiceCharge: String(data.orderType || '').toLowerCase() === 'dine-in' }
   );
 
-  const gstPct = Math.round(PKR_GST_RATE * 100);
+  const gstPct = Math.round(((data.gstRate ?? PKR_GST_RATE) || 0) * 100);
   const receiptHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -197,15 +206,16 @@ export function printReceipt(data: ReceiptData) {
         : ''
     }
     <tr class="sub"><td>Taxable value</td><td>${fmtPKR(taxableAmount)}</td></tr>
-    <tr class="sub"><td>Service charge @ 5%</td><td>${fmtPKR(serviceCharge)}</td></tr>
+    ${
+      String(data.orderType || '').toLowerCase() === 'dine-in'
+        ? `<tr class="sub"><td>Service charge @ ${Math.round(((data.serviceChargeRate ?? 0.05) || 0) * 100)}%</td><td>${fmtPKR(serviceCharge)}</td></tr>`
+        : ''
+    }
     ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
   </table>
 
-  <p class="tax-note">
-    Service charge @ 5% is applied on taxable value, then GST @ ${gstPct}% is applied on the total including service charge. Retain this invoice for SRB / sales tax record. For integrated digital invoicing, verify via portal when live API is enabled.
-  </p>
 
   ${data.paymentMethod ? `<div class="payment">Payment: ${esc(data.paymentMethod)}</div>` : ''}
 

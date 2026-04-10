@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { Order, Table, Delivery } = require("../models");
 
 const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
@@ -14,48 +15,17 @@ const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   }));
 };
 
-const calculateOrderTotals = (items = [], tax = 0, discount = 0) => {
-  const subtotal = Array.isArray(items)
-    ? items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.menuItem?.price || 0), 0)
-    : 0;
-  const taxAmount = Number(tax || 0);
-  const discountAmount = Number(discount || 0);
-  return {
-    subtotal,
-    tax: taxAmount,
-    discount: discountAmount,
-    total: Math.max(0, subtotal + taxAmount - discountAmount),
-  };
-};
-
-const calculateGrandTotal = (items = [], tax = 0, discount = 0, gstEnabled = true) => {
-  const { subtotal, tax: taxAmount, discount: discountAmount, total: taxableTotal } = calculateOrderTotals(items, tax, discount);
-  const gstRate = 0.16;
-  const serviceChargeRate = 0.05;
-  const serviceCharge = Math.round(taxableTotal * serviceChargeRate);
-  const subtotalAfterService = taxableTotal + serviceCharge;
-  const gstAmount = gstEnabled ? Math.round(subtotalAfterService * gstRate) : 0;
-  const grandTotal = subtotalAfterService + gstAmount;
-  return {
-    subtotal,
-    tax: taxAmount,
-    discount: discountAmount,
-    gstAmount,
-    serviceCharge,
-    grandTotal,
-  };
-};
-
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const where = {};
   if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
   if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+  const rates = await getEffectiveTaxRates();
   const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
   res.json(
     buildPaginatedResponse({
       items: items.map((o) => {
-        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled);
+        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
         return {
           id: o.code,
           type: o.type,
@@ -152,7 +122,8 @@ exports.create = async (req, res) => {
   const createdAt = new Date();
   const requestId = `${code}-R1`;
   const items = stampItemsForKitchen(payload.items, requestId, createdAt);
-  const totals = calculateOrderTotals(items, payload.tax, payload.discount);
+  const rates = await getEffectiveTaxRates();
+  const totals = calculateGrandTotal(items, payload.tax, payload.discount, payload.gstEnabled ?? true, rates, payload.type || "dine-in");
   const row = await Order.create({
     code,
     type: payload.type || "dine-in",
@@ -164,9 +135,11 @@ exports.create = async (req, res) => {
     subtotal: totals.subtotal,
     tax: totals.tax,
     discount: totals.discount,
+    gstAmount: totals.gstAmount,
+    serviceCharge: totals.serviceCharge,
     gstEnabled: payload.gstEnabled ?? true,
     paymentMethod: payload.paymentMethod || "cash",
-    total: totals.total,
+    total: totals.grandTotal,
     items,
   });
   if (payload.type === "dine-in" && payload.table) {
@@ -180,7 +153,7 @@ exports.create = async (req, res) => {
       phone: payload.phone || "",
       address: payload.deliveryAddress || "",
       items: Array.isArray(payload.items) ? payload.items.map((item) => item.menuItem?.name || "Unknown") : [],
-      total: totals.total,
+      total: totals.grandTotal,
       status: "pending",
       assignedRider: payload.assignedRider || "",
       estimatedTime: payload.estimatedTime || "30 mins",
@@ -202,7 +175,8 @@ exports.openByTable = async (req, res) => {
   }
   const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
   if (!row) return res.json({ item: null });
-  const totals = calculateOrderTotals(row.items || [], row.tax, row.discount);
+  const rates = await getEffectiveTaxRates();
+  const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);
   return res.json({
     item: {
       id: row.code,
@@ -214,7 +188,10 @@ exports.openByTable = async (req, res) => {
       subtotal: totals.subtotal,
       tax: totals.tax,
       discount: totals.discount,
-      total: totals.total,
+      gstAmount: totals.gstAmount,
+      serviceCharge: totals.serviceCharge,
+      gstEnabled: row.gstEnabled,
+      total: totals.grandTotal,
       notes: row.notes || "",
       customerName: row.customerName || "",
       orderTaker: row.orderTaker || "",
@@ -234,17 +211,24 @@ exports.addItems = async (req, res) => {
   }, 1);
   const requestId = `${row.code}-R${requestNo + 1}`;
   row.items = [...(row.items || []), ...stampItemsForKitchen(incoming, requestId)];
-  const totals = calculateOrderTotals(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount);
+  const rates = await getEffectiveTaxRates();
+  const totals = calculateGrandTotal(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount, req.body.gstEnabled ?? row.gstEnabled, rates, row.type);
   row.subtotal = totals.subtotal;
   row.tax = totals.tax;
   row.discount = totals.discount;
-  row.total = totals.total;
+  row.gstAmount = totals.gstAmount;
+  row.serviceCharge = totals.serviceCharge;
+  row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
+  row.total = totals.grandTotal;
   row.notes = req.body.notes ?? row.notes;
   row.status = "pending";
   if (!row.orderTaker || row.orderTaker === "Unknown") {
     row.orderTaker = req.user.name || req.user.email || "Unknown";
   }
   await row.save();
+  if (row.type === "delivery") {
+    await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
+  }
   if (wasCompleted && row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
   }

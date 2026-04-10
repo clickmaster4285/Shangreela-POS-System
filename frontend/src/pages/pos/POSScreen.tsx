@@ -9,7 +9,7 @@ import {
 } from '@/components/pos/Form';
 import { Plus, Minus, Trash2, ShoppingBag, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
+import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
@@ -37,6 +37,7 @@ export default function POSScreen() {
   const [customItemPrice, setCustomItemPrice] = useState('');
   const [customItemQty, setCustomItemQty] = useState('1');
   const [gstEnabled, setGstEnabled] = useState(true);
+  const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const menuQuery = useQuery({
     queryKey: ['pos-menu-items'],
     queryFn: () => api<PaginatedResponse<MenuItem & { id: string }>>('/menu?limit=500&page=1'),
@@ -79,6 +80,21 @@ export default function POSScreen() {
       );
     }
   }, [tablesQuery.data]);
+
+  useEffect(() => {
+    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
+      .then((r) => {
+        const gstRate = Number(r.salesTaxRate ?? 16) / 100;
+        const serviceChargeRate = Number(r.serviceChargeRate ?? 5) / 100;
+        setTaxRates({
+          gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
+          serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
+        });
+      })
+      .catch(() => {
+        // keep defaults
+      });
+  }, []);
 
   const [searchParams] = useSearchParams();
   useEffect(() => {
@@ -206,7 +222,13 @@ export default function POSScreen() {
 
   const subtotal = cart.reduce((s, c) => s + c.menuItem.price * c.quantity, 0);
   const discountAmt = 0;
-  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal } = computePakistanTaxTotals(subtotal, discountAmt, gstEnabled);
+  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = computePakistanTaxTotals(
+    subtotal,
+    discountAmt,
+    gstEnabled,
+    taxRates,
+    { applyServiceCharge: orderType === 'dine-in' }
+  );
 
   const saveNote = () => {
     if (noteItem) {
@@ -609,7 +631,15 @@ export default function POSScreen() {
             <span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
+            <span>Taxable value</span><span>Rs. {taxableAmount.toLocaleString()}</span>
+          </div>
+          {orderType === 'dine-in' && (
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Service charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>Rs. {serviceCharge.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span><span>Rs. {gstAmount.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground pt-0.5">
             <span>Total taxes</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
@@ -628,7 +658,7 @@ export default function POSScreen() {
               className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
             />
             <label htmlFor="gst-checkbox" className="text-xs text-muted-foreground cursor-pointer">
-              Include GST ({Math.round(PKR_GST_RATE * 100)}%)
+              Include GST ({Math.round(taxRates.gstRate * 100)}%)
             </label>
           </div>
 
@@ -686,6 +716,7 @@ export default function POSScreen() {
                             tax: totalTaxAmount,
                             discount: 0,
                             total: grandTotal,
+                            gstEnabled,
                           }),
                         });
                         return 'updated';
@@ -705,6 +736,7 @@ export default function POSScreen() {
                         tax: totalTaxAmount,
                         discount: 0,
                         total: grandTotal,
+                        gstEnabled,
                         items: cart,
                       }),
                     });

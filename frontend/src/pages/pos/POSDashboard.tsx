@@ -1,4 +1,4 @@
-import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight, Calendar } from 'lucide-react';
+import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight, Calendar, Percent } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
@@ -13,17 +13,17 @@ export default function POSDashboard() {
     queryKey: ['dashboard-overview', dateRange],
     queryFn: async () => {
       const [s, d, w, t, r] = await Promise.all([
-      api<{ revenue: number; totalOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number }>('/dashboard/summary'),
-      api<{ items: { hour: string; sales: number }[] }>('/dashboard/sales-daily'),
-      api<{ items: { day: string; revenue: number }[] }>('/dashboard/revenue-weekly'),
-      api<{ items: { name: string; sold: number; revenue: number }[] }>('/dashboard/top-items'),
-      api<{ items: { id: string; type: string; status: string; items: unknown[]; total: number }[] }>('/dashboard/recent-orders'),
+        api<{ revenue: number; profit: number; totalServiceCharges: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>('/dashboard/summary?range=' + dateRange),
+        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?range=${dateRange}`),
+        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?range=${dateRange}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?range=${dateRange}`),
+        api<{ items: { id: string; type: string; status: string; items: unknown[]; total: number }[] }>('/dashboard/recent-orders'),
       ]);
       return { summary: s, dailySalesData: d.items, weeklySalesData: w.items, topSellingItems: t.items, sampleOrders: r.items };
     },
   });
 
-  const summary = dashboardQuery.data?.summary ?? { revenue: 0, totalOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0, totalExpenses: 0, expenseCount: 0 };
+  const summary = dashboardQuery.data?.summary ?? { revenue: 0, profit: 0, totalServiceCharges: 0, paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 }, totalOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0, totalExpenses: 0, expenseCount: 0, totalMenuOut: 0 };
   const dailySalesData = dashboardQuery.data?.dailySalesData ?? [];
   const weeklySalesData = dashboardQuery.data?.weeklySalesData ?? [];
   const topSellingItems = dashboardQuery.data?.topSellingItems ?? [];
@@ -35,13 +35,14 @@ export default function POSDashboard() {
     takeaway: sampleOrders.filter(o => o.type === 'takeaway').length,
   }), [sampleOrders]);
 
+  const rangeLabel = dateRange === 'today' ? "Today's" : dateRange === 'week' ? 'This week' : dateRange === 'month' ? 'This month' : 'This year';
   const stats = [
-    { label: "Today's Revenue", value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
-    { label: 'Active Orders', value: sampleOrders.filter(o => o.status !== 'completed').length.toString(), icon: ShoppingCart, change: '' },
-    { label: 'Total Orders', value: String(summary.totalOrders), icon: TrendingUp, change: '' },
+    { label: `${rangeLabel} revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
+    { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp, change: '' },
+    { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent, change: '' },
     { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: TrendingUp, change: '' },
+    { label: 'Total Orders', value: String(summary.totalOrders), icon: ShoppingCart, change: '' },
     { label: 'Cancelled Orders', value: String(summary.cancelledOrders), icon: XCircle, change: '' },
-    { label: 'Active Staff', value: String(summary.staff), icon: Users, change: '' },
   ];
 
   return (
@@ -99,10 +100,33 @@ export default function POSDashboard() {
         ))}
       </div>
 
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="pos-card lg:col-span-2">
+          <h3 className="font-semibold text-foreground text-sm mb-4">Payment Breakdown</h3>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Cash', amount: summary.paymentBreakdown.cash },
+              { label: 'Card', amount: summary.paymentBreakdown.card },
+              { label: 'EasyPesa', amount: summary.paymentBreakdown.easypesa },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-border p-4">
+                <p className="text-sm text-muted-foreground">{item.label}</p>
+                <p className="mt-2 text-xl font-semibold text-foreground">{formatPKR(item.amount)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="pos-card">
+          <h3 className="font-semibold text-foreground text-sm mb-4">Menu Out</h3>
+          <p className="text-3xl font-serif font-bold text-foreground">{summary.totalMenuOut}</p>
+          <p className="text-sm text-muted-foreground mt-2">Total menu items served during selected range.</p>
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="pos-card">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Today's Sales (PKR)</h3>
+          <h3 className="font-semibold text-foreground text-sm mb-4">{rangeLabel} sales (PKR)</h3>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dailySalesData}>
               <defs>
@@ -120,7 +144,7 @@ export default function POSDashboard() {
         </div>
 
         <div className="pos-card">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Weekly Revenue (PKR)</h3>
+          <h3 className="font-semibold text-foreground text-sm mb-4">{rangeLabel} revenue breakdown (PKR)</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={weeklySalesData}>
               <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />

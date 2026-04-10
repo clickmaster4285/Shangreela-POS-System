@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { Order } from '@/data/mockData';
-import { CreditCard, Banknote, Printer, Trash2 } from 'lucide-react';
+import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
-import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pakistanTax';
+import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,8 +15,9 @@ export default function Billing() {
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
+  const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
 
   const loadOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
@@ -33,6 +34,21 @@ export default function Billing() {
 
   useEffect(() => {
     loadOrders().catch(() => toast.error('Failed to load active bills'));
+  }, []);
+
+  useEffect(() => {
+    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
+      .then((r) => {
+        const gstRate = Number(r.salesTaxRate ?? 16) / 100;
+        const serviceChargeRate = Number(r.serviceChargeRate ?? 5) / 100;
+        setTaxRates({
+          gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
+          serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
+        });
+      })
+      .catch(() => {
+        // keep defaults
+      });
   }, []);
 
   if (!selectedOrder) {
@@ -53,7 +69,9 @@ export default function Billing() {
   const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = computePakistanTaxTotals(
     subtotal,
     discountAmt,
-    gstEnabled
+    gstEnabled,
+    taxRates,
+    { applyServiceCharge: selectedOrder.type === 'dine-in' }
   );
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -62,6 +80,7 @@ export default function Billing() {
   const paidCount = orders.filter(o => o.status === 'completed').length;
   const getStatusBadgeClass = (status?: string) =>
     status === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30';
+  const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
 
   return (
     <div className="space-y-6">
@@ -169,8 +188,10 @@ export default function Billing() {
               </div>
             )}
             <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
-            <div className="flex justify-between text-muted-foreground"><span>Service charge (5%)</span><span>{fmt(serviceCharge)}</span></div>
-            <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(PKR_GST_RATE * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
+            {selectedOrder.type === 'dine-in' && (
+              <div className="flex justify-between text-muted-foreground"><span>Service charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>{fmt(serviceCharge)}</span></div>
+            )}
+            <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
             <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
             <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border">
               <span>Total</span><span>{fmt(grandTotal)}</span>
@@ -239,26 +260,47 @@ export default function Billing() {
                 onChange={(e) => setGstEnabled(e.target.checked)}
                 className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
               />
-              Include GST ({Math.round(PKR_GST_RATE * 100)}%)
+              Include GST ({Math.round(taxRates.gstRate * 100)}%)
             </label>
           </div>
 
           {/* Payment */}
           <div className="mb-4 rounded-xl border border-border/70 p-3">
             <label className="text-xs text-muted-foreground mb-1 block">Payment Method</label>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-medium ${paymentMethod === 'cash' ? 'text-foreground' : 'text-muted-foreground'}`}>Cash</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={paymentMethod === 'card'}
-                  onChange={() => setPaymentMethod(paymentMethod === 'card' ? 'cash' : 'card')}
-                />
-                <div className="w-14 h-8 rounded-full border border-border bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/40 peer-checked:bg-primary"></div>
-                <div className="absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-6"></div>
-              </label>
-              <span className={`text-xs font-medium ${paymentMethod === 'card' ? 'text-foreground' : 'text-muted-foreground'}`}>Card</span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  paymentMethod === 'cash'
+                    ? 'bg-primary text-primary-foreground border-primary/40'
+                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
+                }`}
+              >
+                <Banknote className="w-4 h-4" /> Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  paymentMethod === 'card'
+                    ? 'bg-primary text-primary-foreground border-primary/40'
+                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" /> Card
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('easypesa')}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  paymentMethod === 'easypesa'
+                    ? 'bg-primary text-primary-foreground border-primary/40'
+                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
+                }`}
+              >
+                <Wallet className="w-4 h-4" /> EasyPaisa
+              </button>
             </div>
           </div>
 
@@ -287,7 +329,9 @@ export default function Billing() {
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,
                 gstEnabled,
-                paymentMethod, customerName: selectedOrder.customerName,
+                gstRate: taxRates.gstRate,
+                serviceChargeRate: taxRates.serviceChargeRate,
+                paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
               });
               toast.success('Receipt sent to printer!');
             }} className="py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-muted/80 transition-colors">
@@ -304,7 +348,9 @@ export default function Billing() {
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,
                 gstEnabled,
-                paymentMethod, customerName: selectedOrder.customerName,
+                gstRate: taxRates.gstRate,
+                serviceChargeRate: taxRates.serviceChargeRate,
+                paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
               });
               if (selectedOrder.dbId) {
                 api(`/orders/${selectedOrder.dbId}/payment`, { method: 'POST', body: JSON.stringify({ paymentMethod, gstEnabled }) })

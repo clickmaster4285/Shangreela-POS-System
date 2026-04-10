@@ -12,8 +12,10 @@ const orderSchema = new mongoose.Schema(
     subtotal: Number,
     tax: Number,
     discount: Number,
+    gstAmount: Number,
+    serviceCharge: Number,
     gstEnabled: { type: Boolean, default: true },
-    paymentMethod: { type: String, enum: ["cash", "card"], default: "cash" },
+    paymentMethod: { type: String, enum: ["cash", "card", "easypesa"], default: "cash" },
     total: Number,
     items: [
       {
