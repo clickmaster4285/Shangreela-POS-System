@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
 
 type MenuCategoriesResponse = { categories: string[] };
+const DEFAULT_SPECIAL_CATEGORIES = ['Deals', 'Platters'] as const;
 
 export default function MenuManagement() {
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -60,11 +61,15 @@ export default function MenuManagement() {
     }
   };
 
-  const openNew = () => {
+  const allCategories = Array.from(new Set([...categories, ...DEFAULT_SPECIAL_CATEGORIES]));
+
+  const openNew = (preferredCategory?: string) => {
     cleanupImagePreview();
     setImageFile(null);
     setImagePreviewUrl('');
-    setForm({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+    const fallbackCategory = allCategories[0] || 'Deals';
+    const category = preferredCategory || fallbackCategory;
+    setForm({ name: '', price: '', category, description: '', kitchenRequired: true, image: '' });
     setEditing(null);
     setShowForm(true);
   };
@@ -179,7 +184,7 @@ export default function MenuManagement() {
               className="bg-background border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             >
               <option key="All" value="All">All</option>
-              {categories.map(category => (
+              {allCategories.map(category => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
@@ -191,7 +196,10 @@ export default function MenuManagement() {
           >
             <Plus className="w-4 h-4" /> Add Category
           </button>
-          <button onClick={openNew} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary transition-colors">
+          <button onClick={() => openNew('Deals')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors">
+            <Plus className="w-4 h-4" /> Add Deal/Platter
+          </button>
+          <button onClick={() => openNew()} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary transition-colors">
             <Plus className="w-4 h-4" /> Add Item
           </button>
         </div>
@@ -210,7 +218,7 @@ export default function MenuManagement() {
               <input className={`${inputClass} pl-12`} placeholder="Price" type="number" step="1" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
             </div>
             <select className={inputClass} value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-              {categories.map(c => (
+              {allCategories.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
