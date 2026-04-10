@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type MenuItem } from '@/data/mockData';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,6 +6,23 @@ import { api, type PaginatedResponse } from '@/lib/api';
 
 type MenuCategoriesResponse = { categories: string[] };
 const DEFAULT_SPECIAL_CATEGORIES = ['Deals', 'Platters'] as const;
+type BundleEntry = { id: string; name: string; quantity: number };
+
+const parseBundleItemsFromDescription = (description: string, sourceItems: MenuItem[]): BundleEntry[] => {
+  if (!description?.trim()) return [];
+  const parts = description.split(',').map(p => p.trim()).filter(Boolean);
+  return parts.map((part, idx) => {
+    const match = part.match(/^(.*)\s+(\d+)$/);
+    const parsedName = match ? match[1].trim() : part;
+    const quantity = match ? Number(match[2]) : 1;
+    const source = sourceItems.find(i => i.name.toLowerCase() === parsedName.toLowerCase());
+    return {
+      id: source?.id || `parsed:${idx}:${parsedName}`,
+      name: source?.name || parsedName,
+      quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
+    };
+  });
+};
 
 export default function MenuManagement() {
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -52,6 +69,9 @@ export default function MenuManagement() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+  const [bundleItemId, setBundleItemId] = useState('');
+  const [bundleQty, setBundleQty] = useState('1');
+  const [bundleItems, setBundleItems] = useState<BundleEntry[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
 
@@ -62,6 +82,11 @@ export default function MenuManagement() {
   };
 
   const allCategories = Array.from(new Set([...categories, ...DEFAULT_SPECIAL_CATEGORIES]));
+  const isBundleCategory = form.category === 'Deals' || form.category === 'Platters';
+  const bundleSourceItems = useMemo(
+    () => items.filter(i => i.category !== 'Deals' && i.category !== 'Platters' && i.id !== editing?.id),
+    [items, editing?.id]
+  );
 
   const openNew = (preferredCategory?: string) => {
     cleanupImagePreview();
@@ -70,6 +95,9 @@ export default function MenuManagement() {
     const fallbackCategory = allCategories[0] || 'Deals';
     const category = preferredCategory || fallbackCategory;
     setForm({ name: '', price: '', category, description: '', kitchenRequired: true, image: '' });
+    setBundleItems([]);
+    setBundleItemId('');
+    setBundleQty('1');
     setEditing(null);
     setShowForm(true);
   };
@@ -79,6 +107,14 @@ export default function MenuManagement() {
     setImageFile(null);
     setImagePreviewUrl('');
     setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' });
+    if (item.category === 'Deals' || item.category === 'Platters') {
+      const sourceItems = items.filter(i => i.id !== item.id && i.category !== 'Deals' && i.category !== 'Platters');
+      setBundleItems(parseBundleItemsFromDescription(item.description || '', sourceItems));
+    } else {
+      setBundleItems([]);
+    }
+    setBundleItemId('');
+    setBundleQty('1');
     setEditing(item);
     setShowForm(true);
   };
@@ -101,6 +137,10 @@ export default function MenuManagement() {
 
   const save = () => {
     if (!form.name || !form.price) return;
+    if (isBundleCategory && bundleItems.length === 0) {
+      toast.error('Add at least one item for this deal/platter');
+      return;
+    }
     const formData = new FormData();
     formData.append('name', form.name);
     formData.append('price', form.price);
@@ -124,6 +164,43 @@ export default function MenuManagement() {
     });
 
     setShowForm(false);
+  };
+
+  useEffect(() => {
+    if (!isBundleCategory) return;
+    const description = bundleItems
+      .map(entry => `${entry.name} ${entry.quantity}`)
+      .join(', ');
+    setForm(prev => ({ ...prev, description }));
+  }, [isBundleCategory, bundleItems]);
+
+  useEffect(() => {
+    if (!isBundleCategory) {
+      setBundleItems([]);
+      setBundleItemId('');
+      setBundleQty('1');
+    }
+  }, [isBundleCategory]);
+
+  const addBundleItem = () => {
+    const selected = bundleSourceItems.find(i => i.id === bundleItemId);
+    const qty = Number(bundleQty);
+    if (!selected) {
+      toast.error('Select an item first');
+      return;
+    }
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast.error('Enter a valid quantity');
+      return;
+    }
+    setBundleItems(prev => {
+      const existing = prev.find(x => x.id === selected.id);
+      if (existing) {
+        return prev.map(x => (x.id === selected.id ? { ...x, quantity: x.quantity + qty } : x));
+      }
+      return [...prev, { id: selected.id, name: selected.name, quantity: qty }];
+    });
+    setBundleQty('1');
   };
 
   const addCategory = () => {
@@ -222,6 +299,58 @@ export default function MenuManagement() {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+            {isBundleCategory && (
+              <div className="space-y-2 rounded-xl border border-border p-3">
+                <p className="text-sm font-medium text-foreground">Select items and quantity</p>
+                <div className="grid grid-cols-[1fr_92px_auto] gap-2">
+                  <select
+                    className={inputClass}
+                    value={bundleItemId}
+                    onChange={e => setBundleItemId(e.target.value)}
+                  >
+                    <option value="">Select item</option>
+                    {bundleSourceItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    className={inputClass}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={bundleQty}
+                    onChange={e => setBundleQty(e.target.value)}
+                    placeholder="Qty"
+                  />
+                  <button
+                    type="button"
+                    onClick={addBundleItem}
+                    className="px-3 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+                {bundleItems.length > 0 && (
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {bundleItems.map(entry => (
+                      <div key={entry.id} className="flex items-center justify-between rounded-lg bg-muted/60 px-2 py-1.5 text-xs">
+                        <span className="truncate pr-2">{entry.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-semibold">x{entry.quantity}</span>
+                          <button
+                            type="button"
+                            className="text-destructive hover:underline"
+                            onClick={() => setBundleItems(prev => prev.filter(x => x.id !== entry.id))}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
