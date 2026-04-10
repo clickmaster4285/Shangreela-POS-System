@@ -3,7 +3,7 @@ const { MenuItem, User, Permission } = require("../models");
 const { MENU_ITEMS } = require("./menuSeedData");
 
 function menuDocsForInsert() {
-  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable }) => ({
+  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable, kitchenRequired }) => ({
     name,
     price,
     category,
@@ -11,13 +11,18 @@ function menuDocsForInsert() {
     description,
     available: available !== false,
     perishable: Boolean(perishable),
+    kitchenRequired: kitchenRequired !== false,
   }));
 }
 
 async function seedMenuIfEmpty() {
-  const count = await MenuItem.countDocuments();
-  if (count > 0 || !MENU_ITEMS.length) return;
-  await MenuItem.insertMany(menuDocsForInsert());
+  if (!MENU_ITEMS.length) return;
+  const existing = await MenuItem.find({}, { name: 1 }).lean();
+  const existingNames = new Set(existing.map((x) => String(x.name || "").trim()));
+  const toInsert = menuDocsForInsert().filter((item) => !existingNames.has(String(item.name || "").trim()));
+  if (!toInsert.length) return;
+  await MenuItem.insertMany(toInsert);
+  console.log(`✓ Added ${toInsert.length} new menu item(s) from seed data`);
 }
 
 const ALL_PAGES = [

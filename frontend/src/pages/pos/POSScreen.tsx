@@ -301,6 +301,11 @@ export default function POSScreen() {
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{item.category}</p>
+                        {(item.category === 'Deals' || item.category === 'Platters') && item.description && (
+                          <p className="text-xs text-muted-foreground leading-5 line-clamp-3">
+                            <span className="font-semibold text-foreground/80">Includes:</span> {item.description}
+                          </p>
+                        )}
                         <p className="font-serif text-base font-bold text-primary mt-2">Rs. {item.price.toLocaleString()}</p>
                       </div>
                     )}
