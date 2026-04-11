@@ -8,7 +8,7 @@ const routes = require("./routes");
 const { runAutoInitialization } = require("./utils/autoInitialization");
 const { port, frontendOrigin } = require("./config/config");
 const app = express();
-
+     
 const uploadsPath = path.join(__dirname, "uploads");
 const uploadSubfolders = ["expenses", "staff", "menu"];
 if (!fs.existsSync(uploadsPath)) {
