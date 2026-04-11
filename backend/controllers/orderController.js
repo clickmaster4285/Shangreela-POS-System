@@ -36,6 +36,7 @@ exports.list = async (req, res) => {
   if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
   const rates = await getEffectiveTaxRates();
   const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
+  res.set("Cache-Control", "no-store");
   res.json(
     buildPaginatedResponse({
       items: items.map((o) => {
@@ -192,6 +193,7 @@ exports.openByTable = async (req, res) => {
     where.status = { $nin: ["completed", "cancelled"] };
   }
   const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+  res.set("Cache-Control", "no-store");
   if (!row) return res.json({ item: null });
   const rates = await getEffectiveTaxRates();
   const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);

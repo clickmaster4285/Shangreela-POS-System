@@ -17,7 +17,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const method = String(options.method || "GET").toUpperCase();
+  const fetchInit: RequestInit = { ...options, headers };
+  if (method === "GET" && options.cache === undefined) {
+    fetchInit.cache = "no-store";
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, fetchInit);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body?.message || "Request failed");

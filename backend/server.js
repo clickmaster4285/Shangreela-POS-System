@@ -8,6 +8,9 @@ const routes = require("./routes");
 const { runAutoInitialization } = require("./utils/autoInitialization");
 const { port, frontendOrigin } = require("./config/config");
 const app = express();
+// Avoid 304 + empty body on JSON GETs. Fetch treats 304 as !ok, so the SPA's api() would throw
+// and lists (orders, tables, etc.) would not refresh even though data changed.
+app.set("etag", false);
 
 const uploadsPath = path.join(__dirname, "uploads");
 const uploadSubfolders = ["expenses", "staff", "menu"];

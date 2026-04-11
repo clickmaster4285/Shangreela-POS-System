@@ -7,6 +7,7 @@ exports.list = async (req, res) => {
     Table.find({}).sort({ number: 1 }).skip(skip).limit(limit).lean(),
     Table.countDocuments({}),
   ]);
+  res.set("Cache-Control", "no-store");
   res.json(
     buildPaginatedResponse({
       items: rows.map((t) => ({

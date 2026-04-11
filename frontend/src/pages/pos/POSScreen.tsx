@@ -841,6 +841,7 @@ export default function POSScreen() {
                     .then(mode => {
                       toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen');
                       setCart([]);
+                      tablesQuery.refetch();
                       if (orderType === 'delivery') {
                         setDeliveryCustomerName('');
                         setDeliveryPhone('');
