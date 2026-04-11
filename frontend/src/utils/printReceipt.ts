@@ -33,6 +33,8 @@ export interface ReceiptData {
   total?: number;
   paymentMethod?: string;
   customerName?: string;
+  /** ISO — order placed time shown on invoice; print time shown separately when set */
+  orderCreatedAt?: string;
 }
 
 const fmtPKR = (v: number) =>
@@ -42,10 +44,18 @@ const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function printReceipt(data: ReceiptData) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' });
-  const timeStr = now.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const fbrRef = `FBR-${data.orderId}-${now.getTime().toString().slice(-6)}`;
+  const printedAt = new Date();
+  const printDateStr = printedAt.toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' });
+  const printTimeStr = printedAt.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const orderPlaced = data.orderCreatedAt ? new Date(data.orderCreatedAt) : null;
+  const orderValid = orderPlaced && !Number.isNaN(orderPlaced.getTime());
+  const orderDateStr = orderValid
+    ? orderPlaced!.toLocaleDateString('en-PK', { year: 'numeric', month: 'short', day: 'numeric' })
+    : printDateStr;
+  const orderTimeStr = orderValid
+    ? orderPlaced!.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : printTimeStr;
+  const fbrRef = `FBR-${data.orderId}-${printedAt.getTime().toString().slice(-6)}`;
 
   const discountAmt = data.discountPercent > 0 ? Math.round((data.subtotal * data.discountPercent) / 100) : Math.round(data.discount);
   const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, serviceCharge, grandTotal } = computePakistanTaxTotals(
@@ -177,8 +187,13 @@ export function printReceipt(data: ReceiptData) {
     <div class="row"><span>Transaction type</span><span style="text-transform:capitalize">${esc(data.orderType)}</span></div>
     ${data.table !== undefined ? `<div class="row"><span>Table</span><span>${data.table}</span></div>` : ''}
     ${data.customerName ? `<div class="row"><span>Customer</span><span>${esc(data.customerName)}</span></div>` : ''}
-    <div class="row"><span>Date</span><span>${esc(dateStr)}</span></div>
-    <div class="row"><span>Time</span><span>${esc(timeStr)}</span></div>
+    <div class="row"><span>Order date</span><span>${esc(orderDateStr)}</span></div>
+    <div class="row"><span>Order time</span><span>${esc(orderTimeStr)}</span></div>
+    ${
+      orderValid
+        ? `<div class="row"><span>Printed</span><span>${esc(printDateStr)} ${esc(printTimeStr)}</span></div>`
+        : ''
+    }
   </div>
 
   <div class="section-h">Line items</div>

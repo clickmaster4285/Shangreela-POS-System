@@ -355,7 +355,17 @@ router.get("/dashboard/top-items", authRequired, async (_req, res) => {
 
 router.get("/dashboard/recent-orders", authRequired, async (_req, res) => {
   const items = await Order.find({}).sort({ createdAt: -1 }).limit(10).lean();
-  res.json({ items: items.map((o) => ({ id: o.code, type: o.type, status: o.status, total: o.total, table: o.table, items: o.items || [] })) });
+  res.json({
+    items: items.map((o) => ({
+      id: o.code,
+      type: o.type,
+      status: o.status,
+      total: o.total,
+      table: o.table,
+      items: o.items || [],
+      createdAt: o.createdAt,
+    })),
+  });
 });
 
 router.post("/orders", authRequired, async (req, res) => {

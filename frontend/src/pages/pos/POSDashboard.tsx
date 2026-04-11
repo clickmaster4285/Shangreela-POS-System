@@ -1,8 +1,11 @@
-import { DollarSign, ShoppingCart, TrendingUp, Users, XCircle, ArrowUpRight, Calendar, Percent } from 'lucide-react';
+import { DollarSign, ShoppingCart, TrendingUp, XCircle, ArrowUpRight, Percent, ClipboardList, Tag } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
+import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
+
+type RecentOrderRow = { id: string; type: string; status: string; items: unknown[]; total: number; createdAt: string };
 
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
@@ -13,17 +16,17 @@ export default function POSDashboard() {
     queryKey: ['dashboard-overview', dateRange],
     queryFn: async () => {
       const [s, d, w, t, r] = await Promise.all([
-        api<{ revenue: number; profit: number; totalServiceCharges: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>('/dashboard/summary?range=' + dateRange),
+        api<{ revenue: number; profit: number; totalServiceCharges: number; totalDiscount: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; openOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>('/dashboard/summary?range=' + dateRange),
         api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?range=${dateRange}`),
         api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?range=${dateRange}`),
         api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?range=${dateRange}`),
-        api<{ items: { id: string; type: string; status: string; items: unknown[]; total: number }[] }>('/dashboard/recent-orders'),
+        api<{ items: RecentOrderRow[] }>('/dashboard/recent-orders'),
       ]);
       return { summary: s, dailySalesData: d.items, weeklySalesData: w.items, topSellingItems: t.items, sampleOrders: r.items };
     },
   });
 
-  const summary = dashboardQuery.data?.summary ?? { revenue: 0, profit: 0, totalServiceCharges: 0, paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 }, totalOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0, totalExpenses: 0, expenseCount: 0, totalMenuOut: 0 };
+  const summary = dashboardQuery.data?.summary ?? { revenue: 0, profit: 0, totalServiceCharges: 0, totalDiscount: 0, paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 }, totalOrders: 0, openOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0, totalExpenses: 0, expenseCount: 0, totalMenuOut: 0 };
   const dailySalesData = dashboardQuery.data?.dailySalesData ?? [];
   const weeklySalesData = dashboardQuery.data?.weeklySalesData ?? [];
   const topSellingItems = dashboardQuery.data?.topSellingItems ?? [];
@@ -35,13 +38,23 @@ export default function POSDashboard() {
     takeaway: sampleOrders.filter(o => o.type === 'takeaway').length,
   }), [sampleOrders]);
 
+  const recentOrdersByDay = useMemo(() => {
+    const rows: RecentOrderRow[] = sampleOrders.map((o) => ({
+      ...o,
+      createdAt: o.createdAt || new Date().toISOString(),
+    }));
+    return groupOrdersByCalendarDay(rows);
+  }, [sampleOrders]);
+
   const rangeLabel = dateRange === 'today' ? "Today's" : dateRange === 'week' ? 'This week' : dateRange === 'month' ? 'This month' : 'This year';
   const stats = [
-    { label: `${rangeLabel} revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
+    { label: `${rangeLabel} paid revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
     { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp, change: '' },
     { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent, change: '' },
+    { label: 'Discounts given', value: formatPKR(summary.totalDiscount), icon: Tag, change: '' },
     { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: TrendingUp, change: '' },
-    { label: 'Total Orders', value: String(summary.totalOrders), icon: ShoppingCart, change: '' },
+    { label: 'Paid orders', value: String(summary.totalOrders), icon: ShoppingCart, change: '' },
+    { label: 'Open bills', value: String(summary.openOrders), icon: ClipboardList, change: '' },
     { label: 'Cancelled Orders', value: String(summary.cancelledOrders), icon: XCircle, change: '' },
   ];
 
@@ -157,10 +170,10 @@ export default function POSDashboard() {
       </div>
 
       {/* Top selling & Recent orders */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="pos-card">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Top Selling Items</h3>
-          <div className="space-y-3">
+      <div className="grid items-stretch lg:grid-cols-2 gap-4">
+        <div className="pos-card flex min-h-0 flex-col">
+          <h3 className="font-semibold text-foreground text-sm mb-4 shrink-0">Top Selling Items</h3>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 max-h-[28rem] scrollbar-thin lg:max-h-[32rem]">
             {topSellingItems.map((item, i) => (
               <div key={item.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -176,28 +189,52 @@ export default function POSDashboard() {
           </div>
         </div>
 
-        <div className="pos-card">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Recent Orders</h3>
-          <div className="space-y-3">
-            {sampleOrders.map(order => (
-              <div key={order.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{order.id}</p>
-                  <p className="text-xs text-muted-foreground">{order.type} • {order.items.length} items</p>
+        <div className="pos-card flex flex-col">
+          <div className="mb-2 shrink-0">
+            <h3 className="font-semibold text-foreground text-sm">Recent orders</h3>
+            <p className="text-[11px] text-muted-foreground">Grouped by day (newest first)</p>
+          </div>
+          <div className="max-h-[22rem] space-y-4 overflow-y-auto pr-1 scrollbar-thin lg:max-h-[26rem]">
+            {recentOrdersByDay.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No recent orders</p>
+            ) : (
+              recentOrdersByDay.map((group) => (
+                <div key={group.dayKey} className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/60 pb-1">
+                    {group.dayLabel}
+                  </p>
+                  <div className="space-y-2">
+                    {group.orders.map((order) => (
+                      <div key={order.id} className="flex items-center justify-between rounded-xl bg-muted/50 p-3">
+                        <div className="min-w-0 pr-2">
+                          <p className="truncate text-sm font-medium text-foreground">{order.id}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {order.type} • {order.items.length} items
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{formatOrderDateTime(order.createdAt)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-foreground">Rs. {order.total.toLocaleString()}</p>
+                          <span
+                            className={`mt-1 inline-block text-xs font-medium rounded-full px-2 py-0.5 ${
+                              order.status === 'pending'
+                                ? 'bg-warning/10 text-warning'
+                                : order.status === 'preparing'
+                                  ? 'bg-primary/10 text-primary'
+                                  : order.status === 'ready'
+                                    ? 'bg-success/10 text-success'
+                                    : 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-foreground">Rs. {order.total.toLocaleString()}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    order.status === 'pending' ? 'bg-warning/10 text-warning' :
-                    order.status === 'preparing' ? 'bg-primary/10 text-primary' :
-                    order.status === 'ready' ? 'bg-success/10 text-success' :
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

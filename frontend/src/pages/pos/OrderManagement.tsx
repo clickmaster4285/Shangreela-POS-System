@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ShoppingCart, X } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 
 type OrderWithDb = Order & { dbId?: string };
 
@@ -228,7 +229,7 @@ export default function OrderManagement() {
                   {order.table ? ` • ${tableMap.get(order.table)?.name || `Table ${order.table}`}` : ''}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatOrderDateTime(order.createdAt)}
                 </p>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${statusColors[order.status]}`}>
