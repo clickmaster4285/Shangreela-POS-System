@@ -174,13 +174,7 @@ export function printReceipt(data: ReceiptData) {
     <div class="addr">${esc(RECEIPT_BUSINESS.address)}<br />${esc(RECEIPT_BUSINESS.city)}<br />Tel: ${esc(RECEIPT_BUSINESS.phone)}</div>
   </div>
 
-  <div class="fbr-box">
-    <div class="label">FBR / registration (Pakistan)</div>
-    <div class="fbr-row"><span>NTN</span><span>${esc(RECEIPT_BUSINESS.ntn)}</span></div>
-    <div class="fbr-row"><span>STRN</span><span>${esc(RECEIPT_BUSINESS.strn)}</span></div>
-    <div class="fbr-row"><span>Registered POS ID</span><span>${esc(RECEIPT_BUSINESS.posRegistrationId)}</span></div>
-    <div class="fbr-row"><span>Invoice ref.</span><span>${esc(fbrRef)}</span></div>
-  </div>
+
 
   <div class="meta">
     <div class="row"><span>Order / bill no.</span><span>${esc(data.orderId)}</span></div>

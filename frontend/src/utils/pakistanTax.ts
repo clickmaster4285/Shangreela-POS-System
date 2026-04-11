@@ -58,3 +58,23 @@ export function computePakistanTaxTotals(
     grandTotal,
   };
 }
+
+/** Grand total for list cards — same rules as POS / Billing receipt (items, stored discount, GST, dine-in service). */
+export function billBreakdownForOrder(
+  order: {
+    items: { menuItem: { price: number }; quantity: number }[];
+    discount?: number;
+    gstEnabled?: boolean;
+    type: string;
+  },
+  rates: Partial<PakistanTaxRates> = {}
+): PakistanTaxBreakdown {
+  const subtotal = order.items.reduce((s, i) => s + Number(i.menuItem.price) * Number(i.quantity), 0);
+  return computePakistanTaxTotals(
+    subtotal,
+    Number(order.discount || 0),
+    order.gstEnabled !== false,
+    rates,
+    { applyServiceCharge: order.type === 'dine-in' }
+  );
+}

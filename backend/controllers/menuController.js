@@ -1,10 +1,16 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
 const { MenuItem, MenuCategory } = require("../models");
 
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const where = {};
-  if (req.query.search) where.name = { $regex: String(req.query.search), $options: "i" };
+  const q = String(req.query.search || "").trim();
+  if (q) {
+    const rx = new RegExp(escapeRegex(q), "i");
+    where.$or = [{ name: rx }, { description: rx }, { category: rx }];
+  }
   if (req.query.category && req.query.category !== "All") where.category = String(req.query.category);
   const [items, total] = await Promise.all([MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), MenuItem.countDocuments(where)]);
   res.json(buildPaginatedResponse({ items: items.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));

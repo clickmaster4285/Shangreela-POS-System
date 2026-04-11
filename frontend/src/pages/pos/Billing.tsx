@@ -3,7 +3,7 @@ import type { Order } from '@/data/mockData';
 import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
-import { computePakistanTaxTotals } from '@/utils/pakistanTax';
+import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -147,6 +147,13 @@ export default function Billing() {
   );
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const grandTotalForBillCard = (o: Order & { dbId?: string }) => {
+    if (o.status === 'completed' && Number.isFinite(Number(o.total))) return Number(o.total);
+    if (o.id === selectedOrder.id) return grandTotal;
+    return billBreakdownForOrder(o, taxRates).grandTotal;
+  };
+
   const getBillStatusLabel = (status?: string) => (status === 'completed' ? 'Paid' : 'Pending');
   const pendingCount = orders.filter(o => o.status !== 'completed').length;
   const paidCount = orders.filter(o => o.status === 'completed').length;
@@ -207,7 +214,7 @@ export default function Billing() {
                       <span className="font-medium text-sm text-foreground">{o.id}</span>
                       <div className="text-right">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Bill</p>
-                        <p className="text-sm font-semibold text-foreground">Rs. {o.total.toLocaleString()}</p>
+                        <p className="text-sm font-semibold text-foreground">Rs. {grandTotalForBillCard(o).toLocaleString()}</p>
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">{formatOrderDateTime(o.createdAt)}</p>
