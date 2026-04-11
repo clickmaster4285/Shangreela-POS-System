@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
-import type { Order } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
+import type { Order, TableInfo } from '@/data/mockData';
 import { Clock, ChefHat, CheckCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, type PaginatedResponse } from '@/lib/api';
 
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
+  const [tables, setTables] = useState<TableInfo[]>([]);
+
+  const tableMap = useMemo(() => new Map<number, TableInfo>(tables.map(table => [table.id, table])), [tables]);
+
   const getLatestRequestItems = (order: Order) => {
     const items = (order.items || []) as Array<Order['items'][number] & { requestId?: string; requestAt?: string | Date }>;
     if (!items.length) return [];
@@ -20,12 +24,25 @@ export default function KitchenDisplay() {
     return items.filter(i => i.requestId === latest.requestId);
   };
 
+  const fetchTables = () =>
+    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=200').then(r => {
+      setTables(r.items.map(table => ({
+        id: table.number,
+        name: table.name,
+        seats: table.seats,
+        floorId: table.floorKey,
+        status: table.status,
+        currentOrder: table.currentOrder,
+      })));
+    });
+
   const fetchOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
       setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'served'));
     });
 
   useEffect(() => {
+    fetchTables().catch(() => toast.error('Failed to load table labels'));
     fetchOrders().catch(() => toast.error('Failed to load kitchen queue'));
   }, []);
 
@@ -73,7 +90,7 @@ export default function KitchenDisplay() {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="font-semibold text-foreground text-lg">{order.id}</p>
-                <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • Table ${order.table}` : ''}</p>
+                <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • ${tableMap.get(order.table)?.name || `Table ${order.table}`}` : ''}</p>
                 {order.orderTaker && <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker}</p>}
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">

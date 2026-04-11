@@ -20,6 +20,7 @@ export interface ReceiptData {
   orderId: string;
   orderType: string;
   table?: number;
+  tableName?: string;
   items: CartItem[];
   subtotal: number;
   discount: number;
@@ -182,7 +183,7 @@ export function printReceipt(data: ReceiptData) {
   <div class="meta">
     <div class="row"><span>Order / bill no.</span><span>${esc(data.orderId)}</span></div>
     <div class="row"><span>Transaction type</span><span style="text-transform:capitalize">${esc(data.orderType)}</span></div>
-    ${data.table !== undefined ? `<div class="row"><span>Table</span><span>${data.table}</span></div>` : ''}
+    ${data.table !== undefined ? `<div class="row"><span>Table</span><span>${data.tableName ?? data.table}</span></div>` : ''}
     ${data.customerName ? `<div class="row"><span>Customer</span><span>${esc(data.customerName)}</span></div>` : ''}
     <div class="row"><span>Order date</span><span>${esc(orderDateStr)}</span></div>
     <div class="row"><span>Order time</span><span>${esc(orderTimeStr)}</span></div>

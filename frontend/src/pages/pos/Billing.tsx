@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Order } from '@/data/mockData';
+import type { Order, TableInfo } from '@/data/mockData';
 import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
 import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, type PaginatedResponse } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
 
@@ -13,6 +13,7 @@ export default function Billing() {
   const { hasAction } = useAuth();
   const queryClient = useQueryClient();
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
+  const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState(0);
@@ -33,8 +34,28 @@ export default function Billing() {
       });
     });
 
+  const loadTables = () =>
+    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500').then(r => {
+      setTables(r.items.map(table => ({
+        id: table.number,
+        name: table.name,
+        seats: table.seats,
+        floorId: table.floorKey,
+        status: table.status,
+        currentOrder: table.currentOrder,
+      })));
+    });
+
+  const tableMap = useMemo(() => {
+    return new Map<number, TableInfo>(tables.map(table => [table.id, table]));
+  }, [tables]);
+
   useEffect(() => {
     loadOrders().catch(() => toast.error('Failed to load active bills'));
+  }, []);
+
+  useEffect(() => {
+    loadTables().catch(() => toast.error('Failed to load tables'));
   }, []);
 
   useEffect(() => {
@@ -219,7 +240,7 @@ export default function Billing() {
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">{formatOrderDateTime(o.createdAt)}</p>
                     <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • Table ${o.table}` : ''}</span>
+                    <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • ${tableMap.get(o.table)?.name || `Table ${o.table}`}` : ''}</span>
                       <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o.status)}`}>
                         {getBillStatusLabel(o.status)}
                       </span>
@@ -244,7 +265,7 @@ export default function Billing() {
             <div className="flex justify-between text-muted-foreground"><span>Order</span><span>{selectedOrder.id}</span></div>
             <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(selectedOrder.createdAt)}</span></div>
             <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{selectedOrder.type}</span></div>
-            {selectedOrder.table && <div className="flex justify-between text-muted-foreground"><span>Table</span><span>{selectedOrder.table}</span></div>}
+            {selectedOrder.table && <div className="flex justify-between text-muted-foreground"><span>Table</span><span>{tableMap.get(selectedOrder.table)?.name || selectedOrder.table}</span></div>}
             {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
             <div className="flex justify-between text-muted-foreground items-center">
               <span>Status</span>
@@ -412,8 +433,11 @@ export default function Billing() {
               <Trash2 className="w-4 h-4" /> Delete
             </button>
             <button onClick={() => {
+              const tableInfo = selectedOrder.table ? tableMap.get(selectedOrder.table) : null;
+              const tableDisplay = tableInfo ? `${tableInfo.name} (${selectedOrder.table})` : selectedOrder.table;
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
+                tableName: tableInfo?.name,
                 items: selectedOrder.items, subtotal,
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,
@@ -432,8 +456,11 @@ export default function Billing() {
                 toast.info('This bill is already paid');
                 return;
               }
+              const tableInfo = selectedOrder.table ? tableMap.get(selectedOrder.table) : null;
+              const tableDisplay = tableInfo ? `${tableInfo.name} (${selectedOrder.table})` : selectedOrder.table;
               printReceipt({
                 orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
+                tableName: tableInfo?.name,
                 items: selectedOrder.items, subtotal,
                 discount: discountMode === 'amount' ? discountValue : 0,
                 discountPercent: discountMode === 'percent' ? discountValue : 0,

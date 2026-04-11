@@ -30,290 +30,354 @@ const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
 };
 
 exports.list = async (req, res) => {
-  const { page, limit, skip } = parsePagination(req.query);
-  const where = {};
-  if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
-  if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
-  const rates = await getEffectiveTaxRates();
-  const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
-  res.json(
-    buildPaginatedResponse({
-      items: items.map((o) => {
-        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
-        const paid = o.status === "completed";
-        const storedTotal = Number(o.total);
-        const storedDiscount = Number(o.discount);
-        return {
-          id: o.code,
-          type: o.type,
-          status: o.status,
-          table: o.table,
-          items: o.items || [],
-          total: paid && Number.isFinite(storedTotal) ? storedTotal : totals.grandTotal,
-          tax: totals.tax,
-          subtotal: totals.subtotal,
-          discount: paid && Number.isFinite(storedDiscount) ? storedDiscount : totals.discount,
-          gstAmount: totals.gstAmount,
-          serviceCharge: totals.serviceCharge,
-          gstEnabled: o.gstEnabled !== false,
-          createdAt: o.createdAt,
-          customerName: o.customerName || "",
-          orderTaker: o.orderTaker || "",
-          dbId: String(o._id),
-        };
-      }),
-      total,
-      page,
-      limit,
-    })
-  );
+  try {
+    const { page, limit, skip } = parsePagination(req.query);
+    const where = {};
+    if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
+    if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+    const rates = await getEffectiveTaxRates();
+    const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
+    res.json(
+      buildPaginatedResponse({
+        items: items.map((o) => {
+          const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
+          const paid = o.status === "completed";
+          const storedTotal = Number(o.total);
+          const storedDiscount = Number(o.discount);
+          return {
+            id: o.code,
+            type: o.type,
+            status: o.status,
+            table: o.table,
+            items: o.items || [],
+            total: paid && Number.isFinite(storedTotal) ? storedTotal : totals.grandTotal,
+            tax: totals.tax,
+            subtotal: totals.subtotal,
+            discount: paid && Number.isFinite(storedDiscount) ? storedDiscount : totals.discount,
+            gstAmount: totals.gstAmount,
+            serviceCharge: totals.serviceCharge,
+            gstEnabled: o.gstEnabled !== false,
+            createdAt: o.createdAt,
+            customerName: o.customerName || "",
+            orderTaker: o.orderTaker || "",
+            dbId: String(o._id),
+          };
+        }),
+        total,
+        page,
+        limit,
+      })
+    );
+  } catch (error) {
+    console.error("List orders error:", error);
+    res.status(500).json({ message: error.message || "Failed to fetch orders" });
+  }
 };
 
 exports.patchStatus = async (req, res) => {
-  const newStatus = String(req.body.status || "");
-  if (newStatus === "completed") {
-    return res.status(400).json({ message: "Order completion must be processed via payment on the billing panel." });
+  try {
+    const newStatus = String(req.body.status || "");
+    if (newStatus === "completed") {
+      return res.status(400).json({ message: "Order completion must be processed via payment on the billing panel." });
+    }
+    const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.json({ ok: true, id: String(order._id), status: order.status });
+  } catch (error) {
+    console.error("Patch status error:", error);
+    res.status(500).json({ message: error.message || "Failed to update order status" });
   }
-  const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
-  if (!order) return res.status(404).json({ message: "Order not found" });
-  res.json({ ok: true, id: String(order._id), status: order.status });
 };
 
 exports.changeTable = async (req, res) => {
-  const newTableNumber = Number(req.body.table);
-  if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
-    return res.status(400).json({ message: "Provide a valid table number." });
-  }
+  try {
+    const newTableNumber = Number(req.body.table);
+    if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
+      return res.status(400).json({ message: "Provide a valid table number." });
+    }
 
-  const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
-  if (order.type !== "dine-in") {
-    return res.status(400).json({ message: "Only dine-in orders can be reassigned to a table." });
-  }
-  if (order.status === "completed" || order.status === "cancelled") {
-    return res.status(400).json({ message: "Cannot switch table for a completed or cancelled order." });
-  }
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.type !== "dine-in") {
+      return res.status(400).json({ message: "Only dine-in orders can be reassigned to a table." });
+    }
+    if (order.status === "completed" || order.status === "cancelled") {
+      return res.status(400).json({ message: "Cannot switch table for a completed or cancelled order." });
+    }
 
-  const currentTableNumber = Number(order.table || 0);
-  if (currentTableNumber === newTableNumber) {
-    return res.json({ ok: true, table: newTableNumber });
-  }
+    const currentTableNumber = Number(order.table || 0);
+    if (currentTableNumber === newTableNumber) {
+      return res.json({ ok: true, table: newTableNumber });
+    }
 
-  const targetTable = await Table.findOne({ number: newTableNumber });
-  if (!targetTable) {
-    return res.status(404).json({ message: "Target table not found." });
-  }
-  if (targetTable.status === "occupied" && targetTable.currentOrder !== order.code) {
-    return res.status(400).json({ message: "Target table is currently occupied." });
-  }
+    const targetTable = await Table.findOne({ number: newTableNumber });
+    if (!targetTable) {
+      return res.status(404).json({ message: "Target table not found." });
+    }
+    if (targetTable.status === "occupied" && targetTable.currentOrder !== order.code) {
+      return res.status(400).json({ message: "Target table is currently occupied." });
+    }
 
-  if (currentTableNumber) {
-    await Table.findOneAndUpdate(
-      { number: currentTableNumber, currentOrder: order.code },
-      { status: "available", currentOrder: "" }
-    );
+    if (currentTableNumber) {
+      await Table.findOneAndUpdate(
+        { number: currentTableNumber, currentOrder: order.code },
+        { status: "available", currentOrder: "" }
+      );
+    }
+
+    await Table.findOneAndUpdate({ number: newTableNumber }, { status: "occupied", currentOrder: order.code });
+    order.table = newTableNumber;
+    await order.save();
+
+    res.json({ ok: true, table: newTableNumber });
+  } catch (error) {
+    console.error("Change table error:", error);
+    res.status(500).json({ message: error.message || "Failed to change table" });
   }
-
-  await Table.findOneAndUpdate({ number: newTableNumber }, { status: "occupied", currentOrder: order.code });
-  order.table = newTableNumber;
-  await order.save();
-
-  res.json({ ok: true, table: newTableNumber });
 };
 
 exports.create = async (req, res) => {
-  const payload = req.body || {};
+  try {
+    const payload = req.body || {};
 
-  if (payload.type === "dine-in" && payload.table) {
-    const tableNumber = Number(payload.table);
-    const existingOrder = await Order.findOne({
-      table: tableNumber,
-      type: "dine-in",
-      status: { $nin: ["completed", "cancelled"] },
-    });
-    if (existingOrder) {
-      return res.status(400).json({ message: "This table already has an active order. Complete payment before creating a new order." });
+    if (payload.type === "dine-in" && payload.table) {
+      const tableNumber = Number(payload.table);
+      const existingOrder = await Order.findOne({
+        table: tableNumber,
+        type: "dine-in",
+        status: { $nin: ["completed", "cancelled"] },
+      });
+      if (existingOrder) {
+        return res.status(400).json({ message: "This table already has an active order. Complete payment before creating a new order." });
+      }
     }
-  }
 
-  const code = payload.code || `ORD-${Date.now().toString().slice(-6)}`;
-  const createdAt = new Date();
-  const requestId = `${code}-R1`;
-  const items = stampItemsForKitchen(payload.items, requestId, createdAt);
-  const rates = await getEffectiveTaxRates();
-  const totals = calculateGrandTotal(items, payload.tax, payload.discount, payload.gstEnabled ?? true, rates, payload.type || "dine-in");
-  const row = await Order.create({
-    code,
-    type: payload.type || "dine-in",
-    status: payload.status || "pending",
-    table: payload.table,
-    customerName: payload.customerName || "",
-    orderTaker: req.user.name || req.user.email || "Unknown",
-    notes: payload.notes || "",
-    subtotal: totals.subtotal,
-    tax: totals.tax,
-    discount: totals.discount,
-    gstAmount: totals.gstAmount,
-    serviceCharge: totals.serviceCharge,
-    gstEnabled: payload.gstEnabled ?? true,
-    paymentMethod: payload.paymentMethod || "cash",
-    total: totals.grandTotal,
-    items,
-  });
-  if (payload.type === "dine-in" && payload.table) {
-    await Table.findOneAndUpdate({ number: Number(payload.table) }, { status: "occupied", currentOrder: code });
-  }
-
-  if (payload.type === "delivery") {
-    await Delivery.create({
-      orderId: code,
+    const code = payload.code || `ORD-${Date.now().toString().slice(-6)}`;
+    const createdAt = new Date();
+    const requestId = `${code}-R1`;
+    const items = stampItemsForKitchen(payload.items, requestId, createdAt);
+    const rates = await getEffectiveTaxRates();
+    const totals = calculateGrandTotal(items, payload.tax, payload.discount, payload.gstEnabled ?? true, rates, payload.type || "dine-in");
+    const row = await Order.create({
+      code,
+      type: payload.type || "dine-in",
+      status: payload.status || "pending",
+      table: payload.table,
       customerName: payload.customerName || "",
-      phone: payload.phone || "",
-      address: payload.deliveryAddress || "",
-      items: Array.isArray(payload.items) ? payload.items.map((item) => item.menuItem?.name || "Unknown") : [],
-      total: totals.grandTotal,
-      status: "pending",
-      assignedRider: payload.assignedRider || "",
-      estimatedTime: payload.estimatedTime || "30 mins",
-    });
-  }
-
-  res.status(201).json({ id: row.code, dbId: String(row._id) });
-};
-
-exports.openByTable = async (req, res) => {
-  const tableNumber = Number(req.params.tableNumber);
-  const includeCompleted = String(req.query.includeCompleted || "") === "true";
-  const where = {
-    table: tableNumber,
-    type: "dine-in",
-  };
-  if (!includeCompleted) {
-    where.status = { $nin: ["completed", "cancelled"] };
-  }
-  const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
-  if (!row) return res.json({ item: null });
-  const rates = await getEffectiveTaxRates();
-  const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);
-  return res.json({
-    item: {
-      id: row.code,
-      dbId: String(row._id),
-      type: row.type,
-      status: row.status,
-      table: row.table,
-      items: row.items || [],
+      orderTaker: req.user.name || req.user.email || "Unknown",
+      notes: payload.notes || "",
       subtotal: totals.subtotal,
       tax: totals.tax,
       discount: totals.discount,
       gstAmount: totals.gstAmount,
       serviceCharge: totals.serviceCharge,
-      gstEnabled: row.gstEnabled !== false,
+      gstEnabled: payload.gstEnabled ?? true,
+      paymentMethod: payload.paymentMethod || "cash",
       total: totals.grandTotal,
-      notes: row.notes || "",
-      customerName: row.customerName || "",
-      orderTaker: row.orderTaker || "",
-    },
-  });
+      items,
+    });
+    
+    if (payload.type === "dine-in" && payload.table) {
+      const tableUpdateResult = await Table.findOneAndUpdate(
+        { number: Number(payload.table) },
+        { status: "occupied", currentOrder: code },
+        { new: true }
+      );
+      if (!tableUpdateResult) {
+        await Order.findByIdAndDelete(row._id);
+        return res.status(404).json({ message: "Table not found. Order cancelled." });
+      }
+    }
+
+    if (payload.type === "delivery") {
+      try {
+        await Delivery.create({
+          orderId: code,
+          customerName: payload.customerName || "",
+          phone: payload.phone || "",
+          address: payload.deliveryAddress || "",
+          items: Array.isArray(payload.items) ? payload.items.map((item) => item.menuItem?.name || "Unknown") : [],
+          total: totals.grandTotal,
+          status: "pending",
+          assignedRider: payload.assignedRider || "",
+          estimatedTime: payload.estimatedTime || "30 mins",
+        });
+      } catch (deliveryError) {
+        console.error("Delivery creation failed:", deliveryError);
+        return res.status(400).json({ message: "Failed to create delivery record for this order." });
+      }
+    }
+
+    res.status(201).json({ id: row.code, dbId: String(row._id) });
+  } catch (error) {
+    console.error("Order creation error:", error);
+    res.status(500).json({ message: error.message || "Failed to create order" });
+  }
+};
+
+exports.openByTable = async (req, res) => {
+  try {
+    const tableNumber = Number(req.params.tableNumber);
+    const includeCompleted = String(req.query.includeCompleted || "") === "true";
+    const where = {
+      table: tableNumber,
+      type: "dine-in",
+    };
+    if (!includeCompleted) {
+      where.status = { $nin: ["completed", "cancelled"] };
+    }
+    const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+    if (!row) return res.json({ item: null });
+    const rates = await getEffectiveTaxRates();
+    const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);
+    return res.json({
+      item: {
+        id: row.code,
+        dbId: String(row._id),
+        type: row.type,
+        status: row.status,
+        table: row.table,
+        items: row.items || [],
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        gstAmount: totals.gstAmount,
+        serviceCharge: totals.serviceCharge,
+        gstEnabled: row.gstEnabled !== false,
+        total: totals.grandTotal,
+        notes: row.notes || "",
+        customerName: row.customerName || "",
+        orderTaker: row.orderTaker || "",
+      },
+    });
+  } catch (error) {
+    console.error("Open by table error:", error);
+    res.status(500).json({ message: error.message || "Failed to fetch order by table" });
+  }
 };
 
 exports.addItems = async (req, res) => {
-  const row = await Order.findById(req.params.id);
-  if (!row) return res.status(404).json({ message: "Order not found" });
-  const wasCompleted = row.status === "completed";
-  const incoming = Array.isArray(req.body.items) ? req.body.items : [];
-  const requestNo = (row.items || []).reduce((max, item) => {
-    const match = String(item.requestId || "").match(/-R(\d+)$/);
-    const n = match ? Number(match[1]) : 0;
-    return Number.isFinite(n) ? Math.max(max, n) : max;
-  }, 1);
-  const requestId = `${row.code}-R${requestNo + 1}`;
-  row.items = [...(row.items || []), ...stampItemsForKitchen(incoming, requestId)];
-  const rates = await getEffectiveTaxRates();
-  const totals = calculateGrandTotal(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount, req.body.gstEnabled ?? row.gstEnabled, rates, row.type);
-  row.subtotal = totals.subtotal;
-  row.tax = totals.tax;
-  row.discount = totals.discount;
-  row.gstAmount = totals.gstAmount;
-  row.serviceCharge = totals.serviceCharge;
-  row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
-  row.total = totals.grandTotal;
-  row.notes = req.body.notes ?? row.notes;
-  row.status = "pending";
-  if (!row.orderTaker || row.orderTaker === "Unknown") {
-    row.orderTaker = req.user.name || req.user.email || "Unknown";
+  try {
+    const row = await Order.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Order not found" });
+    const wasCompleted = row.status === "completed";
+    const incoming = Array.isArray(req.body.items) ? req.body.items : [];
+    const requestNo = (row.items || []).reduce((max, item) => {
+      const match = String(item.requestId || "").match(/-R(\d+)$/);
+      const n = match ? Number(match[1]) : 0;
+      return Number.isFinite(n) ? Math.max(max, n) : max;
+    }, 1);
+    const requestId = `${row.code}-R${requestNo + 1}`;
+    row.items = [...(row.items || []), ...stampItemsForKitchen(incoming, requestId)];
+    const rates = await getEffectiveTaxRates();
+    const totals = calculateGrandTotal(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount, req.body.gstEnabled ?? row.gstEnabled, rates, row.type);
+    row.subtotal = totals.subtotal;
+    row.tax = totals.tax;
+    row.discount = totals.discount;
+    row.gstAmount = totals.gstAmount;
+    row.serviceCharge = totals.serviceCharge;
+    row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
+    row.total = totals.grandTotal;
+    row.notes = req.body.notes ?? row.notes;
+    row.status = "pending";
+    if (!row.orderTaker || row.orderTaker === "Unknown") {
+      row.orderTaker = req.user.name || req.user.email || "Unknown";
+    }
+    await row.save();
+    if (row.type === "delivery") {
+      await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
+    }
+    if (wasCompleted && row.type === "dine-in" && row.table) {
+      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
+    }
+    res.json({ ok: true, id: row.code, dbId: String(row._id) });
+  } catch (error) {
+    console.error("Add items error:", error);
+    res.status(500).json({ message: error.message || "Failed to add items" });
   }
-  await row.save();
-  if (row.type === "delivery") {
-    await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
-  }
-  if (wasCompleted && row.type === "dine-in" && row.table) {
-    await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
-  }
-  res.json({ ok: true, id: row.code, dbId: String(row._id) });
 };
 
 exports.patchBillingTotals = async (req, res) => {
-  const existing = await Order.findById(req.params.id);
-  if (!existing) return res.status(404).json({ message: "Order not found" });
-  if (existing.status === "completed") {
-    return res.status(400).json({ message: "Cannot update billing on a paid order" });
+  try {
+    const existing = await Order.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Order not found" });
+    if (existing.status === "completed") {
+      return res.status(400).json({ message: "Cannot update billing on a paid order" });
+    }
+    const patch = {};
+    applyBillingFieldsFromBody(req.body, patch);
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ message: "Provide gstEnabled and/or numeric billing fields to update" });
+    }
+    const updated = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
+    if (updated.type === "delivery" && updated.code) {
+      await Delivery.findOneAndUpdate({ orderId: updated.code }, { total: Number(updated.total || 0) });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Patch billing totals error:", error);
+    res.status(500).json({ message: error.message || "Failed to update billing" });
   }
-  const patch = {};
-  applyBillingFieldsFromBody(req.body, patch);
-  if (Object.keys(patch).length === 0) {
-    return res.status(400).json({ message: "Provide gstEnabled and/or numeric billing fields to update" });
-  }
-  const updated = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
-  if (updated.type === "delivery" && updated.code) {
-    await Delivery.findOneAndUpdate({ orderId: updated.code }, { total: Number(updated.total || 0) });
-  }
-  res.json({ ok: true });
 };
 
 exports.payment = async (req, res) => {
-  const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
-  applyBillingFieldsFromBody(req.body, patch);
-  const row = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
-  if (!row) return res.status(404).json({ message: "Order not found" });
+  try {
+    const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
+    applyBillingFieldsFromBody(req.body, patch);
+    const row = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
+    if (!row) return res.status(404).json({ message: "Order not found" });
 
-  if (row.type === "delivery" && row.code) {
-    await Delivery.findOneAndUpdate({ orderId: row.code }, { total: Number(row.total || 0) });
+    if (row.type === "delivery" && row.code) {
+      await Delivery.findOneAndUpdate({ orderId: row.code }, { total: Number(row.total || 0) });
+    }
+
+    // For dine-in orders, make table available after payment (no auto-creation of new order)
+    if (row.type === "dine-in" && row.table) {
+      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Payment error:", error);
+    res.status(500).json({ message: error.message || "Failed to process payment" });
   }
-
-  // For dine-in orders, make table available after payment (no auto-creation of new order)
-  if (row.type === "dine-in" && row.table) {
-    await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
-  }
-
-  res.json({ ok: true });
 };
 
 exports.cancel = async (req, res) => {
-  const row = await Order.findById(req.params.id);
-  if (!row) return res.status(404).json({ message: "Order not found" });
-  if (row.status === "completed") {
-    return res.status(400).json({ message: "Cannot cancel a completed/paid order" });
+  try {
+    const row = await Order.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Order not found" });
+    if (row.status === "completed") {
+      return res.status(400).json({ message: "Cannot cancel a completed/paid order" });
+    }
+    if (row.status === "served") {
+      return res.status(400).json({ message: "Cannot cancel a served order" });
+    }
+    row.status = "cancelled";
+    await row.save();
+    if (row.type === "dine-in" && row.table) {
+      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Cancel order error:", error);
+    res.status(500).json({ message: error.message || "Failed to cancel order" });
   }
-  if (row.status === "served") {
-    return res.status(400).json({ message: "Cannot cancel a served order" });
-  }
-  row.status = "cancelled";
-  await row.save();
-  if (row.type === "dine-in" && row.table) {
-    await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
-  }
-  res.json({ ok: true });
 };
 
 exports.remove = async (req, res) => {
-  const row = await Order.findById(req.params.id);
-  if (!row) return res.status(404).json({ message: "Order not found" });
+  try {
+    const row = await Order.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Order not found" });
 
-  if (row.type === "dine-in" && row.table) {
-    await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+    if (row.type === "dine-in" && row.table) {
+      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+    }
+
+    await Order.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Remove order error:", error);
+    res.status(500).json({ message: error.message || "Failed to remove order" });
   }
-
-  await Order.findByIdAndDelete(req.params.id);
-  res.json({ ok: true });
 };
