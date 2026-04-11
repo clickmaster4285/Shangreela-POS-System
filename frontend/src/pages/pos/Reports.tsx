@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useMemo, useState } from 'react';
-import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download } from 'lucide-react';
+import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { exportReportPdf } from '@/utils/exportReportPdf';
@@ -86,6 +86,7 @@ export default function Reports() {
           profit: number;
           totalExpenses: number;
           totalServiceCharges: number;
+          totalDiscount: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
         }>(`/dashboard/summary?range=${dateRange}`),
@@ -100,6 +101,7 @@ export default function Reports() {
     profit: 0,
     totalExpenses: 0,
     totalServiceCharges: 0,
+    totalDiscount: 0,
     paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 },
     totalMenuOut: 0,
   };
@@ -249,7 +251,7 @@ export default function Reports() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
           <div>
             <h1 className="font-serif text-2xl font-bold text-foreground">Reporting</h1>
-            <p className="text-sm text-muted-foreground">Sales, service charge, GST, and payment breakdowns.</p>
+            <p className="text-sm text-muted-foreground">Sales, profit, and payment breakdowns from paid (completed) bills in the selected period.</p>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
@@ -288,6 +290,7 @@ export default function Reports() {
             { label: 'Total Revenue', value: formatPKR(totalRevenue), icon: DollarSign },
             { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp },
             { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent },
+            { label: 'Discounts given', value: formatPKR(summary.totalDiscount ?? 0), icon: Tag },
             { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: Wallet },
             { label: 'Cash Sales', value: formatPKR(summary.paymentBreakdown.cash), icon: DollarSign },
             { label: 'Card Sales', value: formatPKR(summary.paymentBreakdown.card), icon: CreditCard },
@@ -329,6 +332,10 @@ export default function Reports() {
               <tr>
                 <td>Service Charges</td>
                 <td>{formatPKR(summary.totalServiceCharges)}</td>
+              </tr>
+              <tr>
+                <td>Discounts given</td>
+                <td>{formatPKR(summary.totalDiscount ?? 0)}</td>
               </tr>
               <tr>
                 <td>Total Expenses</td>

@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { ShoppingCart, X } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
+import { billBreakdownForOrder } from '@/utils/pakistanTax';
 
 type OrderWithDb = Order & { dbId?: string };
 
@@ -29,6 +31,20 @@ export default function OrderManagement() {
   const [selectedOrderForSwitch, setSelectedOrderForSwitch] = useState<OrderWithDb | null>(null);
   const [selectedOrderForCancel, setSelectedOrderForCancel] = useState<OrderWithDb | null>(null);
   const [tableNumberInput, setTableNumberInput] = useState('');
+  const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
+
+  useEffect(() => {
+    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
+      .then((r) => {
+        const gstRate = Number(r.salesTaxRate ?? 16) / 100;
+        const serviceChargeRate = Number(r.serviceChargeRate ?? 5) / 100;
+        setTaxRates({
+          gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
+          serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchOrders = async () => {
     try {
@@ -168,6 +184,11 @@ export default function OrderManagement() {
   const dineInCount = activeOrders.filter(o => o.type === 'dine-in').length;
   const takeawayCount = activeOrders.filter(o => o.type === 'takeaway').length;
 
+  const grandTotalOnCard = (order: Order) => {
+    if (order.status === 'completed' && Number.isFinite(Number(order.total))) return Number(order.total);
+    return billBreakdownForOrder(order, taxRates).grandTotal;
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -228,7 +249,7 @@ export default function OrderManagement() {
                   {order.table ? ` • ${tableMap.get(order.table)?.name || `Table ${order.table}`}` : ''}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatOrderDateTime(order.createdAt)}
                 </p>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${statusColors[order.status]}`}>
@@ -251,7 +272,7 @@ export default function OrderManagement() {
             <div className="flex justify-between items-center pt-2 border-t border-border gap-2">
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Total bill</p>
-                <p className="font-serif text-lg font-bold text-foreground">Rs. {order.total.toLocaleString()}</p>
+                <p className="font-serif text-lg font-bold text-foreground">Rs. {grandTotalOnCard(order).toLocaleString()}</p>
               </div>
               <div className="flex gap-1 flex-wrap">
                 {order.type === 'dine-in' && order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'served' && order.status !== 'taken away' && (

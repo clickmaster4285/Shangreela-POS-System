@@ -1,38 +1,5 @@
 const { Order, Delivery } = require("../models");
-
-const parseDateRange = (range) => {
-  const now = new Date();
-  if (!range || range === "all") return null;
-
-  const start = new Date(now);
-  switch (String(range)) {
-    case "today":
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "week":
-      start.setDate(start.getDate() - 6);
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "month":
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "year":
-      start.setMonth(0, 1);
-      start.setHours(0, 0, 0, 0);
-      break;
-    default:
-      return null;
-  }
-  return { $gte: start };
-};
-
-const buildOrderQuery = (range) => {
-  const query = { status: { $ne: "cancelled" } };
-  const dateFilter = parseDateRange(range);
-  if (dateFilter) query.createdAt = dateFilter;
-  return query;
-};
+const { buildPaidOrdersQuery } = require("../utils/reportingQueries");
 
 const sumOrderTotal = (order) => Number(order.total || 0);
 
@@ -117,12 +84,12 @@ const buildRevenueSeries = (range, orders) => {
 };
 
 exports.weeklySales = async (req, res) => {
-  const orders = await Order.find(buildOrderQuery(req.query.range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders) });
 };
 
 exports.topItems = async (req, res) => {
-  const orders = await Order.find(buildOrderQuery(req.query.range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
   const map = new Map();
   for (const o of orders) {
     for (const i of o.items || []) {

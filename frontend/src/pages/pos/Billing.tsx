@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Order } from '@/data/mockData';
 import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { printReceipt } from '@/utils/printReceipt';
-import { computePakistanTaxTotals } from '@/utils/pakistanTax';
+import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
 
 export default function Billing() {
   const { hasAction } = useAuth();
@@ -51,12 +52,83 @@ export default function Billing() {
       });
   }, []);
 
+  useEffect(() => {
+    if (!selectedOrder) return;
+    setGstEnabled(selectedOrder.gstEnabled !== false);
+  }, [selectedOrder?.id, selectedOrder?.gstEnabled]);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const saved = Number(selectedOrder.discount ?? 0);
+    if (saved > 0) {
+      setDiscountMode('amount');
+      setDiscountValue(saved);
+    } else {
+      setDiscountMode('percent');
+      setDiscountValue(0);
+    }
+  }, [selectedOrder?.id]);
+
+  const orderItemsKey = useMemo(
+    () => (selectedOrder?.items ?? []).map(i => `${i.menuItem?.id ?? i.menuItem.name}:${i.quantity}`).join('|'),
+    [selectedOrder?.items],
+  );
+
+  const billsByDay = useMemo(() => groupOrdersByCalendarDay(orders), [orders]);
+
+  useEffect(() => {
+    if (!selectedOrder?.dbId || selectedOrder.status === 'completed') return;
+    const sub = selectedOrder.items.reduce((s, i) => s + i.menuItem.price * i.quantity, 0);
+    const disc =
+      discountMode === 'percent' ? sub * (discountValue / 100) : Math.min(Math.max(discountValue, 0), sub);
+    const { gstAmount, totalTaxAmount, grandTotal, serviceCharge } = computePakistanTaxTotals(
+      sub,
+      disc,
+      gstEnabled,
+      taxRates,
+      { applyServiceCharge: selectedOrder.type === 'dine-in' },
+    );
+    const t = window.setTimeout(() => {
+      api(`/orders/${selectedOrder.dbId}/billing-totals`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          gstEnabled,
+          total: grandTotal,
+          subtotal: sub,
+          discount: disc,
+          tax: totalTaxAmount,
+          gstAmount,
+          serviceCharge,
+        }),
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+          queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
+          queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
+        })
+        .catch(() => {});
+    }, 450);
+    return () => window.clearTimeout(t);
+  }, [
+    selectedOrder?.dbId,
+    selectedOrder?.status,
+    selectedOrder?.type,
+    orderItemsKey,
+    discountMode,
+    discountValue,
+    gstEnabled,
+    taxRates.gstRate,
+    taxRates.serviceChargeRate,
+  ]);
+
   if (!selectedOrder) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
-          <p className="text-sm text-muted-foreground">No active table order to bill right now.</p>
+      <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col">
+        <div className="space-y-6">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
+            <p className="text-sm text-muted-foreground">No active table order to bill right now.</p>
+          </div>
         </div>
       </div>
     );
@@ -75,6 +147,13 @@ export default function Billing() {
   );
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const grandTotalForBillCard = (o: Order & { dbId?: string }) => {
+    if (o.status === 'completed' && Number.isFinite(Number(o.total))) return Number(o.total);
+    if (o.id === selectedOrder.id) return grandTotal;
+    return billBreakdownForOrder(o, taxRates).grandTotal;
+  };
+
   const getBillStatusLabel = (status?: string) => (status === 'completed' ? 'Paid' : 'Pending');
   const pendingCount = orders.filter(o => o.status !== 'completed').length;
   const paidCount = orders.filter(o => o.status === 'completed').length;
@@ -83,8 +162,8 @@ export default function Billing() {
   const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4 overflow-hidden lg:h-[calc(100vh-7rem)]">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
           <p className="text-sm text-muted-foreground">Professional billing desk with live bill status and payment control.</p>
@@ -98,7 +177,7 @@ export default function Billing() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Total Bills</p>
           <p className="text-2xl font-bold text-foreground mt-1">{orders.length}</p>
@@ -113,47 +192,57 @@ export default function Billing() {
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
         {/* Order selector & details */}
-        <div className="pos-card p-3.5 shadow-sm">
-          <h3 className="font-semibold text-sm text-foreground mb-3 px-1">Order Panel</h3>
-          <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1 scrollbar-thin">
-              {orders.map(o => (
-                <button key={o.id} onClick={() => setSelectedOrder(o)}
-                  className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                    selectedOrder.id === o.id
-                      ? 'bg-primary/10 border-primary/30 shadow-sm ring-1 ring-primary/15'
-                      : 'bg-muted/30 border-border hover:bg-muted/60 hover:border-primary/30'
-                  }`}
-                >
-                  <div className="flex justify-between gap-4">
-                    <span className="font-medium text-sm text-foreground">{o.id}</span>
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Bill</p>
-                      <p className="text-sm font-semibold text-foreground">Rs. {o.total.toLocaleString()}</p>
+        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-3.5 shadow-sm">
+          <h3 className="mb-3 shrink-0 px-1 font-semibold text-sm text-foreground">Bills by day</h3>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 scrollbar-thin">
+            {billsByDay.map(group => (
+              <div key={group.dayKey} className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1 border-b border-border/60 pb-1">
+                  {group.dayLabel}
+                </p>
+                {group.orders.map(o => (
+                  <button key={o.id} onClick={() => setSelectedOrder(o)}
+                    className={`w-full text-left p-3.5 rounded-xl border transition-all ${
+                      selectedOrder.id === o.id
+                        ? 'bg-primary/10 border-primary/30 shadow-sm ring-1 ring-primary/15'
+                        : 'bg-muted/30 border-border hover:bg-muted/60 hover:border-primary/30'
+                    }`}
+                  >
+                    <div className="flex justify-between gap-4">
+                      <span className="font-medium text-sm text-foreground">{o.id}</span>
+                      <div className="text-right">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Bill</p>
+                        <p className="text-sm font-semibold text-foreground">Rs. {grandTotalForBillCard(o).toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • Table ${o.table}` : ''}</span>
-                    <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o.status)}`}>
-                      {getBillStatusLabel(o.status)}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                    <p className="text-[11px] text-muted-foreground mt-1">{formatOrderDateTime(o.createdAt)}</p>
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • Table ${o.table}` : ''}</span>
+                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o.status)}`}>
+                        {getBillStatusLabel(o.status)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Receipt */}
-        <div className="pos-card p-5 shadow-sm">
-          <div className="text-center mb-5 pb-4 border-b border-border border-dashed">
+        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-5 shadow-sm">
+          <div className="mb-5 shrink-0 border-b border-border border-dashed pb-4 text-center">
             <h2 className="font-serif text-xl font-bold text-foreground">Shangreela Heights</h2>
             <p className="text-xs text-muted-foreground">ling Mor Kahuta, Rawalpindi</p>
             <p className="text-xs text-muted-foreground">Tel: +92 513314120 / +92 337-5454786</p>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-2 text-sm mb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
+          <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
             <div className="flex justify-between text-muted-foreground"><span>Order</span><span>{selectedOrder.id}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(selectedOrder.createdAt)}</span></div>
             <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{selectedOrder.type}</span></div>
             {selectedOrder.table && <div className="flex justify-between text-muted-foreground"><span>Table</span><span>{selectedOrder.table}</span></div>}
             {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
@@ -332,6 +421,7 @@ export default function Billing() {
                 gstRate: taxRates.gstRate,
                 serviceChargeRate: taxRates.serviceChargeRate,
                 paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
+                orderCreatedAt: selectedOrder.createdAt,
               });
               toast.success('Receipt sent to printer!');
             }} className="py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-muted/80 transition-colors">
@@ -351,13 +441,29 @@ export default function Billing() {
                 gstRate: taxRates.gstRate,
                 serviceChargeRate: taxRates.serviceChargeRate,
                 paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
+                orderCreatedAt: selectedOrder.createdAt,
               });
               if (selectedOrder.dbId) {
-                api(`/orders/${selectedOrder.dbId}/payment`, { method: 'POST', body: JSON.stringify({ paymentMethod, gstEnabled }) })
+                api(`/orders/${selectedOrder.dbId}/payment`, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    paymentMethod,
+                    gstEnabled,
+                    total: grandTotal,
+                    subtotal,
+                    discount: discountAmt,
+                    tax: totalTaxAmount,
+                    gstAmount,
+                    serviceCharge,
+                  }),
+                })
                   .then(() => {
                     toast.success('Payment completed and receipt printed');
                     loadOrders();
                     queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
+                    queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+                    queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
+                    queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
                   })
                   .catch(() => toast.error('Payment failed'));
               } else {
@@ -366,6 +472,7 @@ export default function Billing() {
             }} className="py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" disabled={selectedOrder.status === 'completed'}>
               Complete Payment
             </button>
+          </div>
           </div>
         </div>
       </div>

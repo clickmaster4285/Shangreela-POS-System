@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type MenuItem } from '@/data/mockData';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Pencil, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
 
@@ -34,6 +34,14 @@ export default function MenuManagement() {
   const [newCategory, setNewCategory] = useState('');
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [categoryPickerSearch, setCategoryPickerSearch] = useState('');
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -50,13 +58,14 @@ export default function MenuManagement() {
   const fetchItems = useCallback(async () => {
     try {
       const categoryQuery = categoryFilter !== 'All' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
-      const response = await api<PaginatedResponse<MenuItem>>(`/menu?page=${page}&limit=${pageSize}${categoryQuery}`);
+      const searchQuery = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : '';
+      const response = await api<PaginatedResponse<MenuItem>>(`/menu?page=${page}&limit=${pageSize}${categoryQuery}${searchQuery}`);
       setItems(response.items);
       setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load menu');
     }
-  }, [page, pageSize, categoryFilter]);
+  }, [page, pageSize, categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchCategories();
@@ -72,6 +81,7 @@ export default function MenuManagement() {
   const [bundleItemId, setBundleItemId] = useState('');
   const [bundleQty, setBundleQty] = useState('1');
   const [bundleItems, setBundleItems] = useState<BundleEntry[]>([]);
+  const [bundlePickerSearch, setBundlePickerSearch] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
 
@@ -244,41 +254,59 @@ export default function MenuManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Menu Management</h1>
-          <p className="text-sm text-muted-foreground">Filter menu items by category, add new categories, or manage items in each category.</p>
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-foreground">Menu Management</h1>
+            <p className="text-sm text-muted-foreground">One search for names, descriptions, and categories. Use the list to show one category only.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowCategoryForm(true)}
+              className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Category
+            </button>
+            <button onClick={() => openNew('Deals')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors">
+              <Plus className="w-4 h-4" /> Add Deal/Platter
+            </button>
+            <button onClick={() => openNew()} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary transition-colors">
+              <Plus className="w-4 h-4" /> Add Item
+            </button>
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <label className="text-sm text-muted-foreground flex items-center gap-2">
-            Category
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={e => {
+                setPage(1);
+                setSearchInput(e.target.value);
+              }}
+              placeholder="Search menu (item name, description, or category)…"
+              className={`${inputClass} pl-10 w-full`}
+              aria-label="Search menu"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap sm:shrink-0">
+            <span className="hidden sm:inline">Show</span>
             <select
               value={categoryFilter}
               onChange={e => {
                 setPage(1);
                 setCategoryFilter(e.target.value);
               }}
-              className="bg-background border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              className="bg-background border border-border rounded-xl px-3 py-2.5 text-sm min-w-[10rem] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             >
-              <option key="All" value="All">All</option>
+              <option value="All">All categories</option>
               {allCategories.map(category => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
           </label>
-          <button
-            type="button"
-            onClick={() => setShowCategoryForm(true)}
-            className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Category
-          </button>
-          <button onClick={() => openNew('Deals')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors">
-            <Plus className="w-4 h-4" /> Add Deal/Platter
-          </button>
-          <button onClick={() => openNew()} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary transition-colors">
-            <Plus className="w-4 h-4" /> Add Item
-          </button>
         </div>
       </div>
 

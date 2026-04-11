@@ -4,10 +4,11 @@ import {
   POSCategoryFolderGrid,
   POSFolderContent,
   POSPakistaniSubGrid,
+  PAKISTANI_SUBFOLDERS,
   categoryLabelToDataCategory,
   type PakistaniSubfolder,
 } from '@/components/pos/Form';
-import { Plus, Minus, Trash2, ShoppingBag, X, MessageSquare } from 'lucide-react';
+import { Plus, Minus, Trash2, ShoppingBag, Search, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
@@ -108,6 +109,9 @@ export default function POSScreen() {
 
   const [noteItem, setNoteItem] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
+  const [folderItemSearch, setFolderItemSearch] = useState('');
+  const [pakistaniSubSearch, setPakistaniSubSearch] = useState('');
 
   const selectedTable: TableInfo | null = useMemo(
     () => (selectedTableId != null ? tables.find(t => t.id === selectedTableId) ?? null : null),
@@ -120,6 +124,18 @@ export default function POSScreen() {
     const remaining = uniqueCategories.filter(c => c !== 'Karahi' && c !== 'Handi');
     return hasPakistani ? ['All', 'Pakistani', ...remaining] : ['All', ...remaining];
   }, [menuItems]);
+
+  const filteredCategoryLabels = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return categoryLabels;
+    return categoryLabels.filter(label => label.toLowerCase().includes(q));
+  }, [categoryLabels, categorySearch]);
+
+  const filteredPakistaniSubfolders = useMemo((): PakistaniSubfolder[] => {
+    const q = pakistaniSubSearch.trim().toLowerCase();
+    if (!q) return [...PAKISTANI_SUBFOLDERS];
+    return PAKISTANI_SUBFOLDERS.filter(s => s.toLowerCase().includes(q));
+  }, [pakistaniSubSearch]);
 
   const itemCount = useCallback((label: string) => {
     if (label === 'All') return menuItems.length;
@@ -138,6 +154,28 @@ export default function POSScreen() {
     }
     return menuItems.filter(i => i.category === categoryLabelToDataCategory(openFolder));
   }, [openFolder, pakistaniSub, menuItems]);
+
+  const displayFolderItems = useMemo(() => {
+    const q = folderItemSearch.trim().toLowerCase();
+    if (!q) return folderItems;
+    return folderItems.filter(
+      i =>
+        i.name.toLowerCase().includes(q) ||
+        (i.description || '').toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q)
+    );
+  }, [folderItems, folderItemSearch]);
+
+  useEffect(() => {
+    setFolderItemSearch('');
+  }, [openFolder, pakistaniSub]);
+
+  useEffect(() => {
+    setPakistaniSubSearch('');
+  }, [openFolder]);
+
+  const posSearchInputClass =
+    'w-full bg-background border border-border rounded-xl pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary';
 
   const openTopFolder = useCallback((label: string) => {
     setOpenFolder(label);
@@ -250,10 +288,48 @@ export default function POSScreen() {
       {/* Full-screen category folders OR items inside the selected folder */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {openFolder === null ? (
-          <POSCategoryFolderGrid categories={categoryLabels} itemCount={itemCount} onOpenFolder={openTopFolder} />
+          <div className="flex flex-col h-full min-h-0 gap-3">
+            <div className="relative shrink-0">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="search"
+                value={categorySearch}
+                onChange={e => setCategorySearch(e.target.value)}
+                placeholder="Search categories…"
+                className={posSearchInputClass}
+                aria-label="Search categories"
+              />
+            </div>
+            <div className="flex-1 min-h-0">
+              {filteredCategoryLabels.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">No categories match your search.</p>
+              ) : (
+                <POSCategoryFolderGrid categories={filteredCategoryLabels} itemCount={itemCount} onOpenFolder={openTopFolder} />
+              )}
+            </div>
+          </div>
         ) : openFolder === 'Pakistani' && pakistaniSub === null ? (
           <POSFolderContent title="Pakistani" onBack={handleFolderBack}>
-            <POSPakistaniSubGrid itemCount={itemCount} onOpenSubfolder={setPakistaniSub} />
+            <div className="relative mb-3 shrink-0">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="search"
+                value={pakistaniSubSearch}
+                onChange={e => setPakistaniSubSearch(e.target.value)}
+                placeholder="Search Karahi / Handi…"
+                className={posSearchInputClass}
+                aria-label="Search Pakistani subfolders"
+              />
+            </div>
+            {filteredPakistaniSubfolders.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No matching folders.</p>
+            ) : (
+              <POSPakistaniSubGrid
+                itemCount={itemCount}
+                onOpenSubfolder={setPakistaniSub}
+                subfolders={filteredPakistaniSubfolders}
+              />
+            )}
           </POSFolderContent>
         ) : (
           <POSFolderContent
@@ -264,11 +340,24 @@ export default function POSScreen() {
             }
             onBack={handleFolderBack}
           >
+            <div className="relative mb-3 shrink-0">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="search"
+                value={folderItemSearch}
+                onChange={e => setFolderItemSearch(e.target.value)}
+                placeholder="Search items in this category…"
+                className={posSearchInputClass}
+                aria-label="Search items in category"
+              />
+            </div>
             {folderItems.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">No items in this category.</p>
+            ) : displayFolderItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No items match your search.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                {folderItems.map(item => (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {displayFolderItems.map(item => (
                   <button
                     key={item.id}
                     onClick={() => addToCart(item)}
@@ -318,7 +407,7 @@ export default function POSScreen() {
       </div>
 
       {/* Right: Cart */}
-      <div className="lg:w-80 flex flex-col pos-card p-0 overflow-hidden relative">
+      <div className="w-full lg:w-[min(100%,28rem)] xl:w-[30rem] lg:shrink-0 flex flex-col pos-card p-0 overflow-hidden relative">
         {/* Order type */}
         <div className="p-3 border-b border-border flex gap-1">
           {(['dine-in', 'takeaway', 'delivery'] as const).map(t => (
