@@ -39,9 +39,10 @@ const statusDot: Record<string, string> = {
 };
 
 export default function TableManagement() {
-  const { user } = useAuth();
+  const { user, hasAction } = useAuth();
   const navigate = useNavigate();
   const canManage = user ? MANAGER_ROLES.includes(user.role) : false;
+  const canChangeTableStatus = hasAction('change_table_status');
 
   const [floorsState, setFloorsState] = useState<FloorInfo[]>([]);
   const [tablesState, setTablesState] = useState<TableInfo[]>([]);
@@ -420,7 +421,7 @@ export default function TableManagement() {
                 />
               </div>
             )}
-            {canManage && (
+            {(canManage || canChangeTableStatus) && (
               <div className="absolute top-2 right-2 z-10 flex gap-0.5">
                 <button
                   type="button"
@@ -433,17 +434,19 @@ export default function TableManagement() {
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={e => {
-                    e.stopPropagation();
-                    deleteTable(table);
-                  }}
-                  className="p-1.5 rounded-lg bg-background/90 border border-border shadow-sm hover:bg-destructive/10 text-destructive"
-                  title="Remove table"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteTable(table);
+                    }}
+                    className="p-1.5 rounded-lg bg-background/90 border border-border shadow-sm hover:bg-destructive/10 text-destructive"
+                    title="Remove table"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
             <button
