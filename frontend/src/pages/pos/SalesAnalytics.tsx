@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Calendar, Filter, XCircle, Package } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Filter, XCircle, Package, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 
 const orderTypeDataDefault = [
-  { name: 'Dine-in', value: 0, revenue: 0 },
-  { name: 'Delivery', value: 0, revenue: 0 },
-  { name: 'Takeaway', value: 0, revenue: 0 },
+  { name: 'Dine-in', value: 0, revenue: 0, count: 0 },
+  { name: 'Delivery', value: 0, revenue: 0, count: 0 },
+  { name: 'Takeaway', value: 0, revenue: 0, count: 0 },
 ];
 
 const pieColors = ['hsl(340,70%,21%)', 'hsl(40,70%,55%)', 'hsl(142,60%,40%)'];
@@ -15,57 +15,57 @@ const pieColors = ['hsl(340,70%,21%)', 'hsl(40,70%,55%)', 'hsl(142,60%,40%)'];
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 export default function SalesAnalytics() {
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
+
   const analyticsQuery = useQuery({
-    queryKey: ['analytics-dashboard'],
+    queryKey: ['analytics-dashboard', dateRange],
     queryFn: async () => {
-      const [w, d, top, orders, typeData, month, summary] = await Promise.all([
-      api<{ items: { day: string; revenue: number }[] }>('/dashboard/revenue-weekly'),
-      api<{ items: { hour: string; sales: number }[] }>('/dashboard/sales-daily'),
-      api<{ items: { name: string; sold: number; revenue: number }[] }>('/dashboard/top-items'),
-      api<{ items: { type: 'dine-in' | 'delivery' | 'takeaway' | 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled' }[] }>('/orders?page=1&limit=200&status=all&type=all'),
-      api<{ items: { name: string; value: number; revenue: number }[] }>('/analytics/order-type-breakdown'),
-      api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
-      api<{ totalExpenses: number }>('/dashboard/summary'),
+      const [w, d, top, typeData, month, summary] = await Promise.all([
+        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?range=${dateRange}`),
+        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?range=${dateRange}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?range=${dateRange}`),
+        api<{ items: { name: string; value: number; revenue: number; count?: number }[] }>(`/analytics/order-type-breakdown?range=${dateRange}`),
+        api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
+        api<{ revenue: number; totalOrders: number; avgOrder: number; totalExpenses: number; cancelledOrders: number; totalDiscount: number }>(`/dashboard/summary?range=${dateRange}`),
       ]);
-      const cancelledOrders = orders.items.filter((o: any) => o.status === 'cancelled').length;
       return {
         weeklySalesData: w.items,
         dailySalesData: d.items,
         topSellingItems: top.items,
-        sampleOrders: orders.items.filter((o: any) => o.status !== 'cancelled'),
-        cancelledOrders,
+        cancelledOrders: summary.cancelledOrders,
         orderTypeData: typeData.items,
         monthlyTrend: month.items,
         totalExpenses: summary.totalExpenses,
+        paidRevenue: summary.revenue,
+        paidOrders: summary.totalOrders,
+        avgPaidOrder: summary.totalOrders ? Math.round(summary.revenue / summary.totalOrders) : 0,
+        totalDiscount: summary.totalDiscount ?? 0,
       };
     },
   });
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'dine-in' | 'delivery' | 'takeaway'>('all');
 
   const weeklySalesData = analyticsQuery.data?.weeklySalesData ?? [];
   const dailySalesData = analyticsQuery.data?.dailySalesData ?? [];
   const topSellingItems = analyticsQuery.data?.topSellingItems ?? [];
-  const sampleOrders = analyticsQuery.data?.sampleOrders ?? [];
   const cancelledOrders = analyticsQuery.data?.cancelledOrders ?? 0;
   const orderTypeData = analyticsQuery.data?.orderTypeData ?? orderTypeDataDefault;
   const monthlyTrend = analyticsQuery.data?.monthlyTrend ?? [];
   const totalExpenses = analyticsQuery.data?.totalExpenses ?? 0;
-
-  const totalRevenue = useMemo(() => weeklySalesData.reduce((s, d) => s + d.revenue, 0), [weeklySalesData]);
-  const totalOrders = sampleOrders.length;
-  const avgOrder = Math.round(totalRevenue / (totalOrders || 1));
-
-  const dineInCount = sampleOrders.filter(o => o.type === 'dine-in').length;
-  const deliveryCount = sampleOrders.filter(o => o.type === 'delivery').length;
-  const takeawayCount = sampleOrders.filter(o => o.type === 'takeaway').length;
+  const totalRevenue = analyticsQuery.data?.paidRevenue ?? 0;
+  const totalOrders = analyticsQuery.data?.paidOrders ?? 0;
+  const avgOrder = analyticsQuery.data?.avgPaidOrder ?? 0;
+  const totalDiscount = analyticsQuery.data?.totalDiscount ?? 0;
+  const dineInCount = orderTypeData.find(o => o.name === 'Dine-in')?.count ?? 0;
+  const deliveryCount = orderTypeData.find(o => o.name === 'Delivery')?.count ?? 0;
+  const takeawayCount = orderTypeData.find(o => o.name === 'Takeaway')?.count ?? 0;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground">Sales Analytics</h1>
-          <p className="text-sm text-muted-foreground">Revenue insights and performance trends.</p>
+          <p className="text-sm text-muted-foreground">Revenue and trends from paid (completed) bills in the selected period.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {/* Date range filter */}
@@ -94,9 +94,10 @@ export default function SalesAnalytics() {
       {/* KPI Cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: 'Total Revenue', value: formatPKR(totalRevenue), icon: DollarSign, change: '+18.2%' },
+          { label: 'Paid revenue', value: formatPKR(totalRevenue), icon: DollarSign, change: '+18.2%' },
+          { label: 'Discounts given', value: formatPKR(totalDiscount), icon: Tag, change: '' },
           { label: 'Total Expenses', value: formatPKR(totalExpenses), icon: Package, change: '' },
-          { label: 'Total Orders', value: totalOrders.toString(), icon: ShoppingCart, change: '+12.5%' },
+          { label: 'Paid orders', value: totalOrders.toString(), icon: ShoppingCart, change: '+12.5%' },
           { label: 'Cancelled Orders', value: String(cancelledOrders), icon: XCircle, change: '' },
           { label: 'Average Order', value: formatPKR(avgOrder), icon: TrendingUp, change: '+5.3%' },
           { label: 'Dine-in / Delivery / Takeaway', value: `${dineInCount} / ${deliveryCount} / ${takeawayCount}`, icon: Filter, change: '' },

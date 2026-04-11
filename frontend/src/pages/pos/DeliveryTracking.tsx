@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Truck, MapPin, Clock, CheckCircle2, Package, Phone } from 'lucide-react';
+import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 
 type DeliveryStatus = 'pending' | 'out_for_delivery' | 'delivered';
 
@@ -15,7 +16,7 @@ interface DeliveryOrder {
   assignedRider: string;
   estimatedTime: string;
   orderStatus?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 import { api } from '@/lib/api';
@@ -114,6 +115,9 @@ export default function DeliveryTracking() {
                 <div>
                   <p className="font-semibold text-foreground">{delivery.orderId}</p>
                   <p className="text-xs text-muted-foreground">Order ID</p>
+                  {delivery.createdAt && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{formatOrderDateTime(delivery.createdAt)}</p>
+                  )}
                   <p className="text-xs text-muted-foreground mt-1">
                     Kitchen status: <span className="text-foreground font-medium">{formatCookingStatus(delivery.orderStatus)}</span>
                   </p>

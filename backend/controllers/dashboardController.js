@@ -1,38 +1,5 @@
 const { Order, MenuItem, InventoryItem, Employee, Expense, TaxConfig } = require("../models");
-
-const parseDateRange = (range) => {
-  const now = new Date();
-  if (!range || range === "all") return null;
-
-  const start = new Date(now);
-  switch (String(range)) {
-    case "today":
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "week":
-      start.setDate(start.getDate() - 6);
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "month":
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-      break;
-    case "year":
-      start.setMonth(0, 1);
-      start.setHours(0, 0, 0, 0);
-      break;
-    default:
-      return null;
-  }
-  return { $gte: start };
-};
-
-const buildOrderQuery = (range) => {
-  const query = { status: { $ne: "cancelled" } };
-  const dateFilter = parseDateRange(range);
-  if (dateFilter) query.createdAt = dateFilter;
-  return query;
-};
+const { parseDateRange, buildPaidOrdersQuery } = require("../utils/reportingQueries");
 
 const getEffectiveTaxRates = async () => {
   const row = await TaxConfig.findOne({}).lean();
@@ -154,15 +121,16 @@ const buildRevenueSeries = (range, orders) => {
 exports.summary = async (req, res) => {
   const range = String(req.query.range || "all");
   const dateFilter = parseDateRange(range);
-  const orderQuery = buildOrderQuery(range);
+  const paidQuery = buildPaidOrdersQuery(range);
   const expenseQuery = dateFilter ? { createdAt: dateFilter } : {};
   const rates = await getEffectiveTaxRates();
-  const [orders, menuCount, lowStock, staff, cancelledOrders, expenses] = await Promise.all([
-    Order.find(orderQuery).lean(),
+  const [orders, menuCount, lowStock, staff, cancelledOrders, openOrders, expenses] = await Promise.all([
+    Order.find(paidQuery).lean(),
     MenuItem.countDocuments({}),
     InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$minStock"] } }),
     Employee.countDocuments({ status: "active" }),
     Order.countDocuments({ status: "cancelled", ...(dateFilter ? { createdAt: dateFilter } : {}) }),
+    Order.countDocuments({ status: { $nin: ["completed", "cancelled"] } }),
     Expense.find(expenseQuery).lean(),
   ]);
 
@@ -182,6 +150,7 @@ exports.summary = async (req, res) => {
     { cash: 0, card: 0, easypesa: 0, other: 0 }
   );
   const totalMenuOut = orders.reduce((sum, o) => sum + (o.items || []).reduce((count, it) => count + Number(it.quantity || 0), 0), 0);
+  const totalDiscount = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).discount, 0);
   const topMenuItems = buildTopMenuItems(orders).slice(0, 5);
   const profit = revenue - totalExpenses;
 
@@ -189,8 +158,10 @@ exports.summary = async (req, res) => {
     revenue,
     profit,
     totalServiceCharges,
+    totalDiscount,
     paymentBreakdown,
     totalOrders: orders.length,
+    openOrders,
     cancelledOrders,
     menuCount,
     lowStock,
@@ -204,8 +175,7 @@ exports.summary = async (req, res) => {
 
 exports.salesDaily = async (req, res) => {
   const rates = await getEffectiveTaxRates();
-  const orderQuery = buildOrderQuery(req.query.range);
-  const orders = await Order.find(orderQuery).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
   const buckets = new Map();
   for (let i = 9; i <= 20; i += 1) buckets.set(i, 0);
   for (const o of orders) {
@@ -221,16 +191,26 @@ exports.salesDaily = async (req, res) => {
 };
 
 exports.revenueWeekly = async (req, res) => {
-  const orders = await Order.find(buildOrderQuery(req.query.range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders) });
 };
 
 exports.topItems = async (req, res) => {
-  const items = buildTopMenuItems(await Order.find(buildOrderQuery(req.query.range)).lean());
+  const items = buildTopMenuItems(await Order.find(buildPaidOrdersQuery(req.query.range)).lean());
   res.json({ items });
 };
 
 exports.recentOrders = async (_req, res) => {
   const items = await Order.find({ status: { $ne: "cancelled" } }).sort({ createdAt: -1 }).limit(10).lean();
-  res.json({ items: items.map((o) => ({ id: o.code, type: o.type, status: o.status, total: o.total, table: o.table, items: o.items || [] })) });
+  res.json({
+    items: items.map((o) => ({
+      id: o.code,
+      type: o.type,
+      status: o.status,
+      total: o.total,
+      table: o.table,
+      items: o.items || [],
+      createdAt: o.createdAt,
+    })),
+  });
 };

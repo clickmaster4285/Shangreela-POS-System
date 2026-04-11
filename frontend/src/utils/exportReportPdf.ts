@@ -12,6 +12,7 @@ export type ReportPdfPayload = {
     profit: number;
     totalExpenses: number;
     totalServiceCharges: number;
+    totalDiscount?: number;
     totalMenuOut: number;
     paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
   };
@@ -125,6 +126,7 @@ export function exportReportPdf(payload: ReportPdfPayload) {
       ['Total revenue', fmtPKR(payload.summary.revenue)],
       ['Profit', fmtPKR(payload.summary.profit)],
       ['Service charges', fmtPKR(payload.summary.totalServiceCharges)],
+      ['Discounts given', fmtPKR(payload.summary.totalDiscount ?? 0)],
       ['Total expenses', fmtPKR(payload.summary.totalExpenses)],
       ['Menu out', `${Math.round(payload.summary.totalMenuOut || 0).toLocaleString('en-PK')} units`],
     ],

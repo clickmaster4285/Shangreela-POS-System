@@ -2,6 +2,20 @@ const { parsePagination, buildPaginatedResponse } = require("../utils/pagination
 const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { Order, Table, Delivery } = require("../models");
 
+const applyBillingFieldsFromBody = (body, patch) => {
+  if (body.gstEnabled !== undefined) {
+    patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
+  }
+  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge"];
+  for (const f of numericFields) {
+    if (body[f] !== undefined && body[f] !== null && body[f] !== "") {
+      const n = Number(body[f]);
+      if (Number.isFinite(n)) patch[f] = n;
+    }
+  }
+  return patch;
+};
+
 const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   const list = Array.isArray(items) ? items : [];
   return list.map((item) => ({
@@ -26,18 +40,22 @@ exports.list = async (req, res) => {
     buildPaginatedResponse({
       items: items.map((o) => {
         const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
+        const paid = o.status === "completed";
+        const storedTotal = Number(o.total);
+        const storedDiscount = Number(o.discount);
         return {
           id: o.code,
           type: o.type,
           status: o.status,
           table: o.table,
           items: o.items || [],
-          total: totals.grandTotal,
+          total: paid && Number.isFinite(storedTotal) ? storedTotal : totals.grandTotal,
           tax: totals.tax,
           subtotal: totals.subtotal,
-          discount: totals.discount,
+          discount: paid && Number.isFinite(storedDiscount) ? storedDiscount : totals.discount,
           gstAmount: totals.gstAmount,
           serviceCharge: totals.serviceCharge,
+          gstEnabled: o.gstEnabled !== false,
           createdAt: o.createdAt,
           customerName: o.customerName || "",
           orderTaker: o.orderTaker || "",
@@ -190,7 +208,7 @@ exports.openByTable = async (req, res) => {
       discount: totals.discount,
       gstAmount: totals.gstAmount,
       serviceCharge: totals.serviceCharge,
-      gstEnabled: row.gstEnabled,
+      gstEnabled: row.gstEnabled !== false,
       total: totals.grandTotal,
       notes: row.notes || "",
       customerName: row.customerName || "",
@@ -235,9 +253,33 @@ exports.addItems = async (req, res) => {
   res.json({ ok: true, id: row.code, dbId: String(row._id) });
 };
 
+exports.patchBillingTotals = async (req, res) => {
+  const existing = await Order.findById(req.params.id);
+  if (!existing) return res.status(404).json({ message: "Order not found" });
+  if (existing.status === "completed") {
+    return res.status(400).json({ message: "Cannot update billing on a paid order" });
+  }
+  const patch = {};
+  applyBillingFieldsFromBody(req.body, patch);
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ message: "Provide gstEnabled and/or numeric billing fields to update" });
+  }
+  const updated = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
+  if (updated.type === "delivery" && updated.code) {
+    await Delivery.findOneAndUpdate({ orderId: updated.code }, { total: Number(updated.total || 0) });
+  }
+  res.json({ ok: true });
+};
+
 exports.payment = async (req, res) => {
-  const row = await Order.findByIdAndUpdate(req.params.id, { status: "completed", paymentMethod: req.body.paymentMethod || "cash" }, { new: true });
+  const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
+  applyBillingFieldsFromBody(req.body, patch);
+  const row = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
   if (!row) return res.status(404).json({ message: "Order not found" });
+
+  if (row.type === "delivery" && row.code) {
+    await Delivery.findOneAndUpdate({ orderId: row.code }, { total: Number(row.total || 0) });
+  }
 
   // For dine-in orders, make table available after payment (no auto-creation of new order)
   if (row.type === "dine-in" && row.table) {

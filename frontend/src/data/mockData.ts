@@ -26,6 +26,8 @@ export interface Order {
   createdAt: string;
   customerName?: string;
   orderTaker?: string;
+  /** From API: false when POS placed order without GST */
+  gstEnabled?: boolean;
 }
 
 export interface CartItem {

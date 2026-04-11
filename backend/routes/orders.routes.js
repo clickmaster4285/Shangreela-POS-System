@@ -9,6 +9,7 @@ router.get("/open-by-table/:tableNumber", authRequired, orderController.openByTa
 router.patch("/:id/status", authRequired, orderController.patchStatus);
 router.patch("/:id/table", authRequired, orderController.changeTable);
 router.patch("/:id/add-items", authRequired, orderController.addItems);
+router.patch("/:id/billing-totals", authRequired, orderController.patchBillingTotals);
 router.post("/:id/payment", authRequired, orderController.payment);
 router.post("/:id/cancel", authRequired, orderController.cancel);
 router.delete("/:id", authRequired, orderController.remove);
