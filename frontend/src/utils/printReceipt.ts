@@ -14,6 +14,8 @@ export const RECEIPT_BUSINESS = {
   website: 'www.shangreelheights.com',
 } as const;
 
+const PRINT_FRAME_ID = 'pos-receipt-print-frame';
+
 export interface ReceiptData {
   orderId: string;
   orderType: string;
@@ -70,6 +72,7 @@ export function printReceipt(data: ReceiptData) {
   );
 
   const gstPct = Math.round(((data.gstRate ?? PKR_GST_RATE) || 0) * 100);
+
   const receiptHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -236,12 +239,31 @@ export function printReceipt(data: ReceiptData) {
 </body>
 </html>`;
 
-  const printWindow = window.open('', '_blank', 'width=420,height=720');
-  if (printWindow) {
-    printWindow.document.write(receiptHtml);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+  let iframe = document.getElementById(PRINT_FRAME_ID) as HTMLIFrameElement | null;
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = PRINT_FRAME_ID;
+    iframe.title = 'Print receipt';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText =
+      'position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;visibility:hidden;';
+    document.body.appendChild(iframe);
   }
+
+  const win = iframe.contentWindow;
+  if (!win) return;
+
+  const doc = win.document;
+  doc.open();
+  doc.write(receiptHtml);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      /* ignore */
+    }
+  }, 150);
 }

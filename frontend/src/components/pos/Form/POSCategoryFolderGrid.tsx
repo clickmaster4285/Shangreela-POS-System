@@ -17,7 +17,7 @@ export function POSCategoryFolderGrid({ categories, itemCount, onOpenFolder }: P
     <div className="flex flex-col h-full min-h-0">
       <p className="text-sm text-muted-foreground mb-3 shrink-0">Select a category to open its menu</p>
       <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pb-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-2">
           {displayCategories.map(cat => {
             const count = itemCount(cat);
             return (
