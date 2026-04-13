@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Order, TableInfo } from '@/data/mockData';
+import type { Order, TableInfo, MenuItem } from '@/data/mockData';
 import { toast } from 'sonner';
-import { ShoppingCart, X } from 'lucide-react';
+import { Search, ShoppingCart, X, Plus, Minus, Trash2, Edit3, ChevronDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
@@ -24,12 +24,20 @@ export default function OrderManagement() {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
   const [switchTableDialogOpen, setSwitchTableDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedOrderForSwitch, setSelectedOrderForSwitch] = useState<OrderWithDb | null>(null);
   const [selectedOrderForCancel, setSelectedOrderForCancel] = useState<OrderWithDb | null>(null);
+  const [editingOrder, setEditingOrder] = useState<OrderWithDb | null>(null);
+  const [editingItems, setEditingItems] = useState<Order['items']>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [addItemMenuId, setAddItemMenuId] = useState<string | null>(null);
+  const [addItemQty, setAddItemQty] = useState<number>(1);
+  const [replaceItemIndex, setReplaceItemIndex] = useState<number | null>(null);
   const [tableNumberInput, setTableNumberInput] = useState('');
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
 
@@ -54,6 +62,7 @@ export default function OrderManagement() {
         status: statusFilter,
         type: typeFilter,
       });
+      if (search.trim()) params.set('search', search.trim());
       const response = await api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
       setOrders(response.items);
       setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
@@ -78,12 +87,22 @@ export default function OrderManagement() {
     }
   };
 
+  const fetchMenuItems = async () => {
+    try {
+      const response = await api<PaginatedResponse<MenuItem & { id: string }>>('/menu?limit=500&page=1');
+      setMenuItems(response.items);
+    } catch (error) {
+      console.error('Failed to load menu items:', error);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
-  }, [page, statusFilter, typeFilter]);
+  }, [page, statusFilter, typeFilter, search]);
 
   useEffect(() => {
     fetchTables();
+    fetchMenuItems();
   }, []);
 
   const updateStatus = (id: string, status: Order['status']) => {
@@ -128,6 +147,97 @@ export default function OrderManagement() {
       .catch(err => toast.error(err instanceof Error ? err.message : 'Cancel failed'));
   };
 
+  const openEditDialog = (order: OrderWithDb) => {
+    if (!order.dbId) return;
+    if (['completed', 'cancelled'].includes(order.status)) {
+      toast.error('This order cannot be edited.');
+      return;
+    }
+
+    setEditingOrder(order);
+    setEditingItems(order.items.map(item => ({ ...item })));
+    setAddItemMenuId(null);
+    setAddItemQty(1);
+    setReplaceItemIndex(null);
+    setEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setEditDialogOpen(false);
+    setEditingOrder(null);
+    setEditingItems([]);
+    setAddItemMenuId(null);
+    setAddItemQty(1);
+    setReplaceItemIndex(null);
+  };
+
+  const updateEditingItemQuantity = (index: number, delta: number) => {
+    setEditingItems(prev =>
+      prev
+        .map((item, i) => i === index ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item)
+        .filter(item => item.quantity > 0)
+    );
+  };
+
+  const removeEditingItem = (index: number) => {
+    setEditingItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddItem = () => {
+    if (!addItemMenuId || addItemQty <= 0) {
+      toast.error('Select an item and quantity');
+      return;
+    }
+
+    const menuItem = menuItems.find(m => m.id === addItemMenuId);
+    if (!menuItem) return;
+
+    const newItem: Order['items'][0] = {
+      menuItem,
+      quantity: addItemQty,
+      notes: '',
+      requestId: '',
+      requestAt: new Date(),
+    };
+
+    if (replaceItemIndex !== null) {
+      setEditingItems(prev => prev.map((item, i) => i === replaceItemIndex ? newItem : item));
+      toast.success('Item replaced');
+      setReplaceItemIndex(null);
+    } else {
+      setEditingItems(prev => [...prev, newItem]);
+      toast.success('Item added');
+    }
+
+    setAddItemMenuId(null);
+    setAddItemQty(1);
+  };
+
+  const saveEditedOrder = () => {
+    if (!editingOrder?.dbId) return;
+    if (editingItems.length === 0) {
+      toast.error('Order must contain at least one item.');
+      return;
+    }
+
+    api(`/orders/${editingOrder.dbId}/edit-items`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        items: editingItems,
+        tax: editingOrder.tax,
+        discount: editingOrder.discount,
+        total: editingOrder.total,
+        gstEnabled: editingOrder.gstEnabled,
+      }),
+    })
+      .then(() => {
+        toast.success(`Order ${editingOrder.id} updated`);
+        fetchOrders();
+        closeEditDialog();
+      })
+      .catch(err => toast.error(err instanceof Error ? err.message : 'Failed to update order'));
+  };
+
   const openSwitchTableDialog = (order: OrderWithDb) => {
     if (order.type !== 'dine-in') {
       toast.error('Only dine-in orders can change tables');
@@ -170,6 +280,8 @@ export default function OrderManagement() {
   const tableMap = useMemo(() => {
     return new Map<number, TableInfo>(tables.map(table => [table.id, table]));
   }, [tables]);
+
+  const editingSubtotal = editingItems.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
 
   const nextStatus = (s: Order['status'], type?: Order['type']): Order['status'] | null => {
     const flow: Record<string, Order['status']> = {
@@ -236,6 +348,16 @@ export default function OrderManagement() {
             </button>
           ))}
         </div>
+        <div className="relative max-w-sm w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search order number..."
+            className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm"
+          />
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -274,19 +396,27 @@ export default function OrderManagement() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Total bill</p>
                 <p className="font-serif text-lg font-bold text-foreground">Rs. {grandTotalOnCard(order).toLocaleString()}</p>
               </div>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex gap-1 flex-wrap items-center">
                 {order.type === 'dine-in' && order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'served' && order.status !== 'taken away' && (
                   <button
                     onClick={() => openSwitchTableDialog(order as OrderWithDb)}
-                    className="bg-secondary/10 text-secondary px-3 py-2 rounded-xl text-xs font-medium hover:bg-secondary/20 transition-colors"
+                    className="bg-secondary/10 text-secondary px-3 py-2 rounded-xl text-xs font-medium hover:bg-secondary/20 transition-colors whitespace-nowrap"
                   >
                     Switch table
+                  </button>
+                )}
+                {order.status !== 'completed' && order.status !== 'cancelled' && (
+                  <button
+                    onClick={() => openEditDialog(order as OrderWithDb)}
+                    className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 px-3 py-2 rounded-xl text-xs font-semibold hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors whitespace-nowrap flex items-center gap-1"
+                  >
+                    <Edit3 className="w-4 h-4" /> Edit
                   </button>
                 )}
                 {nextStatus(order.status, order.type) && (
                   <button
                     onClick={() => updateStatus(order.id, nextStatus(order.status, order.type)!)}
-                    className="bg-primary text-primary-foreground px-3 py-2 rounded-xl text-xs font-medium hover:bg-secondary transition-colors capitalize"
+                    className="bg-primary text-primary-foreground px-3 py-2 rounded-xl text-xs font-medium hover:bg-secondary transition-colors capitalize whitespace-nowrap"
                   >
                     → {nextStatus(order.status, order.type)}
                   </button>
@@ -294,7 +424,7 @@ export default function OrderManagement() {
                 {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'served' && order.status !== 'taken away' && (
                   <button
                     onClick={() => openCancelDialog(order as OrderWithDb)}
-                    className="bg-destructive/10 text-destructive px-3 py-2 rounded-xl text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center gap-1"
+                    className="bg-destructive/10 text-destructive px-3 py-2 rounded-xl text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center gap-1 whitespace-nowrap"
                   >
                     <X className="w-3 h-3" /> Cancel
                   </button>
@@ -349,6 +479,129 @@ export default function OrderManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={closeCancelDialog}>Go back</AlertDialogCancel>
             <AlertDialogAction onClick={confirmCancelOrder}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={editDialogOpen} onOpenChange={value => { if (!value) closeEditDialog(); setEditDialogOpen(value); }}>
+        <AlertDialogContent className="max-h-[80vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Adjust quantities, remove items, or add/replace items in {editingOrder?.id}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            {/* Current items */}
+            {editingItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">This order has no items.</p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-foreground">Current items:</p>
+                <div className="space-y-2">
+                  {editingItems.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                      <div className="flex-1">
+                        <p className="font-medium text-foreground text-sm">{item.menuItem.name}</p>
+                        <p className="text-xs text-muted-foreground">Rs. {item.menuItem.price.toLocaleString()}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updateEditingItemQuantity(index, -1)}
+                          className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="w-5 text-center text-sm font-semibold">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateEditingItemQuantity(index, 1)}
+                          className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplaceItemIndex(index);
+                            setAddItemMenuId(null);
+                            setAddItemQty(1);
+                          }}
+                          className="rounded-lg border border-secondary/30 bg-secondary/10 px-2 py-1 text-secondary text-xs font-medium hover:bg-secondary/20 ml-1"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeEditingItem(index)}
+                          className="rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1 text-destructive hover:bg-destructive/20"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add/Replace item section */}
+            <div className="border-t border-border pt-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground">
+                {replaceItemIndex !== null ? 'Replace item' : 'Add new item'}
+              </p>
+              <div className="space-y-2">
+                <select
+                  value={addItemMenuId || ''}
+                  onChange={(e) => setAddItemMenuId(e.target.value || null)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select an item</option>
+                  {menuItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} - Rs. {item.price.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={addItemQty}
+                    onChange={(e) => setAddItemQty(Math.max(1, Number(e.target.value)))}
+                    placeholder="Qty"
+                    className="w-20 rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> {replaceItemIndex !== null ? 'Replace' : 'Add'}
+                  </button>
+                  {replaceItemIndex !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setReplaceItemIndex(null)}
+                      className="rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Subtotal */}
+            <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-semibold">Rs. {editingSubtotal.toLocaleString()}</span>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={closeEditDialog}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={saveEditedOrder}>Save changes</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

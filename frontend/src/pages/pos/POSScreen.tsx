@@ -28,6 +28,7 @@ export default function POSScreen() {
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [currentOrderForEdit, setCurrentOrderForEdit] = useState<{ dbId: string; id: string } | null>(null);
   const [deliveryCustomerName, setDeliveryCustomerName] = useState('');
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -65,7 +66,7 @@ export default function POSScreen() {
       setFloors(fs);
       if (fs.length && !fs.some(f => f.id === activeFloorId)) setActiveFloorId(fs[0].id);
     }
-  }, [floorsQuery.data]);
+  }, [floorsQuery.data, activeFloorId]);
 
   useEffect(() => {
     if (tablesQuery.data?.items) {
@@ -117,6 +118,10 @@ export default function POSScreen() {
     () => (selectedTableId != null ? tables.find(t => t.id === selectedTableId) ?? null : null),
     [selectedTableId, tables]
   );
+
+  useEffect(() => {
+    setCurrentOrderForEdit(null);
+  }, [selectedTableId, orderType]);
 
   const categoryLabels = useMemo(() => {
     const uniqueCategories = Array.from(new Set(menuItems.map(i => i.category))).sort((a, b) => a.localeCompare(b));
@@ -273,6 +278,47 @@ export default function POSScreen() {
       setCart(prev => prev.map(c => c.menuItem.id === noteItem ? { ...c, notes: noteText } : c));
       setNoteItem(null);
       setNoteText('');
+    }
+  };
+
+  const loadActiveTableOrder = async () => {
+    if (!selectedTable?.id) {
+      toast.error('Select a table first');
+      return;
+    }
+
+    try {
+      const response = await api<{
+        item: {
+          dbId: string;
+          id: string;
+          status: string;
+          type: 'dine-in';
+          table?: number;
+          items: Array<{ menuItem: MenuItem; quantity: number; notes?: string }>;
+        } | null;
+      }>(`/orders/open-by-table/${selectedTable.id}`);
+
+      if (!response.item?.dbId) {
+        toast.error('No active order found on this table');
+        return;
+      }
+      if (['completed', 'cancelled'].includes(response.item.status)) {
+        toast.error('Cannot edit this order');
+        return;
+      }
+
+      setCart(
+        (response.item.items || []).map(item => ({
+          menuItem: item.menuItem,
+          quantity: item.quantity || 1,
+          notes: item.notes || '',
+        }))
+      );
+      setCurrentOrderForEdit({ dbId: response.item.dbId, id: response.item.id });
+      toast.success(`Loaded order ${response.item.id} for editing`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load order');
     }
   };
 
@@ -757,6 +803,28 @@ export default function POSScreen() {
           </div>
 
           <div className="pt-2">
+            {selectedTable?.currentOrder && orderType === 'dine-in' && !currentOrderForEdit && (
+              <button
+                onClick={loadActiveTableOrder}
+                className="w-full mb-2 py-2.5 rounded-xl border border-primary text-primary text-xs font-medium hover:bg-primary/10 transition-colors"
+              >
+                Edit active order on {selectedTable.name}
+              </button>
+            )}
+            {currentOrderForEdit && (
+              <div className="mb-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-3 text-sm text-primary">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Editing order {currentOrderForEdit.id}. Save to update it.</span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentOrderForEdit(null)}
+                    className="text-xs underline"
+                  >
+                    Stop editing
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Hold button hidden for waiter-only flow */}
             {/* {hasAction('hold_order') && (
               <button onClick={() => { if (cart.length) { toast.info('Order held'); } }} className="py-2.5 rounded-xl bg-warning/10 text-warning text-xs font-medium hover:bg-warning/20 transition-colors flex items-center justify-center gap-1">
@@ -798,6 +866,21 @@ export default function POSScreen() {
 
                   const createOrAppend = async () => {
                     if (orderType === 'dine-in' && selectedTable?.id) {
+                      if (currentOrderForEdit?.dbId) {
+                        await api(`/orders/${currentOrderForEdit.dbId}/edit-items`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({
+                            items: cart,
+                            subtotal,
+                            tax: totalTaxAmount,
+                            discount: 0,
+                            total: grandTotal,
+                            gstEnabled,
+                          }),
+                        });
+                        return 'updated';
+                      }
+
                       const existing = await api<{ item: { dbId: string } | null }>(
                         `/orders/open-by-table/${selectedTable.id}`
                       );
@@ -841,6 +924,7 @@ export default function POSScreen() {
                     .then(mode => {
                       toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen');
                       setCart([]);
+                      setCurrentOrderForEdit(null);
                       if (orderType === 'delivery') {
                         setDeliveryCustomerName('');
                         setDeliveryPhone('');

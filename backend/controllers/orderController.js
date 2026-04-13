@@ -2,6 +2,8 @@ const { parsePagination, buildPaginatedResponse } = require("../utils/pagination
 const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { Order, Table, Delivery } = require("../models");
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
@@ -35,6 +37,10 @@ exports.list = async (req, res) => {
     const where = {};
     if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
     if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+    if (req.query.search) {
+      const search = String(req.query.search).trim();
+      if (search) where.code = { $regex: escapeRegex(search), $options: "i" };
+    }
     const rates = await getEffectiveTaxRates();
     const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
     res.json(
@@ -294,6 +300,54 @@ exports.addItems = async (req, res) => {
   } catch (error) {
     console.error("Add items error:", error);
     res.status(500).json({ message: error.message || "Failed to add items" });
+  }
+};
+
+exports.editItems = async (req, res) => {
+  try {
+    const row = await Order.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Order not found" });
+    const invalidStatuses = ["completed", "cancelled"];
+    if (invalidStatuses.includes(row.status)) {
+      return res.status(400).json({ message: "Cannot edit a completed or cancelled order." });
+    }
+
+    const incoming = Array.isArray(req.body.items) ? req.body.items : [];
+    const requestNo = (row.items || []).reduce((max, item) => {
+      const match = String(item.requestId || "").match(/-R(\d+)$/);
+      const n = match ? Number(match[1]) : 0;
+      return Number.isFinite(n) ? Math.max(max, n) : max;
+    }, 1);
+    const requestId = `${row.code}-R${requestNo + 1}`;
+    row.items = stampItemsForKitchen(incoming, requestId);
+    const rates = await getEffectiveTaxRates();
+    const totals = calculateGrandTotal(
+      row.items,
+      req.body.tax ?? row.tax,
+      req.body.discount ?? row.discount,
+      req.body.gstEnabled ?? row.gstEnabled,
+      rates,
+      row.type
+    );
+    row.subtotal = totals.subtotal;
+    row.tax = totals.tax;
+    row.discount = totals.discount;
+    row.gstAmount = totals.gstAmount;
+    row.serviceCharge = totals.serviceCharge;
+    row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
+    row.total = totals.grandTotal;
+    row.notes = req.body.notes ?? row.notes;
+    if (!row.orderTaker || row.orderTaker === "Unknown") {
+      row.orderTaker = req.user.name || req.user.email || "Unknown";
+    }
+    await row.save();
+    if (row.type === "delivery") {
+      await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
+    }
+    res.json({ ok: true, id: row.code, dbId: String(row._id) });
+  } catch (error) {
+    console.error("Edit items error:", error);
+    res.status(500).json({ message: error.message || "Failed to edit order items" });
   }
 };
 
