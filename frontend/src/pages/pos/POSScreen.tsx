@@ -38,6 +38,8 @@ export default function POSScreen() {
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');
   const [customItemQty, setCustomItemQty] = useState('1');
+  const [showDiscardPopup, setShowDiscardPopup] = useState(false);
+  const [pendingOrderType, setPendingOrderType] = useState<'dine-in' | 'takeaway' | 'delivery' | null>(null);
   const [gstEnabled, setGstEnabled] = useState(true);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const menuQuery = useQuery({
@@ -322,10 +324,33 @@ export default function POSScreen() {
     }
   };
 
+  const handleDiscardOrder = () => {
+    if (pendingOrderType) {
+      setOrderType(pendingOrderType);
+      if (pendingOrderType !== 'dine-in') {
+        setSelectedTableId(null);
+      }
+      setCart([]);
+      setCurrentOrderForEdit(null);
+    }
+    setShowDiscardPopup(false);
+    setPendingOrderType(null);
+  };
+
+  const handleCancelDiscard = () => {
+    setShowDiscardPopup(false);
+    setPendingOrderType(null);
+  };
+
   const handleOrderTypeChange = (type: 'dine-in' | 'takeaway' | 'delivery') => {
-    setOrderType(type);
-    if (type !== 'dine-in') {
-      setSelectedTableId(null);
+    if (cart.length > 0 && !currentOrderForEdit) {
+      setPendingOrderType(type);
+      setShowDiscardPopup(true);
+    } else {
+      setOrderType(type);
+      if (type !== 'dine-in') {
+        setSelectedTableId(null);
+      }
     }
   };
 
@@ -765,6 +790,34 @@ export default function POSScreen() {
           </div>
         )}
 
+        {/* Discard Order Popup */}
+        {showDiscardPopup && (
+          <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4">
+              <div className="text-center">
+                <h3 className="font-semibold text-lg text-foreground">Order Not Placed</h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Do you want to discard the order to move to the new screen?
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelDiscard}
+                  className="flex-1 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDiscardOrder}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                >
+                  Discard Order
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Totals */}
         <div className="border-t border-border p-3 space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
@@ -825,6 +878,7 @@ export default function POSScreen() {
                 </div>
               </div>
             )}
+
             {/* Hold button hidden for waiter-only flow */}
             {/* {hasAction('hold_order') && (
               <button onClick={() => { if (cart.length) { toast.info('Order held'); } }} className="py-2.5 rounded-xl bg-warning/10 text-warning text-xs font-medium hover:bg-warning/20 transition-colors flex items-center justify-center gap-1">
@@ -856,7 +910,18 @@ export default function POSScreen() {
               onClick={() => {
                 if (cart.length) {
                   if (orderType === 'dine-in' && !selectedTable?.id) {
-                    toast.error('Select a table first');
+                    toast.error('Table not selected', {
+                      style: {
+                        background: '#ef4444',
+                        color: 'white',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '16px 24px',
+                        minHeight: '80px'
+                      }
+                    });
                     return;
                   }
                   if (orderType === 'delivery' && (!deliveryCustomerName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim())) {
@@ -922,7 +987,18 @@ export default function POSScreen() {
 
                   createOrAppend()
                     .then(mode => {
-                      toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen');
+                      toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen', {
+                        style: {
+                          background: '#22c55e',
+                          color: 'white',
+                          fontSize: '18px',
+                          fontWeight: 'bold',
+                          border: 'none',
+                          borderRadius: '12px',
+                          padding: '16px 24px',
+                          minHeight: '80px'
+                        }
+                      });
                       setCart([]);
                       setCurrentOrderForEdit(null);
                       if (orderType === 'delivery') {
