@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { type CartItem, type MenuItem, type TableInfo } from '@/data/mockData';
 import {
   POSCategoryFolderGrid,
@@ -14,9 +15,10 @@ import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useCart } from '@/contexts/CartContext';
 
 export default function POSScreen() {
+  const { cart, setCart, showDiscardPopup, setShowDiscardPopup, pendingNavigation, setPendingNavigation } = useCart();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [floors, setFloors] = useState<{ id: string; name: string }[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
@@ -24,7 +26,6 @@ export default function POSScreen() {
   const [openFolder, setOpenFolder] = useState<string | null>(null);
   /** Inside **Pakistani**: pick Karahi or Handi before showing items */
   const [pakistaniSub, setPakistaniSub] = useState<PakistaniSubfolder | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
@@ -38,7 +39,6 @@ export default function POSScreen() {
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');
   const [customItemQty, setCustomItemQty] = useState('1');
-  const [showDiscardPopup, setShowDiscardPopup] = useState(false);
   const [pendingOrderType, setPendingOrderType] = useState<'dine-in' | 'takeaway' | 'delivery' | null>(null);
   const [gstEnabled, setGstEnabled] = useState(true);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
@@ -332,14 +332,23 @@ export default function POSScreen() {
       }
       setCart([]);
       setCurrentOrderForEdit(null);
+    } else if (pendingNavigation) {
+      // Handle navigation away from terminal
+      setCart([]);
+      setCurrentOrderForEdit(null);
+      // Navigate to the pending route
+      window.location.href = pendingNavigation;
+      return;
     }
     setShowDiscardPopup(false);
     setPendingOrderType(null);
+    setPendingNavigation(null);
   };
 
   const handleCancelDiscard = () => {
     setShowDiscardPopup(false);
     setPendingOrderType(null);
+    setPendingNavigation(null);
   };
 
   const handleOrderTypeChange = (type: 'dine-in' | 'takeaway' | 'delivery') => {

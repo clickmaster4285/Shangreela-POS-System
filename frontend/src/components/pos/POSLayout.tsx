@@ -27,7 +27,8 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
+import { useAuth, ROLE_LABELS } from '@/contexts/AuthContext';
 import { BrandHeader } from '@/components/branding/BrandHeader';
 import Logo from '@/components/branding/Logo';
 
@@ -65,6 +66,19 @@ const roleBadge: Record<string, string> = {
 export default function POSLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, loading, logout, hasPageAccess } = useAuth();
+  const { cart, setShowDiscardPopup, setPendingNavigation } = useCart();
+
+  const handleNavigation = (to: string) => {
+    // Check if we're currently on the terminal page and have items in cart
+    const isOnTerminal = window.location.pathname === '/pos/terminal';
+    if (isOnTerminal && cart.length > 0) {
+      setPendingNavigation(to);
+      setShowDiscardPopup(true);
+      return false; // Prevent navigation
+    }
+    setSidebarOpen(false);
+    return true; // Allow navigation
+  };
 
   if (loading) {
     return (
@@ -107,7 +121,11 @@ export default function POSLayout() {
               key={link.to}
               to={link.to}
               end={link.end}
-              onClick={() => setSidebarOpen(false)}
+              onClick={(e) => {
+                if (!handleNavigation(link.to)) {
+                  e.preventDefault();
+                }
+              }}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   isActive
@@ -123,7 +141,11 @@ export default function POSLayout() {
         </nav>
 
         <div className="p-3 space-y-0.5 border-t border-sidebar-border">
-          <Link to="/" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all">
+          <Link to="/" onClick={(e) => {
+            if (!handleNavigation('/')) {
+              e.preventDefault();
+            }
+          }} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all">
             <ArrowLeft className="w-4 h-4" /> Back to Website
           </Link>
           <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-destructive hover:bg-destructive/10 transition-all">

@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import POSLayout from "./components/pos/POSLayout.tsx";
@@ -39,15 +40,16 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/pos/login" element={<Login />} />
-            <Route path="/pos" element={<POSLayout />}>
-              <Route index element={<PageGuard page="dashboard"><POSDashboard /></PageGuard>} />
-              <Route path="terminal" element={<PageGuard page="terminal"><POSScreen /></PageGuard>} />
-              <Route path="orders" element={<PageGuard page="orders"><OrderManagement /></PageGuard>} />
-              <Route path="tables" element={<PageGuard page="tables"><TableManagement /></PageGuard>} />
+        <CartProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/pos/login" element={<Login />} />
+              <Route path="/pos" element={<POSLayout />}>
+                <Route index element={<PageGuard page="dashboard"><POSDashboard /></PageGuard>} />
+                <Route path="terminal" element={<PageGuard page="terminal"><POSScreen /></PageGuard>} />
+                <Route path="orders" element={<PageGuard page="orders"><OrderManagement /></PageGuard>} />
+                <Route path="tables" element={<PageGuard page="tables"><TableManagement /></PageGuard>} />
               <Route path="kitchen" element={<PageGuard page="kitchen"><KitchenDisplay /></PageGuard>} />
               <Route path="billing" element={<PageGuard page="billing"><Billing /></PageGuard>} />
               <Route path="menu" element={<PageGuard page="menu"><MenuManagement /></PageGuard>} />
@@ -69,6 +71,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        </CartProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
