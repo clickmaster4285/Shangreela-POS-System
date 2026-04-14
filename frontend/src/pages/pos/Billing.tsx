@@ -104,7 +104,7 @@ export default function Billing() {
 
   useEffect(() => {
     if (!selectedOrder?.dbId || selectedOrder.status === 'completed') return;
-    const sub = selectedOrder.items.reduce((s, i) => s + i.menuItem.price * i.quantity, 0);
+    const sub = selectedOrder.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
     const disc =
       discountMode === 'percent' ? sub * (discountValue / 100) : Math.min(Math.max(discountValue, 0), sub);
     const { gstAmount, totalTaxAmount, grandTotal, serviceCharge } = computePakistanTaxTotals(
@@ -160,7 +160,7 @@ export default function Billing() {
     );
   }
 
-  const subtotal = selectedOrder.items.reduce((s, i) => s + i.menuItem.price * i.quantity, 0);
+  const subtotal = selectedOrder.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
   const discountAmt = discountMode === 'percent'
     ? subtotal * (discountValue / 100)
     : Math.min(Math.max(discountValue, 0), subtotal);
@@ -293,10 +293,17 @@ export default function Billing() {
 
           <div className="rounded-xl border border-border/70 bg-muted/35 p-3 space-y-2 mb-4">
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">ORDER ITEMS</h3>
-            {selectedOrder.items.map((item, i) => (
-              <div key={i} className="flex justify-between text-sm">
-                <span>{item.quantity}× {item.menuItem.name}</span>
-                <span className="font-medium">Rs. {(item.menuItem.price * item.quantity).toLocaleString()}</span>
+            {selectedOrder.items.map((item: any, i) => (
+              <div key={i} className="flex justify-between text-sm py-1 border-b border-border/40 last:border-0">
+                <div className="flex-1">
+                  <p className="text-foreground">{item.quantity}× {item.menuItem.name}</p>
+                  {item.extraName && (
+                    <p className="text-[11px] text-primary font-bold">
+                      + {item.extraName} (Rs. {Number(item.extraPrice || 0).toLocaleString()})
+                    </p>
+                  )}
+                </div>
+                <span className="font-medium text-foreground">Rs. {((Number(item.menuItem.price) + Number(item.extraPrice || 0)) * item.quantity).toLocaleString()}</span>
               </div>
             ))}
           </div>

@@ -89,6 +89,12 @@ async function initializeRolePermissions() {
       actionPermissions: CASHIER_ACTIONS,
       dataVisibility: CASHIER_DATA,
     },
+    {
+      role: "store_manager",
+      pageAccess: ["dashboard", "terminal", "orders", "tables", "kitchen", "billing", "inventory", "reports", "expenses", "delivery", "outdoordelivery"],
+      actionPermissions: ["print_bill", "apply_discount", "hold_order", "change_table_status", "edit_menu"],
+      dataVisibility: ["view_all_orders", "view_reports", "view_staff"],
+    },
   ];
 
   for (const roleConfig of roles) {

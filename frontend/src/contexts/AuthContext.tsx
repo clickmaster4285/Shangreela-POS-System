@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, setToken, type PaginatedResponse } from '@/lib/api';
 
-export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier';
+export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier' | 'store_manager';
 
 export const ROLE_LABELS: Record<Role, string> = {
   superadmin: 'Superadmin',
   hassaan: 'Hassaan shb',
   fahad: 'Fahad shb',
   cashier: 'Cashier',
+  store_manager: 'Store Manager',
 };
 
 export const MANAGER_ROLES: Role[] = ['superadmin', 'hassaan', 'fahad'];
@@ -117,6 +118,11 @@ const DEFAULT_PERMISSIONS: PermissionsConfig = {
     actionPermissions: ['print_bill', 'apply_discount', 'hold_order', 'change_table_status'],
     dataVisibility: ['view_all_orders'],
   },
+  store_manager: {
+    pageAccess: ['dashboard', 'terminal', 'orders', 'tables', 'kitchen', 'billing', 'inventory', 'reports', 'expenses', 'delivery', 'outdoordelivery'],
+    actionPermissions: ['print_bill', 'apply_discount', 'hold_order', 'change_table_status', 'edit_menu'],
+    dataVisibility: ['view_all_orders', 'view_reports', 'view_staff'],
+  },
 };
 
 function normalizeEmail(email: string) {
@@ -132,6 +138,8 @@ function migrateRole(r: string): Role {
     cashier: 'cashier',
     hr: 'hassaan',
     waiter: 'fahad',
+    store_manager: 'store_manager',
+    manager: 'store_manager',
   };
   return map[r] ?? 'cashier';
 }
@@ -193,7 +201,7 @@ function migratePermissionsFromStorage(parsed: Record<string, RolePermissions>):
   if (parsed.hr && !parsed.hassaan) remapped.hassaan = parsed.hr;
   if (parsed.waiter && !parsed.fahad) remapped.fahad = parsed.waiter;
 
-  const roles: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier'];
+  const roles: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier', 'store_manager'];
   const out = { ...DEFAULT_PERMISSIONS };
   for (const role of roles) {
     const saved = remapped[role];
@@ -214,6 +222,7 @@ interface AuthContextType {
   hasDataAccess: (data: DataKey) => boolean;
   updatePermissions: (config: PermissionsConfig) => Promise<void>;
   addUser: (user: Omit<User, 'id'>, password: string) => Promise<void>;
+  updateUser: (id: string, updates: Partial<Omit<User, 'id'>> & { password?: string }) => Promise<void>;
   removeUser: (id: string) => Promise<void>;
   currentPermissions: RolePermissions | null;
 }
@@ -317,6 +326,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchSession();
   };
 
+  const updateUser = async (id: string, updates: Partial<Omit<User, 'id'>> & { password?: string }) => {
+    await api(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...updates,
+        email: updates.email ? normalizeEmail(updates.email) : undefined,
+        role: updates.role ? migrateRole(updates.role) : undefined,
+      }),
+    });
+    await fetchSession();
+  };
+
   const removeUser = async (id: string) => {
     await api(`/users/${id}`, { method: 'DELETE' });
     await fetchSession();
@@ -335,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasDataAccess,
       updatePermissions,
       addUser,
+      updateUser,
       removeUser,
       currentPermissions,
     }),

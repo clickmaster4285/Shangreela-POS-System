@@ -29,3 +29,17 @@ exports.remove = async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 };
+
+exports.update = async (req, res) => {
+  const { name, email, role, password } = req.body || {};
+  const updateData = { name, email: String(email || "").toLowerCase(), role };
+
+  if (password) {
+    updateData.passwordHash = await bcrypt.hash(String(password), 10);
+  }
+
+  const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  res.json({ id: String(user._id), name: user.name, email: user.email, role: user.role, avatar: user.avatar || "" });
+};

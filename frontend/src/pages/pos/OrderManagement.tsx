@@ -39,6 +39,8 @@ export default function OrderManagement() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [addItemMenuId, setAddItemMenuId] = useState<string | null>(null);
   const [addItemQty, setAddItemQty] = useState<number>(1);
+  const [addItemExtraName, setAddItemExtraName] = useState<string>('');
+  const [addItemExtraPrice, setAddItemExtraPrice] = useState<number | string>('');
   const [replaceItemIndex, setReplaceItemIndex] = useState<number | null>(null);
   const [tableNumberInput, setTableNumberInput] = useState('');
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
@@ -162,6 +164,8 @@ export default function OrderManagement() {
     setEditingItems(order.items.map(item => ({ ...item })));
     setAddItemMenuId(null);
     setAddItemQty(1);
+    setAddItemExtraName('');
+    setAddItemExtraPrice('');
     setReplaceItemIndex(null);
     setEditDialogOpen(true);
   };
@@ -172,6 +176,8 @@ export default function OrderManagement() {
     setEditingItems([]);
     setAddItemMenuId(null);
     setAddItemQty(1);
+    setAddItemExtraName('');
+    setAddItemExtraPrice('');
     setReplaceItemIndex(null);
     setItemSearch('');
   };
@@ -201,6 +207,8 @@ export default function OrderManagement() {
       menuItem,
       quantity: addItemQty,
       notes: '',
+      extraName: addItemExtraName,
+      extraPrice: Number(addItemExtraPrice) || 0,
       requestId: '',
       requestAt: new Date(),
     };
@@ -226,14 +234,23 @@ export default function OrderManagement() {
       return;
     }
 
+    const breakdown = billBreakdownForOrder({
+      items: editingItems,
+      discount: editingOrder.discount,
+      gstEnabled: editingOrder.gstEnabled,
+      type: editingOrder.type
+    }, taxRates);
+
     api(`/orders/${editingOrder.dbId}/edit-items`, {
       method: 'PATCH',
       body: JSON.stringify({
         items: editingItems,
-        tax: editingOrder.tax,
-        discount: editingOrder.discount,
-        total: editingOrder.total,
+        subtotal: breakdown.taxableAmount + breakdown.discountAmount,
+        tax: breakdown.totalTaxAmount,
+        discount: breakdown.discountAmount,
+        total: breakdown.grandTotal,
         gstEnabled: editingOrder.gstEnabled,
+        serviceCharge: breakdown.serviceCharge,
       }),
     })
       .then(() => {
@@ -531,6 +548,11 @@ export default function OrderManagement() {
                     <div key={index} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                       <div className="flex-1">
                         <p className="font-medium text-foreground text-sm">{item.menuItem.name}</p>
+                        {item.extraName && (
+                          <p className="text-[11px] text-primary font-bold">
+                            + {item.extraName} (Rs. {Number(item.extraPrice || 0).toLocaleString()})
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">Rs. {item.menuItem.price.toLocaleString()}</p>
                       </div>
                       <div className="flex items-center gap-1">
@@ -630,6 +652,29 @@ export default function OrderManagement() {
                     </div>
                   </div>
                 )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider ml-1">Extra Item</label>
+                    <input
+                      type="text"
+                      value={addItemExtraName}
+                      onChange={(e) => setAddItemExtraName(e.target.value)}
+                      placeholder="e.g. Extra Cheese"
+                      className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider ml-1">Extra Price (Rs.)</label>
+                    <input
+                      type="number"
+                      value={addItemExtraPrice}
+                      onChange={(e) => setAddItemExtraPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="e.g. 50"
+                      className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <input
                     type="number"

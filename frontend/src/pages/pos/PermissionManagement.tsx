@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth, ROLE_LABELS, type Role, type PageKey, type ActionKey, type DataKey, type PermissionsConfig, type RolePermissions } from '@/contexts/AuthContext';
-import { Shield, User, Plus, Trash2, X, Save, Check } from 'lucide-react';
+import { Shield, User, Plus, Trash2, X, Save, Check, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ALL_PAGES: { key: PageKey; label: string }[] = [
@@ -17,6 +17,7 @@ const ALL_PAGES: { key: PageKey; label: string }[] = [
   { key: 'hr', label: 'HR Management' },
   { key: 'delivery', label: 'Delivery Tracking' },
   { key: 'analytics', label: 'Sales Analytics' },
+  { key: 'expenses', label: 'Expenses' },
   { key: 'printers', label: 'Printers (×3)' },
   { key: 'postabs', label: 'POS tabs (×3)' },
   { key: 'giftcards', label: 'Gift & loyalty' },
@@ -47,16 +48,28 @@ const roleBadge: Record<Role, string> = {
   hassaan: 'bg-secondary/20 text-secondary-foreground',
   fahad: 'bg-accent/30 text-accent-foreground',
   cashier: 'bg-success/10 text-success',
+  store_manager: 'bg-amber-100/50 text-amber-700',
 };
 
-const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier'];
+const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'store_manager', 'cashier'];
 
 export default function PermissionManagement() {
-  const { users, permissions, updatePermissions, addUser, removeUser, user: currentUser } = useAuth();
+  const { 
+    users, 
+    permissions, 
+    updatePermissions, 
+    addUser, 
+    updateUser,
+    removeUser, 
+    user: currentUser 
+  } = useAuth();
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [draft, setDraft] = useState<RolePermissions | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'cashier' as Role });
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editUserData, setEditUserData] = useState({ name: '', email: '', password: '', role: 'cashier' as Role });
 
   const startEdit = (role: Role) => {
     setEditingRole(role);
@@ -107,7 +120,28 @@ export default function PermissionManagement() {
   const handleRemoveUser = async (id: string) => {
     if (id === currentUser?.id) { toast.error("Can't remove yourself"); return; }
     await removeUser(id);
-    toast.success('User removed');
+    toast.success('Staff removed');
+  };
+
+  const startEditUser = (u: any) => {
+    setEditingUser(u);
+    setEditUserData({ name: u.name, email: u.email, role: u.role, password: '' });
+    setShowEditUser(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser || !editUserData.name || !editUserData.email) return;
+    const updates: any = { 
+      name: editUserData.name, 
+      email: editUserData.email, 
+      role: editUserData.role 
+    };
+    if (editUserData.password) updates.password = editUserData.password;
+
+    await updateUser(editingUser.id, updates);
+    setShowEditUser(false);
+    setEditingUser(null);
+    toast.success('Staff updated');
   };
 
   const inputClass = "w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary";
@@ -149,8 +183,43 @@ export default function PermissionManagement() {
         </div>
       )}
 
-      {/* Role permission cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Edit user modal */}
+      {showEditUser && editingUser && (
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" style={{ boxShadow: 'var(--shadow-elevated)' }}>
+            <div className="flex justify-between items-center">
+              <h3 className="font-serif text-lg font-bold">Edit Staff Member</h3>
+              <button onClick={() => setShowEditUser(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Full Name</label>
+              <input className={inputClass} placeholder="Full Name" value={editUserData.name} onChange={e => setEditUserData({ ...editUserData, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Email Address</label>
+              <input className={inputClass} placeholder="Email" type="email" value={editUserData.email} onChange={e => setEditUserData({ ...editUserData, email: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Password (Leave blank to keep same)</label>
+              <input className={inputClass} placeholder="New Password" type="password" value={editUserData.password} onChange={e => setEditUserData({ ...editUserData, password: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Role</label>
+              <select className={inputClass} value={editUserData.role} onChange={e => setEditUserData({ ...editUserData, role: e.target.value as Role })}>
+                {ROLES_ORDER.map(r => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button onClick={handleUpdateUser} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors mt-2">
+              Update Staff
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {ROLES_ORDER.map(role => (
           <div key={role} className="pos-card">
             <div className="flex items-center justify-between mb-3">
@@ -285,11 +354,16 @@ export default function PermissionManagement() {
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${roleBadge[u.role]}`}>{ROLE_LABELS[u.role]}</span>
                 </td>
                 <td className="py-3 px-2 text-right">
-                  {u.id !== currentUser?.id && (
-                    <button onClick={() => handleRemoveUser(u.id)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-                      <Trash2 className="w-4 h-4" />
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => startEditUser(u)} className="p-2 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Edit Staff">
+                      <Pencil className="w-4 h-4" />
                     </button>
-                  )}
+                    {u.id !== currentUser?.id && (
+                      <button onClick={() => handleRemoveUser(u.id)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Remove Staff">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -201,8 +201,11 @@ export function printReceipt(data: ReceiptData) {
         item => `
       <div class="item-row">
         <span class="qty">${item.quantity}×</span>
-        <span class="name">${esc(item.menuItem.name)}</span>
-        <span class="amt">${fmtPKR(item.menuItem.price * item.quantity)}</span>
+        <span class="name">
+          ${esc(item.menuItem.name)}
+          ${item.extraName ? `<br/><span style="font-size:8px;font-weight:400;font-style:italic">+ ${esc(item.extraName)} (Rs. ${item.extraPrice})</span>` : ''}
+        </span>
+        <span class="amt">${fmtPKR((Number(item.menuItem.price) + Number(item.extraPrice || 0)) * item.quantity)}</span>
       </div>
       ${item.notes ? `<div class="item-notes">Note: ${esc(item.notes)}</div>` : ''}
     `
