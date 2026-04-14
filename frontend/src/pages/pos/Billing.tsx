@@ -234,13 +234,20 @@ export default function Billing() {
                     <div className="flex justify-between gap-4">
                       <span className="font-medium text-sm text-foreground">{o.id}</span>
                       <div className="text-right">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Bill</p>
-                        <p className="text-sm font-semibold text-foreground">Rs. {grandTotalForBillCard(o).toLocaleString()}</p>
+                        <p className="text-xs text-foreground font-bold uppercase tracking-[0.2em]">Bill</p>
+                        <p className="text-base font-bold text-foreground">Rs. {grandTotalForBillCard(o).toLocaleString()}</p>
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">{formatOrderDateTime(o.createdAt)}</p>
                     <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground capitalize">{o.type}{o.table ? ` • ${tableMap.get(o.table)?.name || `Table ${o.table}`}` : ''}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground capitalize">{o.type}</span>
+                      {o.table && (
+                        <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+                          {tableMap.get(o.table)?.name || `Table ${o.table}`}
+                        </span>
+                      )}
+                    </div>
                       <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o.status)}`}>
                         {getBillStatusLabel(o.status)}
                       </span>
@@ -262,10 +269,10 @@ export default function Billing() {
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
           <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-            <div className="flex justify-between text-muted-foreground"><span>Order</span><span>{selectedOrder.id}</span></div>
+            <div className="flex justify-between"><span className="font-bold text-foreground">Order</span><span className="text-foreground font-semibold">{selectedOrder.id}</span></div>
             <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(selectedOrder.createdAt)}</span></div>
             <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{selectedOrder.type}</span></div>
-            {selectedOrder.table && <div className="flex justify-between text-muted-foreground"><span>Table</span><span>{tableMap.get(selectedOrder.table)?.name || selectedOrder.table}</span></div>}
+            {selectedOrder.table && <div className="flex justify-between"><span className="font-bold text-foreground">Table</span><span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(selectedOrder.table)?.name || selectedOrder.table}</span></div>}
             {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
             <div className="flex justify-between text-muted-foreground items-center">
               <span>Status</span>
@@ -273,9 +280,9 @@ export default function Billing() {
                 {getBillStatusLabel(selectedOrder.status)}
               </span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Total bill</span>
-              <span>{fmt(grandTotal)}</span>
+            <div className="flex justify-between">
+              <span className="font-bold text-foreground text-base">Total Bill</span>
+              <span className="text-foreground font-bold text-base">{fmt(grandTotal)}</span>
             </div>
           </div>
 

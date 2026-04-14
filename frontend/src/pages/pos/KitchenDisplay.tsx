@@ -90,7 +90,14 @@ export default function KitchenDisplay() {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="font-semibold text-foreground text-lg">{order.id}</p>
-                <p className="text-xs text-muted-foreground capitalize">{order.type}{order.table ? ` • ${tableMap.get(order.table)?.name || `Table ${order.table}`}` : ''}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <p className="text-xs text-muted-foreground capitalize">{order.type}</p>
+                  {order.table && (
+                    <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+                      {tableMap.get(order.table)?.name || `Table ${order.table}`}
+                    </span>
+                  )}
+                </div>
                 {order.orderTaker && <p className="text-[10px] text-muted-foreground mt-1">Order taker: {order.orderTaker}</p>}
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">

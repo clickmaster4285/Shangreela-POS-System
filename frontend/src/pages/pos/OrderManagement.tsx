@@ -364,13 +364,19 @@ export default function OrderManagement() {
         {activeOrders.map(order => (
           <div key={order.id} className="pos-card space-y-3">
             <div className="flex justify-between items-start">
-              <div>
-                <p className="font-semibold text-foreground">{order.id}</p>
-                <p className="text-xs text-muted-foreground capitalize">
-                  {order.type}
-                  {order.table ? ` • ${tableMap.get(order.table)?.name || `Table ${order.table}`}` : ''}
-                </p>
-                <p className="text-xs text-muted-foreground">
+              <div className="flex-1">
+                <p className="font-bold text-lg text-foreground">{order.id}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <p className="text-sm text-muted-foreground capitalize font-medium">
+                    {order.type}
+                  </p>
+                  {order.table && (
+                    <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full text-sm font-bold">
+                      {tableMap.get(order.table)?.name || `Table ${order.table}`}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
                   {formatOrderDateTime(order.createdAt)}
                 </p>
               </div>
@@ -381,9 +387,9 @@ export default function OrderManagement() {
 
             <div className="space-y-1.5">
               {order.items.map((item, i) => (
-                <div key={i} className="flex justify-between text-sm">
-                  <span className="text-foreground">{item.quantity}× {item.menuItem.name}</span>
-                  <span className="text-muted-foreground">Rs. {(item.menuItem.price * item.quantity).toLocaleString()}</span>
+                <div key={i} className="flex justify-between text-base">
+                  <span className="text-foreground font-semibold">{item.quantity}× {item.menuItem.name}</span>
+                  <span className="text-muted-foreground font-semibold">Rs. {(item.menuItem.price * item.quantity).toLocaleString()}</span>
                 </div>
               ))}
             </div>
@@ -393,8 +399,8 @@ export default function OrderManagement() {
 
             <div className="flex justify-between items-center pt-2 border-t border-border gap-2">
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em]">Total bill</p>
-                <p className="font-serif text-lg font-bold text-foreground">Rs. {grandTotalOnCard(order).toLocaleString()}</p>
+                <p className="text-xs text-foreground font-bold uppercase tracking-[0.2em]">Total Bill</p>
+                <p className="font-serif text-xl font-bold text-foreground">Rs. {grandTotalOnCard(order).toLocaleString()}</p>
               </div>
               <div className="flex gap-1 flex-wrap items-center">
                 {order.type === 'dine-in' && order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'served' && order.status !== 'taken away' && (
