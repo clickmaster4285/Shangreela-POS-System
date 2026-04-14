@@ -352,14 +352,14 @@ export default function POSScreen() {
   };
 
   const handleOrderTypeChange = (type: 'dine-in' | 'takeaway' | 'delivery') => {
-    if (cart.length > 0 && !currentOrderForEdit) {
-      setPendingOrderType(type);
-      setShowDiscardPopup(true);
-    } else {
-      setOrderType(type);
-      if (type !== 'dine-in') {
-        setSelectedTableId(null);
-      }
+    // Allow switching order types without showing modal, just clear cart when switching
+    setOrderType(type);
+    if (type !== 'dine-in') {
+      setSelectedTableId(null);
+    }
+    // Clear the current order being edited when switching order types
+    if (type !== 'dine-in') {
+      setCurrentOrderForEdit(null);
     }
   };
 
