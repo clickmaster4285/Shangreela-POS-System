@@ -23,6 +23,8 @@ const orderSchema = new mongoose.Schema(
         notes: String,
         requestId: String,
         requestAt: Date,
+        extraName: String,
+        extraPrice: Number,
         menuItem: {
           id: String,
           name: String,

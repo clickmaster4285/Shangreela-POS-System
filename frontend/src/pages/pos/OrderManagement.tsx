@@ -6,6 +6,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { api, type PaginatedResponse } from '@/lib/api';
 import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 import { billBreakdownForOrder } from '@/utils/pakistanTax';
+import { useDebounce } from '@/hooks/use-debounce';
+import Fuse from 'fuse.js';
 
 type OrderWithDb = Order & { dbId?: string };
 
@@ -40,6 +42,8 @@ export default function OrderManagement() {
   const [replaceItemIndex, setReplaceItemIndex] = useState<number | null>(null);
   const [tableNumberInput, setTableNumberInput] = useState('');
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
+  const [itemSearch, setItemSearch] = useState('');
+  const debouncedMainSearch = useDebounce(search, 500);
 
   useEffect(() => {
     api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
@@ -98,7 +102,7 @@ export default function OrderManagement() {
 
   useEffect(() => {
     fetchOrders();
-  }, [page, statusFilter, typeFilter, search]);
+  }, [page, statusFilter, typeFilter, debouncedMainSearch]);
 
   useEffect(() => {
     fetchTables();
@@ -169,6 +173,7 @@ export default function OrderManagement() {
     setAddItemMenuId(null);
     setAddItemQty(1);
     setReplaceItemIndex(null);
+    setItemSearch('');
   };
 
   const updateEditingItemQuantity = (index: number, delta: number) => {
@@ -211,6 +216,7 @@ export default function OrderManagement() {
 
     setAddItemMenuId(null);
     setAddItemQty(1);
+    setItemSearch('');
   };
 
   const saveEditedOrder = () => {
@@ -280,6 +286,22 @@ export default function OrderManagement() {
   const tableMap = useMemo(() => {
     return new Map<number, TableInfo>(tables.map(table => [table.id, table]));
   }, [tables]);
+
+  const debouncedSearch = useDebounce(itemSearch, 300);
+
+  const filteredMenuItems = useMemo(() => {
+    const q = debouncedSearch.trim();
+    if (!q) return [];
+    
+    const fuse = new Fuse(menuItems, {
+      keys: ['name', 'category', 'description'],
+      threshold: 0.3,
+      useExtendedSearch: true,
+      ignoreLocation: true,
+    });
+
+    return fuse.search(q).map(result => result.item);
+  }, [menuItems, debouncedSearch]);
 
   const editingSubtotal = editingItems.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
 
@@ -557,19 +579,57 @@ export default function OrderManagement() {
               <p className="text-sm font-semibold text-foreground">
                 {replaceItemIndex !== null ? 'Replace item' : 'Add new item'}
               </p>
-              <div className="space-y-2">
-                <select
-                  value={addItemMenuId || ''}
-                  onChange={(e) => setAddItemMenuId(e.target.value || null)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">Select an item</option>
-                  {menuItems.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} - Rs. {item.price.toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={itemSearch}
+                    onChange={(e) => setItemSearch(e.target.value)}
+                    placeholder="Search item to add..."
+                    className="w-full pl-10 pr-3 py-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                  />
+                </div>
+
+                {itemSearch.trim() !== '' && (
+                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                    <div className="max-h-[200px] overflow-y-auto p-1.5 space-y-1 scrollbar-thin">
+                      {filteredMenuItems.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-4 text-center">
+                          {debouncedSearch === itemSearch ? 'No items found.' : 'Searching...'}
+                        </p>
+                      ) : (
+                        filteredMenuItems.map(item => {
+                          const isSelected = addItemMenuId === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setAddItemMenuId(item.id)}
+                              className={`w-full text-left px-3 py-2.5 rounded-lg transition-all border ${
+                                isSelected
+                                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                  : 'bg-card text-foreground border-transparent hover:bg-muted hover:border-border/60'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold truncate">{item.name}</p>
+                                  <p className={`text-[10px] uppercase tracking-wider ${isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                    {item.category}
+                                  </p>
+                                </div>
+                                <span className={`text-xs font-bold shrink-0 ${isSelected ? 'text-primary-foreground' : 'text-primary'}`}>
+                                  Rs. {item.price.toLocaleString()}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     type="number"

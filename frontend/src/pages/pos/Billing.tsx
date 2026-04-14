@@ -20,6 +20,7 @@ export default function Billing() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
+  const [paidAmount, setPaidAmount] = useState<number | string>('');
 
   const loadOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
@@ -88,6 +89,10 @@ export default function Billing() {
       setDiscountMode('percent');
       setDiscountValue(0);
     }
+  }, [selectedOrder?.id]);
+
+  useEffect(() => {
+    setPaidAmount('');
   }, [selectedOrder?.id]);
 
   const orderItemsKey = useMemo(
@@ -374,7 +379,11 @@ export default function Billing() {
               <input
                 type="checkbox"
                 checked={gstEnabled}
-                onChange={(e) => setGstEnabled(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setGstEnabled(val);
+                  localStorage.setItem('pos_gst_enabled', val.toString());
+                }}
                 className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
               />
               Include GST ({Math.round(taxRates.gstRate * 100)}%)
@@ -420,6 +429,54 @@ export default function Billing() {
               </button>
             </div>
           </div>
+
+          {/* Amount Received & Change Due (Cash Calculator) */}
+          {paymentMethod === 'cash' && (
+            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-primary mb-1 block">Amount Received (Rs.)</label>
+                  <input
+                    type="number"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 5000"
+                    className="w-full bg-background border border-primary/30 rounded-xl px-3 py-2.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Change Due (Return)</label>
+                  <div className={`w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm font-bold flex items-center ${Number(paidAmount) >= grandTotal ? 'text-success' : 'text-muted-foreground'}`}>
+                    {Number(paidAmount) >= grandTotal ? fmt(Number(paidAmount) - grandTotal) : 'Rs. 0'}
+                  </div>
+                </div>
+              </div>
+              {Number(paidAmount) > 0 && Number(paidAmount) < grandTotal && (
+                <p className="text-[11px] text-destructive mt-2 font-medium">
+                  Note: Received amount is less than total bill.
+                </p>
+              )}
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {[500, 1000, 2000, 5000].map(amt => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setPaidAmount(amt)}
+                    className="px-3 py-1.5 rounded-lg bg-background border border-primary/20 text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
+                  >
+                    + {amt}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setPaidAmount(Math.ceil(grandTotal / 500) * 500)}
+                  className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
+                >
+                  Round Up
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid sm:grid-cols-3 gap-2">
             <button

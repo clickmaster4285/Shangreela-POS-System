@@ -16,6 +16,8 @@ import { useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '@/contexts/CartContext';
+import { useDebounce } from '@/hooks/use-debounce';
+import Fuse from 'fuse.js';
 
 export default function POSScreen() {
   const { cart, setCart, showDiscardPopup, setShowDiscardPopup, pendingNavigation, setPendingNavigation } = useCart();
@@ -40,7 +42,14 @@ export default function POSScreen() {
   const [customItemPrice, setCustomItemPrice] = useState('');
   const [customItemQty, setCustomItemQty] = useState('1');
   const [pendingOrderType, setPendingOrderType] = useState<'dine-in' | 'takeaway' | 'delivery' | null>(null);
-  const [gstEnabled, setGstEnabled] = useState(true);
+  const [gstEnabled, setGstEnabled] = useState(() => {
+    const saved = localStorage.getItem('pos_gst_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pos_gst_enabled', gstEnabled.toString());
+  }, [gstEnabled]);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const menuQuery = useQuery({
     queryKey: ['pos-menu-items'],
@@ -116,6 +125,10 @@ export default function POSScreen() {
   const [folderItemSearch, setFolderItemSearch] = useState('');
   const [pakistaniSubSearch, setPakistaniSubSearch] = useState('');
 
+  const debouncedCategorySearch = useDebounce(categorySearch, 300);
+  const debouncedFolderItemSearch = useDebounce(folderItemSearch, 300);
+  const debouncedPakistaniSubSearch = useDebounce(pakistaniSubSearch, 300);
+
   const selectedTable: TableInfo | null = useMemo(
     () => (selectedTableId != null ? tables.find(t => t.id === selectedTableId) ?? null : null),
     [selectedTableId, tables]
@@ -133,16 +146,28 @@ export default function POSScreen() {
   }, [menuItems]);
 
   const filteredCategoryLabels = useMemo(() => {
-    const q = categorySearch.trim().toLowerCase();
+    const q = debouncedCategorySearch.trim();
     if (!q) return categoryLabels;
-    return categoryLabels.filter(label => label.toLowerCase().includes(q));
-  }, [categoryLabels, categorySearch]);
+    
+    const fuse = new Fuse(categoryLabels, {
+      threshold: 0.3,
+      useExtendedSearch: true,
+      ignoreLocation: true,
+    });
+    return fuse.search(q).map(r => r.item);
+  }, [categoryLabels, debouncedCategorySearch]);
 
   const filteredPakistaniSubfolders = useMemo((): PakistaniSubfolder[] => {
-    const q = pakistaniSubSearch.trim().toLowerCase();
+    const q = debouncedPakistaniSubSearch.trim();
     if (!q) return [...PAKISTANI_SUBFOLDERS];
-    return PAKISTANI_SUBFOLDERS.filter(s => s.toLowerCase().includes(q));
-  }, [pakistaniSubSearch]);
+    
+    const fuse = new Fuse(PAKISTANI_SUBFOLDERS as string[], {
+      threshold: 0.3,
+      useExtendedSearch: true,
+      ignoreLocation: true,
+    });
+    return fuse.search(q).map(r => r.item as PakistaniSubfolder);
+  }, [debouncedPakistaniSubSearch]);
 
   const itemCount = useCallback((label: string) => {
     if (label === 'All') return menuItems.length;
@@ -163,15 +188,17 @@ export default function POSScreen() {
   }, [openFolder, pakistaniSub, menuItems]);
 
   const displayFolderItems = useMemo(() => {
-    const q = folderItemSearch.trim().toLowerCase();
+    const q = debouncedFolderItemSearch.trim();
     if (!q) return folderItems;
-    return folderItems.filter(
-      i =>
-        i.name.toLowerCase().includes(q) ||
-        (i.description || '').toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q)
-    );
-  }, [folderItems, folderItemSearch]);
+
+    const fuse = new Fuse(folderItems, {
+      keys: ['name', 'description', 'category'],
+      threshold: 0.3,
+      useExtendedSearch: true,
+      ignoreLocation: true,
+    });
+    return fuse.search(q).map(r => r.item);
+  }, [folderItems, debouncedFolderItemSearch]);
 
   useEffect(() => {
     setFolderItemSearch('');

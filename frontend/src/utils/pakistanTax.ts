@@ -69,7 +69,7 @@ export function billBreakdownForOrder(
   },
   rates: Partial<PakistanTaxRates> = {}
 ): PakistanTaxBreakdown {
-  const subtotal = order.items.reduce((s, i) => s + Number(i.menuItem.price) * Number(i.quantity), 0);
+  const subtotal = order.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * Number(i.quantity), 0);
   return computePakistanTaxTotals(
     subtotal,
     Number(order.discount || 0),
