@@ -73,14 +73,16 @@ const svgToPngDataUrl = async (svgUrl: string, size = 256) => {
 };
 
 export default function Reports() {
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   const reportsQuery = useQuery({
-    queryKey: ['reports-dashboard', dateRange],
+    queryKey: ['reports-dashboard', startDate, endDate],
     queryFn: async () => {
       const [w, t, s] = await Promise.all([
-        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?range=${dateRange}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?range=${dateRange}`),
+        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}`),
         api<{
           revenue: number;
           profit: number;
@@ -89,7 +91,7 @@ export default function Reports() {
           totalDiscount: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
-        }>(`/dashboard/summary?range=${dateRange}`),
+        }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
       ]);
       return { weeklySalesData: w.items, topSellingItems: t.items, summary: s };
     },
@@ -121,7 +123,9 @@ export default function Reports() {
       logoPngDataUrl = undefined;
     }
     exportReportPdf({
-      range: dateRange,
+      range: 'custom',
+      customDateFrom: startDate,
+      customDateTo: endDate,
       generatedAt: new Date(),
       summary,
       revenueSeries: weeklySalesData,
@@ -138,10 +142,7 @@ export default function Reports() {
   };
 
   const revenueBreakdownLabel =
-    dateRange === 'today' ? 'Hourly Revenue Breakdown' :
-    dateRange === 'week' ? 'Daily Revenue Breakdown (Last 7 Days)' :
-    dateRange === 'month' ? 'Daily Revenue Breakdown (This Month)' :
-    'Monthly Revenue Breakdown (This Year)';
+    `Daily Revenue Breakdown (${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })})`;
 
   return (
     <>
@@ -254,14 +255,21 @@ export default function Reports() {
             <p className="text-sm text-muted-foreground">Sales, profit, and payment breakdowns from paid (completed) bills in the selected period.</p>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
-              {(['today', 'week', 'month', 'year'] as const).map(r => (
-                <button key={r} onClick={() => setDateRange(r)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {r}
-                </button>
-              ))}
+            <div className="flex gap-2 items-center bg-card border border-border rounded-xl p-2">
+              <label className="text-xs font-medium text-muted-foreground">From:</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+              />
+              <label className="text-xs font-medium text-muted-foreground">To:</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+              />
             </div>
             <button
               onClick={handleExportPdf}
@@ -279,7 +287,7 @@ export default function Reports() {
         <div className="print-only print-header">
           <h1 style={{ fontSize: '24px', marginBottom: '8px' }}>Restaurant Sales Report</h1>
           <p style={{ fontSize: '14px', color: '#666' }}>
-            Period: {dateRange.charAt(0).toUpperCase() + dateRange.slice(1)} 
+            Period: {new Date(startDate).toLocaleDateString('en-GB')} - {new Date(endDate).toLocaleDateString('en-GB')}
             | Generated: {new Date().toLocaleString()}
           </p>
         </div>

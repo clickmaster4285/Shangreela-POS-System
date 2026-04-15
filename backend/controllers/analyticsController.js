@@ -3,7 +3,7 @@ const { buildPaidOrdersQuery } = require("../utils/reportingQueries");
 
 exports.summary = async (req, res) => {
   const range = String(req.query.range || "all");
-  const orders = await Order.find(buildPaidOrdersQuery(range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(range, req.query.from, req.query.to)).lean();
   const revenue = orders.reduce((sum, o) => sum + Number(o.total || 0), 0);
   const totalDiscount = orders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
   const n = orders.length;
@@ -12,7 +12,7 @@ exports.summary = async (req, res) => {
 
 exports.orderTypeBreakdown = async (req, res) => {
   const range = String(req.query.range || "all");
-  const orders = await Order.find(buildPaidOrdersQuery(range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(range, req.query.from, req.query.to)).lean();
   const total = orders.length || 1;
   const counts = { "dine-in": 0, delivery: 0, takeaway: 0 };
   const revenue = { "dine-in": 0, delivery: 0, takeaway: 0 };

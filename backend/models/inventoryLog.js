@@ -6,6 +6,10 @@ const inventoryLogSchema = new mongoose.Schema(
     itemName: String,
     action: String,
     quantity: Number,
+    price: {
+      type: Number,
+      default: 0,
+    },
     note: String,
     timestamp: String,
     userId: String,

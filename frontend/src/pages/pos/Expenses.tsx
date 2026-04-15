@@ -62,39 +62,17 @@ export default function Expenses() {
   const [selectedReceiptIsImage, setSelectedReceiptIsImage] = useState(false);
   const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
   const uploadHost = apiBase.replace(/\/api$/, '');
-  const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'year'>('month');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | 'all'>('all');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const getDateRange = (filter: string) => {
-    const now = new Date();
-    const start = new Date();
-    switch (filter) {
-      case 'today':
-        start.setHours(0, 0, 0, 0);
-        break;
-      case 'week':
-        start.setDate(now.getDate() - now.getDay());
-        start.setHours(0, 0, 0, 0);
-        break;
-      case 'month':
-        start.setDate(1);
-        start.setHours(0, 0, 0, 0);
-        break;
-      case 'year':
-        start.setMonth(0, 1);
-        start.setHours(0, 0, 0, 0);
-        break;
-    }
-    return { from: start.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
-  };
-
   const fetchExpenses = useCallback(async () => {
     try {
-      const range = getDateRange(dateFilter);
-      const params = new URLSearchParams({ page: String(page), limit: '12', from: range.from, to: range.to });
+      const params = new URLSearchParams({ page: String(page), limit: '12', from: startDate, to: endDate });
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
       const response = await api<ExpensesResponse>(`/expenses?${params.toString()}`);
       setExpenses(response.items || []);
@@ -102,11 +80,11 @@ export default function Expenses() {
     } catch (error) {
       toast.error('Failed to load expenses');
     }
-  }, [page, dateFilter, categoryFilter]);
+  }, [page, startDate, endDate, categoryFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [dateFilter, categoryFilter]);
+  }, [startDate, endDate, categoryFilter]);
 
   useEffect(() => {
     fetchExpenses();
@@ -200,16 +178,21 @@ export default function Expenses() {
 
       {/* Filters */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
-          {(['today', 'week', 'month', 'year'] as const).map(d => (
-            <button
-              key={d}
-              onClick={() => setDateFilter(d)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateFilter === d ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              {d}
-            </button>
-          ))}
+        <div className="flex gap-2 items-center bg-card border border-border rounded-xl p-2">
+          <label className="text-xs font-medium text-muted-foreground">From:</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+          />
+          <label className="text-xs font-medium text-muted-foreground">To:</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+          />
         </div>
 
         <div className="flex gap-1 bg-card border border-border rounded-xl p-1">

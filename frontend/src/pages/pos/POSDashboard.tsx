@@ -10,16 +10,18 @@ type RecentOrderRow = { id: string; type: string; status: string; items: unknown
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 export default function POSDashboard() {
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard-overview', dateRange],
+    queryKey: ['dashboard-overview', startDate, endDate],
     queryFn: async () => {
       const [s, d, w, t, r] = await Promise.all([
-        api<{ revenue: number; profit: number; totalServiceCharges: number; totalDiscount: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; openOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>('/dashboard/summary?range=' + dateRange),
-        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?range=${dateRange}`),
-        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?range=${dateRange}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?range=${dateRange}`),
+        api<{ revenue: number; profit: number; totalServiceCharges: number; totalDiscount: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; openOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
+        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?from=${startDate}&to=${endDate}`),
+        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}`),
         api<{ items: RecentOrderRow[] }>('/dashboard/recent-orders'),
       ]);
       return { summary: s, dailySalesData: d.items, weeklySalesData: w.items, topSellingItems: t.items, sampleOrders: r.items };
@@ -46,7 +48,7 @@ export default function POSDashboard() {
     return groupOrdersByCalendarDay(rows);
   }, [sampleOrders]);
 
-  const rangeLabel = dateRange === 'today' ? "Today's" : dateRange === 'week' ? 'This week' : dateRange === 'month' ? 'This month' : 'This year';
+  const rangeLabel = `${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
   const stats = [
     { label: `${rangeLabel} paid revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
     { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp, change: '' },
@@ -65,14 +67,21 @@ export default function POSDashboard() {
           <h1 className="font-serif text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Welcome back. Here's your overview.</p>
         </div>
-        <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
-          {(['today', 'week', 'month', 'year'] as const).map(r => (
-            <button key={r} onClick={() => setDateRange(r)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              {r}
-            </button>
-          ))}
+        <div className="flex gap-2 items-center bg-card border border-border rounded-xl p-2">
+          <label className="text-xs font-medium text-muted-foreground">From:</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+          />
+          <label className="text-xs font-medium text-muted-foreground">To:</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+          />
         </div>
       </div>
 

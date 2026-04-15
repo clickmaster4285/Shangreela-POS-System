@@ -15,18 +15,20 @@ const pieColors = ['hsl(340,70%,21%)', 'hsl(40,70%,55%)', 'hsl(142,60%,40%)'];
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 export default function SalesAnalytics() {
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year'>('week');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   const analyticsQuery = useQuery({
-    queryKey: ['analytics-dashboard', dateRange],
+    queryKey: ['analytics-dashboard', startDate, endDate],
     queryFn: async () => {
       const [w, d, top, typeData, month, summary] = await Promise.all([
-        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?range=${dateRange}`),
-        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?range=${dateRange}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?range=${dateRange}`),
-        api<{ items: { name: string; value: number; revenue: number; count?: number }[] }>(`/analytics/order-type-breakdown?range=${dateRange}`),
+        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?from=${startDate}&to=${endDate}`),
+        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; value: number; revenue: number; count?: number }[] }>(`/analytics/order-type-breakdown?from=${startDate}&to=${endDate}`),
         api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
-        api<{ revenue: number; totalOrders: number; avgOrder: number; totalExpenses: number; cancelledOrders: number; totalDiscount: number }>(`/dashboard/summary?range=${dateRange}`),
+        api<{ revenue: number; totalOrders: number; avgOrder: number; totalExpenses: number; cancelledOrders: number; totalDiscount: number }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
       ]);
       return {
         weeklySalesData: w.items,
@@ -69,14 +71,21 @@ export default function SalesAnalytics() {
         </div>
         <div className="flex gap-2 flex-wrap">
           {/* Date range filter */}
-          <div className="flex gap-1 bg-card border border-border rounded-xl p-1">
-            {(['today', 'week', 'month', 'year'] as const).map(r => (
-              <button key={r} onClick={() => setDateRange(r)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${dateRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {r}
-              </button>
-            ))}
+          <div className="flex gap-2 items-center bg-card border border-border rounded-xl p-2">
+            <label className="text-xs font-medium text-muted-foreground">From:</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+            />
+            <label className="text-xs font-medium text-muted-foreground">To:</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
+            />
           </div>
           {/* Order type filter */}
           <div className="flex gap-1 bg-card border border-border rounded-xl p-1">

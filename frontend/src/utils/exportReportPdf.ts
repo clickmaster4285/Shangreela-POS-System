@@ -5,8 +5,10 @@ type RevenueRow = { day: string; revenue: number };
 type TopItemRow = { name: string; sold: number; revenue: number };
 
 export type ReportPdfPayload = {
-  range: 'today' | 'week' | 'month' | 'year';
+  range: 'today' | 'week' | 'month' | 'year' | 'custom';
   generatedAt: Date;
+  customDateFrom?: string;
+  customDateTo?: string;
   summary: {
     revenue: number;
     profit: number;
@@ -38,10 +40,15 @@ export type ReportPdfPayload = {
 const fmtPKR = (n: number) => `Rs. ${Math.round(Number(n || 0)).toLocaleString('en-PK')}`;
 const cap = (s: string) => s.slice(0, 1).toUpperCase() + s.slice(1);
 
-function rangeLabel(range: ReportPdfPayload['range']) {
-  if (range === 'today') return 'Today';
-  if (range === 'week') return 'This Week (Last 7 Days)';
-  if (range === 'month') return 'This Month';
+function rangeLabel(payload: ReportPdfPayload) {
+  if (payload.range === 'custom' && payload.customDateFrom && payload.customDateTo) {
+    const from = new Date(payload.customDateFrom).toLocaleDateString('en-GB');
+    const to = new Date(payload.customDateTo).toLocaleDateString('en-GB');
+    return `${from} - ${to}`;
+  }
+  if (payload.range === 'today') return 'Today';
+  if (payload.range === 'week') return 'This Week (Last 7 Days)';
+  if (payload.range === 'month') return 'This Month';
   return 'This Year';
 }
 
@@ -60,7 +67,7 @@ export function exportReportPdf(payload: ReportPdfPayload) {
 
   const brand = payload.business?.name || 'Restaurant POS';
   const title = 'Sales & Payments Report';
-  const sub = `Period: ${rangeLabel(payload.range)}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
+  const sub = `Period: ${rangeLabel(payload)}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
 
   // Header
   doc.setFillColor(primary[0], primary[1], primary[2]);
@@ -158,13 +165,15 @@ export function exportReportPdf(payload: ReportPdfPayload) {
 
   // Revenue breakdown table title depends on range
   const revenueTitle =
-    payload.range === 'today'
-      ? 'Hourly Revenue Breakdown'
-      : payload.range === 'week'
-        ? 'Daily Revenue Breakdown (Last 7 Days)'
-        : payload.range === 'month'
-          ? 'Daily Revenue Breakdown (This Month)'
-          : 'Monthly Revenue Breakdown (This Year)';
+    payload.range === 'custom'
+      ? `Daily Revenue Breakdown (${rangeLabel(payload)})`
+      : payload.range === 'today'
+        ? 'Hourly Revenue Breakdown'
+        : payload.range === 'week'
+          ? 'Daily Revenue Breakdown (Last 7 Days)'
+          : payload.range === 'month'
+            ? 'Daily Revenue Breakdown (This Month)'
+            : 'Monthly Revenue Breakdown (This Year)';
 
   autoTable(doc, {
     startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6,
@@ -205,7 +214,9 @@ export function exportReportPdf(payload: ReportPdfPayload) {
     columnStyles: { 0: { halign: 'right', cellWidth: 10 }, 2: { halign: 'right', cellWidth: 16 }, 3: { halign: 'right', cellWidth: 34 } },
   });
 
-  const fileName = `report-${payload.range}-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const fileName = payload.range === 'custom'
+    ? `report-${payload.customDateFrom}-to-${payload.customDateTo}.pdf`
+    : `report-${payload.range}-${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);
 }
 

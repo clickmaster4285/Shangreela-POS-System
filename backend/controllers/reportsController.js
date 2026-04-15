@@ -1,5 +1,5 @@
 const { Order, Delivery } = require("../models");
-const { buildPaidOrdersQuery } = require("../utils/reportingQueries");
+const { buildPaidOrdersQuery, parseCustomDateRange } = require("../utils/reportingQueries");
 
 const sumOrderTotal = (order) => Number(order.total || 0);
 
@@ -9,9 +9,37 @@ const startOfDay = (d) => {
   return x;
 };
 
-const buildRevenueSeries = (range, orders) => {
+const buildRevenueSeries = (range, orders, from, to) => {
   const now = new Date();
   const r = String(range || "week");
+
+  // Custom date range support
+  if (from || to) {
+    const startDate = from ? new Date(from) : new Date(now);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = to ? new Date(to) : new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+    
+    // Generate date buckets for the range
+    const totals = new Map();
+    const labels = [];
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      const key = current.toISOString().slice(0, 10);
+      const label = current.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      labels.push({ key, label });
+      totals.set(key, 0);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    // Aggregate orders
+    for (const o of orders) {
+      const key = startOfDay(o.createdAt).toISOString().slice(0, 10);
+      if (totals.has(key)) totals.set(key, totals.get(key) + sumOrderTotal(o));
+    }
+    
+    return labels.map((x) => ({ day: x.label, revenue: totals.get(x.key) || 0 }));
+  }
 
   if (r === "today") {
     const buckets = new Map();
@@ -84,12 +112,12 @@ const buildRevenueSeries = (range, orders) => {
 };
 
 exports.weeklySales = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
-  res.json({ items: buildRevenueSeries(req.query.range, orders) });
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
   const map = new Map();
   for (const o of orders) {
     for (const i of o.items || []) {

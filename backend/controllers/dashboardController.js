@@ -1,5 +1,5 @@
 const { Order, MenuItem, InventoryItem, Employee, Expense, TaxConfig } = require("../models");
-const { parseDateRange, buildPaidOrdersQuery } = require("../utils/reportingQueries");
+const { parseDateRange, parseCustomDateRange, buildPaidOrdersQuery } = require("../utils/reportingQueries");
 
 const getEffectiveTaxRates = async () => {
   const row = await TaxConfig.findOne({}).lean();
@@ -49,10 +49,38 @@ const startOfDay = (d) => {
   return x;
 };
 
-const buildRevenueSeries = (range, orders) => {
+const buildRevenueSeries = (range, orders, from, to) => {
   const now = new Date();
   const r = String(range || "week");
   const orderTotal = (o) => Number(o.total || 0);
+
+  // Custom date range support
+  if (from || to) {
+    const startDate = from ? new Date(from) : new Date(now);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = to ? new Date(to) : new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+    
+    // Generate date buckets for the range
+    const totals = new Map();
+    const labels = [];
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      const key = current.toISOString().slice(0, 10);
+      const label = current.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      labels.push({ key, label });
+      totals.set(key, 0);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    // Aggregate orders
+    for (const o of orders) {
+      const key = startOfDay(o.createdAt).toISOString().slice(0, 10);
+      if (totals.has(key)) totals.set(key, totals.get(key) + orderTotal(o));
+    }
+    
+    return labels.map((x) => ({ day: x.label, revenue: totals.get(x.key) || 0 }));
+  }
 
   if (r === "today") {
     const labels = [];
@@ -120,8 +148,10 @@ const buildRevenueSeries = (range, orders) => {
 
 exports.summary = async (req, res) => {
   const range = String(req.query.range || "all");
-  const dateFilter = parseDateRange(range);
-  const paidQuery = buildPaidOrdersQuery(range);
+  const from = req.query.from;
+  const to = req.query.to;
+  const dateFilter = from || to ? parseCustomDateRange(from, to) : parseDateRange(range);
+  const paidQuery = buildPaidOrdersQuery(range, from, to);
   const expenseQuery = dateFilter ? { createdAt: dateFilter } : {};
   const rates = await getEffectiveTaxRates();
   const [orders, menuCount, lowStock, staff, cancelledOrders, openOrders, expenses] = await Promise.all([
@@ -175,7 +205,7 @@ exports.summary = async (req, res) => {
 
 exports.salesDaily = async (req, res) => {
   const rates = await getEffectiveTaxRates();
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
   const buckets = new Map();
   for (let i = 9; i <= 20; i += 1) buckets.set(i, 0);
   for (const o of orders) {
@@ -191,12 +221,12 @@ exports.salesDaily = async (req, res) => {
 };
 
 exports.revenueWeekly = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range)).lean();
-  res.json({ items: buildRevenueSeries(req.query.range, orders) });
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
-  const items = buildTopMenuItems(await Order.find(buildPaidOrdersQuery(req.query.range)).lean());
+  const items = buildTopMenuItems(await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean());
   res.json({ items });
 };
 
