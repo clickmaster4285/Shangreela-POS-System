@@ -37,9 +37,32 @@ exports.list = async (req, res) => {
     const where = {};
     if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
     if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+
+    // Filter for today's orders only (default: true)
+    const todayOnly = req.query.today !== "false";
+    if (todayOnly) {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      where.createdAt = { $gte: startOfDay, $lt: endOfDay };
+    }
+
     if (req.query.search) {
       const search = String(req.query.search).trim();
-      if (search) where.code = { $regex: escapeRegex(search), $options: "i" };
+      if (search) {
+        // Check if search is a number (for table search)
+        const searchNum = Number(search);
+        if (!Number.isNaN(searchNum) && searchNum > 0) {
+          // Search by both order code and table number
+          where.$or = [
+            { code: { $regex: escapeRegex(search), $options: "i" } },
+            { table: searchNum }
+          ];
+        } else {
+          // Search by order code only
+          where.code = { $regex: escapeRegex(search), $options: "i" };
+        }
+      }
     }
     const rates = await getEffectiveTaxRates();
     const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);

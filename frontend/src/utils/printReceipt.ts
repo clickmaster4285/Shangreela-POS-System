@@ -38,6 +38,8 @@ export interface ReceiptData {
   customerName?: string;
   /** ISO — order placed time shown on invoice; print time shown separately when set */
   orderCreatedAt?: string;
+  amountPaid?: number;
+  changeDue?: number;
 }
 
 const fmtPKR = (v: number) =>
@@ -230,6 +232,16 @@ export function printReceipt(data: ReceiptData) {
     ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
+    ${
+      data.amountPaid !== undefined
+        ? `<tr class="sub"><td style="padding-top:4px">Amount Received</td><td style="padding-top:4px">${fmtPKR(data.amountPaid)}</td></tr>`
+        : ''
+    }
+    ${
+      data.changeDue !== undefined
+        ? `<tr class="sub"><td>Change Due (Return)</td><td>${fmtPKR(data.changeDue)}</td></tr>`
+        : ''
+    }
   </table>
 
 

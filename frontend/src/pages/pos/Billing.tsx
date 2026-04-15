@@ -12,26 +12,111 @@ import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrd
 export default function Billing() {
   const { hasAction } = useAuth();
   const queryClient = useQueryClient();
-  const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
+  const [orders, setOrders] = useState<(Order & { dbId?: string; printed?: boolean })[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string }) | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string; printed?: boolean }) | null>(null);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const [paidAmount, setPaidAmount] = useState<number | string>('');
+  const [printedOrderIds, setPrintedOrderIds] = useState<Set<string>>(new Set());
+  const [billingStatusFilter, setBillingStatusFilter] = useState<'all' | 'paid' | 'pending' | 'ready'>('all');
+
+  // Load printed order IDs and billing filter from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('printed_order_ids');
+    if (saved) {
+      try {
+        const ids = JSON.parse(saved);
+        if (Array.isArray(ids)) {
+          setPrintedOrderIds(new Set(ids));
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+    // Load billing status filter
+    const savedFilter = localStorage.getItem('billing_status_filter');
+    if (savedFilter && ['all', 'paid', 'pending', 'ready'].includes(savedFilter)) {
+      setBillingStatusFilter(savedFilter as 'all' | 'paid' | 'pending' | 'ready');
+    }
+  }, []);
+
+  // Save billing status filter to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('billing_status_filter', billingStatusFilter);
+  }, [billingStatusFilter]);
+
+  // Save printed order IDs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('printed_order_ids', JSON.stringify(Array.from(printedOrderIds)));
+  }, [printedOrderIds]);
+
+  // Mark an order as printed
+  const markOrderAsPrinted = (orderId: string) => {
+    setPrintedOrderIds(prev => new Set([...prev, orderId]));
+  };
+
+  // Check if an order is printed
+  const isOrderPrinted = (orderId: string) => printedOrderIds.has(orderId);
+
+  const getBillStatusLabel = (order?: Order & { printed?: boolean }) => {
+    if (!order) return 'Pending';
+    if (order.status === 'completed') return 'Paid';
+    if (order.printed || isOrderPrinted(order.id)) return 'Ready';
+    return 'Pending';
+  };
+
+  const getBillingStatusCategory = (order?: Order & { printed?: boolean }): 'paid' | 'pending' | 'ready' => {
+    if (!order) return 'pending';
+    if (order.status === 'completed') return 'paid';
+    if (order.printed || isOrderPrinted(order.id)) return 'ready';
+    return 'pending';
+  };
+
+  const getStatusBadgeClass = (order?: Order & { printed?: boolean }) => {
+    if (!order) return 'bg-warning/15 text-warning border-warning/30';
+    if (order.status === 'completed') return 'bg-success/15 text-success border-success/30';
+    if (order.printed || isOrderPrinted(order.id)) return 'bg-primary/15 text-primary border-primary/30';
+    return 'bg-warning/15 text-warning border-warning/30';
+  };
 
   const loadOrders = () =>
     api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
       const filteredOrders = r.items.filter(o => o.status !== 'cancelled');
-      setOrders(filteredOrders);
+      
+      // Add printed status to orders first so we can use it for sorting
+      const ordersWithPrinted = filteredOrders.map(o => ({
+        ...o,
+        printed: isOrderPrinted(o.id)
+      }));
+
+      // Sort: Pending (top) -> Ready -> Paid (bottom)
+      const sortedOrders = ordersWithPrinted.sort((a, b) => {
+        const getSortPriority = (order: Order & { printed?: boolean }) => {
+          if (order.status === 'completed') return 3; // Paid (Bottom)
+          if (order.printed || isOrderPrinted(order.id)) return 2; // Ready
+          return 1; // Pending (Top)
+        };
+
+        const aPriority = getSortPriority(a);
+        const bPriority = getSortPriority(b);
+
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        
+        // If same priority, sort by date (newest first)
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
+      setOrders(sortedOrders);
       setSelectedOrder(prev => {
         if (prev) {
-          const same = filteredOrders.find(a => a.id === prev.id);
+          const same = sortedOrders.find(a => a.id === prev.id);
           if (same) return same;
         }
-        return filteredOrders[0] ?? null;
+        return sortedOrders[0] ?? null;
       });
     });
 
@@ -100,7 +185,13 @@ export default function Billing() {
     [selectedOrder?.items],
   );
 
-  const billsByDay = useMemo(() => groupOrdersByCalendarDay(orders), [orders]);
+  // Filter orders based on billing status
+  const filteredOrders = useMemo(() => {
+    if (billingStatusFilter === 'all') return orders;
+    return orders.filter(o => getBillingStatusCategory(o) === billingStatusFilter);
+  }, [orders, billingStatusFilter]);
+
+  const billsByDay = useMemo(() => groupOrdersByCalendarDay(filteredOrders, true), [filteredOrders]);
 
   useEffect(() => {
     if (!selectedOrder?.dbId || selectedOrder.status === 'completed') return;
@@ -180,27 +271,35 @@ export default function Billing() {
     return billBreakdownForOrder(o, taxRates).grandTotal;
   };
 
-  const getBillStatusLabel = (status?: string) => (status === 'completed' ? 'Paid' : 'Pending');
   const pendingCount = orders.filter(o => o.status !== 'completed').length;
   const paidCount = orders.filter(o => o.status === 'completed').length;
-  const getStatusBadgeClass = (status?: string) =>
-    status === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30';
+  const readyCount = orders.filter(o => o.status !== 'completed' && (o.printed || isOrderPrinted(o.id))).length;
+
   const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4 overflow-hidden lg:h-[calc(100vh-7rem)]">
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
+      <div className="flex shrink-0 flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
           <p className="text-sm text-muted-foreground">Professional billing desk with live bill status and payment control.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => loadOrders().then(() => toast.success('Bills refreshed')).catch(() => toast.error('Failed to refresh bills'))}
-          className="px-3.5 py-2.5 rounded-xl border border-border bg-card text-xs font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors"
-        >
-          Refresh Bills
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status Filter */}
+          <div className="flex shrink-0 items-center gap-1 overflow-x-auto scrollbar-none bg-muted/40 p-1 rounded-full border border-border">
+             <button onClick={() => setBillingStatusFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All Bills</button>
+             <button onClick={() => setBillingStatusFilter('pending')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'pending' ? 'bg-warning text-warning-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Pending</button>
+             <button onClick={() => setBillingStatusFilter('ready')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'ready' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Ready</button>
+             <button onClick={() => setBillingStatusFilter('paid')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'paid' ? 'bg-success text-success-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Paid</button>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadOrders().then(() => toast.success('Bills refreshed')).catch(() => toast.error('Failed to refresh bills'))}
+            className="px-4 py-2.5 rounded-full border border-border bg-card text-xs font-bold hover:border-primary/40 hover:bg-primary/5 transition-colors"
+          >
+            Refresh Bills
+          </button>
+        </div>
       </div>
 
       <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
@@ -217,6 +316,8 @@ export default function Billing() {
           <p className="text-2xl font-bold text-success mt-1">{paidCount}</p>
         </div>
       </div>
+
+
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
         {/* Order selector & details */}
@@ -253,8 +354,8 @@ export default function Billing() {
                         </span>
                       )}
                     </div>
-                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o.status)}`}>
-                        {getBillStatusLabel(o.status)}
+                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o)}`}>
+                        {getBillStatusLabel(o)}
                       </span>
                     </div>
                   </button>
@@ -281,8 +382,8 @@ export default function Billing() {
             {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
             <div className="flex justify-between text-muted-foreground items-center">
               <span>Status</span>
-              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(selectedOrder.status)}`}>
-                {getBillStatusLabel(selectedOrder.status)}
+              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(selectedOrder)}`}>
+                {getBillStatusLabel(selectedOrder)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -517,7 +618,13 @@ export default function Billing() {
                 serviceChargeRate: taxRates.serviceChargeRate,
                 paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
                 orderCreatedAt: selectedOrder.createdAt,
+                amountPaid: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal) : undefined,
+                changeDue: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0) : undefined,
               });
+              // Mark order as printed
+              markOrderAsPrinted(selectedOrder.id);
+              // Update the order in the list to show printed status
+              setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, printed: true } : o));
               toast.success('Receipt sent to printer!');
             }} className="py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-muted/80 transition-colors">
               <Printer className="w-4 h-4" /> Print
@@ -540,7 +647,11 @@ export default function Billing() {
                 serviceChargeRate: taxRates.serviceChargeRate,
                 paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
                 orderCreatedAt: selectedOrder.createdAt,
+                amountPaid: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal) : undefined,
+                changeDue: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0) : undefined,
               });
+              // Mark order as printed
+              markOrderAsPrinted(selectedOrder.id);
               if (selectedOrder.dbId) {
                 api(`/orders/${selectedOrder.dbId}/payment`, {
                   method: 'POST',

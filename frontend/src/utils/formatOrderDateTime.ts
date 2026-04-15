@@ -21,8 +21,8 @@ export type CalendarDayGroup<T extends { createdAt: string }> = {
 };
 
 /** Newest day first; within each day, orders newest first. */
-export function groupOrdersByCalendarDay<T extends { createdAt: string }>(orders: T[]): CalendarDayGroup<T>[] {
-  const sorted = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export function groupOrdersByCalendarDay<T extends { createdAt: string }>(orders: T[], disableSort = false): CalendarDayGroup<T>[] {
+  const sorted = disableSort ? [...orders] : [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const map = new Map<string, T[]>();
   for (const o of sorted) {
     const d = new Date(o.createdAt);

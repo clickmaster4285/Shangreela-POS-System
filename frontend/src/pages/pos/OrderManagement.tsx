@@ -26,6 +26,7 @@ export default function OrderManagement() {
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [todayFilter, setTodayFilter] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
@@ -57,7 +58,7 @@ export default function OrderManagement() {
           serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
         });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const fetchOrders = async () => {
@@ -67,6 +68,7 @@ export default function OrderManagement() {
         limit: '12',
         status: statusFilter,
         type: typeFilter,
+        today: String(todayFilter),
       });
       if (search.trim()) params.set('search', search.trim());
       const response = await api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
@@ -104,7 +106,7 @@ export default function OrderManagement() {
 
   useEffect(() => {
     fetchOrders();
-  }, [page, statusFilter, typeFilter, debouncedMainSearch]);
+  }, [page, statusFilter, typeFilter, todayFilter, debouncedMainSearch]);
 
   useEffect(() => {
     fetchTables();
@@ -309,7 +311,7 @@ export default function OrderManagement() {
   const filteredMenuItems = useMemo(() => {
     const q = debouncedSearch.trim();
     if (!q) return [];
-    
+
     const fuse = new Fuse(menuItems, {
       keys: ['name', 'category', 'description'],
       threshold: 0.3,
@@ -342,9 +344,22 @@ export default function OrderManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
-        <p className="text-sm text-muted-foreground">Track and manage all dine-in and takeout orders.</p>
+      {/* Header with search */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
+          <p className="text-sm text-muted-foreground">Track and manage all dine-in and takeout orders.</p>
+        </div>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search order # or table #..."
+            className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm"
+          />
+        </div>
       </div>
 
       {/* Order type summary */}
@@ -366,7 +381,7 @@ export default function OrderManagement() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="flex gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
           {['all', 'pending', 'preparing', 'ready', 'served', 'taken away', 'completed', 'cancelled'].map(s => (
@@ -387,15 +402,20 @@ export default function OrderManagement() {
             </button>
           ))}
         </div>
-        <div className="relative max-w-sm w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="search"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search order number..."
-            className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm"
-          />
+        <div className="flex gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground self-center mr-1">Date:</span>
+          <button
+            onClick={() => setTodayFilter(true)}
+            className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${todayFilter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setTodayFilter(false)}
+            className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${!todayFilter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}
+          >
+            All Time
+          </button>
         </div>
       </div>
 
@@ -529,7 +549,7 @@ export default function OrderManagement() {
       </AlertDialog>
 
       <AlertDialog open={editDialogOpen} onOpenChange={value => { if (!value) closeEditDialog(); setEditDialogOpen(value); }}>
-        <AlertDialogContent className="max-h-[80vh] overflow-y-auto">
+        <AlertDialogContent className="max-h-[85vh] sm:max-w-3xl overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Edit order</AlertDialogTitle>
             <AlertDialogDescription>
@@ -614,40 +634,59 @@ export default function OrderManagement() {
                 </div>
 
                 {itemSearch.trim() !== '' && (
-                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                    <div className="max-h-[200px] overflow-y-auto p-1.5 space-y-1 scrollbar-thin">
+                  <div className="rounded-xl border border-border bg-muted/5 p-2 overflow-hidden">
+                    <div className="max-h-[300px] overflow-y-auto p-1 scrollbar-thin">
                       {filteredMenuItems.length === 0 ? (
                         <p className="text-xs text-muted-foreground py-4 text-center">
                           {debouncedSearch === itemSearch ? 'No items found.' : 'Searching...'}
                         </p>
                       ) : (
-                        filteredMenuItems.map(item => {
-                          const isSelected = addItemMenuId === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setAddItemMenuId(item.id)}
-                              className={`w-full text-left px-3 py-2.5 rounded-lg transition-all border ${
-                                isSelected
-                                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                  : 'bg-card text-foreground border-transparent hover:bg-muted hover:border-border/60'
-                              }`}
-                            >
-                              <div className="flex justify-between items-center gap-2">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold truncate">{item.name}</p>
-                                  <p className={`text-[10px] uppercase tracking-wider ${isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {filteredMenuItems.map(item => {
+                            const isSelected = addItemMenuId === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  const newItem: Order['items'][0] = {
+                                    menuItem: item,
+                                    quantity: 1,
+                                    notes: '',
+                                    extraName: '',
+                                    extraPrice: 0,
+                                    requestId: '',
+                                    requestAt: new Date(),
+                                  };
+                                  if (replaceItemIndex !== null) {
+                                    setEditingItems(prev => prev.map((oldItem, i) => i === replaceItemIndex ? newItem : oldItem));
+                                    toast.success('Item replaced');
+                                    setReplaceItemIndex(null);
+                                  } else {
+                                    setEditingItems(prev => [...prev, newItem]);
+                                    toast.success('Item added');
+                                  }
+                                  setItemSearch('');
+                                  setAddItemMenuId(null);
+                                }}
+                                className={`flex flex-col text-left p-2.5 rounded-xl transition-all border h-full ${isSelected
+                                  ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[0.98]'
+                                  : 'bg-card text-foreground border-border/50 hover:border-primary/50 hover:shadow-sm'
+                                  }`}
+                              >
+                                <div className="flex-1 min-w-0 w-full mb-2">
+                                  <p className="text-xs font-bold leading-tight line-clamp-2">{item.name}</p>
+                                  <p className={`text-[9px] mt-1 uppercase tracking-wider truncate font-medium ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
                                     {item.category}
                                   </p>
                                 </div>
-                                <span className={`text-xs font-bold shrink-0 ${isSelected ? 'text-primary-foreground' : 'text-primary'}`}>
+                                <div className={`text-xs font-black w-full text-right ${isSelected ? 'text-primary-foreground' : 'text-primary'}`}>
                                   Rs. {item.price.toLocaleString()}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   </div>

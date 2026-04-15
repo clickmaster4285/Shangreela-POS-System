@@ -25,7 +25,7 @@ export default function POSScreen() {
   const [floors, setFloors] = useState<{ id: string; name: string }[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   /** `null` = full-screen category folders; otherwise open that folder’s items */
-  const [openFolder, setOpenFolder] = useState<string | null>(null);
+  const [openFolder, setOpenFolder] = useState<string | null>('All');
   /** Inside **Pakistani**: pick Karahi or Handi before showing items */
   const [pakistaniSub, setPakistaniSub] = useState<PakistaniSubfolder | null>(null);
   const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
