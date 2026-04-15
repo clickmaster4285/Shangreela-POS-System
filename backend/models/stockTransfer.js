@@ -4,7 +4,6 @@ const stockTransferSchema = new mongoose.Schema(
   {
     transferNumber: {
       type: String,
-      required: true,
       unique: true,
     },
     fromLocation: {
