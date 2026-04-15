@@ -76,13 +76,14 @@ export default function Reports() {
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [showAllScreenItems, setShowAllScreenItems] = useState(false);
 
   const reportsQuery = useQuery({
     queryKey: ['reports-dashboard', startDate, endDate],
     queryFn: async () => {
       const [w, t, s] = await Promise.all([
         api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}&limit=999`),
         api<{
           revenue: number;
           profit: number;
@@ -481,19 +482,30 @@ export default function Reports() {
                  </tr>
               </thead>
               <tbody>
-                {topSellingItems.map((item, i) => (
+                {(showAllScreenItems ? topSellingItems : topSellingItems.slice(0, 10)).map((item, i) => {
+                  const actualIndex = showAllScreenItems ? topSellingItems.indexOf(item) : i;
+                  return (
                   <tr key={item.name} className="border-b border-border/50 last:border-0">
                     <td className="py-3 px-2">
-                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{actualIndex + 1}</span>
                      </td>
                     <td className="py-3 px-2 font-medium text-foreground">{item.name}</td>
                     <td className="py-3 px-2 text-muted-foreground">{item.sold}</td>
                     <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>
+          {topSellingItems.length > 10 && (
+            <button
+              onClick={() => setShowAllScreenItems(!showAllScreenItems)}
+              className="mt-4 px-4 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+            >
+              {showAllScreenItems ? `Show Less (${topSellingItems.length} items)` : `See More (${topSellingItems.length} items)`}
+            </button>
+          )}
         </div>
 
         {/* Payment Breakdown - Visible on screen */}

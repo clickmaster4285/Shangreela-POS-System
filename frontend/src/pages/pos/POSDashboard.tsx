@@ -13,6 +13,7 @@ export default function POSDashboard() {
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [showAllItems, setShowAllItems] = useState(false);
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard-overview', startDate, endDate],
@@ -21,7 +22,7 @@ export default function POSDashboard() {
         api<{ revenue: number; profit: number; totalServiceCharges: number; totalDiscount: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; openOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
         api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?from=${startDate}&to=${endDate}`),
         api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?from=${startDate}&to=${endDate}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}&limit=999`),
         api<{ items: RecentOrderRow[] }>('/dashboard/recent-orders'),
       ]);
       return { summary: s, dailySalesData: d.items, weeklySalesData: w.items, topSellingItems: t.items, sampleOrders: r.items };
@@ -183,10 +184,12 @@ export default function POSDashboard() {
         <div className="pos-card flex min-h-0 flex-col">
           <h3 className="font-semibold text-foreground text-sm mb-4 shrink-0">Top Selling Items</h3>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 max-h-[28rem] scrollbar-thin lg:max-h-[32rem]">
-            {topSellingItems.map((item, i) => (
+            {(showAllItems ? topSellingItems : topSellingItems.slice(0, 10)).map((item, i) => {
+              const actualIndex = showAllItems ? topSellingItems.indexOf(item) : i;
+              return (
               <div key={item.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{actualIndex + 1}</span>
                   <span className="text-sm text-foreground">{item.name}</span>
                 </div>
                 <div className="text-right">
@@ -194,8 +197,17 @@ export default function POSDashboard() {
                   <p className="text-xs text-muted-foreground">{item.sold} sold</p>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
+          {topSellingItems.length > 10 && (
+            <button
+              onClick={() => setShowAllItems(!showAllItems)}
+              className="mt-4 px-4 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors shrink-0"
+            >
+              {showAllItems ? `Show Less (${topSellingItems.length} items)` : `See More (${topSellingItems.length} items)`}
+            </button>
+          )}
         </div>
 
         <div className="pos-card flex flex-col">

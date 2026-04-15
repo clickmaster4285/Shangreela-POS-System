@@ -70,7 +70,7 @@ export default function OrderManagement() {
         type: typeFilter,
         today: String(todayFilter),
       });
-      if (search.trim()) params.set('search', search.trim());
+      // Don't send search to API - we'll filter client-side with fuzzy matching
       const response = await api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
       setOrders(response.items);
       setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
@@ -306,6 +306,50 @@ export default function OrderManagement() {
     return new Map<number, TableInfo>(tables.map(table => [table.id, table]));
   }, [tables]);
 
+  // Fuzzy search helper - matches characters in sequence
+  const fuzzyMatch = (text: string, query: string): boolean => {
+    let textIndex = 0;
+    let queryIndex = 0;
+    
+    while (textIndex < text.length && queryIndex < query.length) {
+      if (text[textIndex].toLowerCase() === query[queryIndex].toLowerCase()) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+    
+    return queryIndex === query.length;
+  };
+
+  // Filter orders based on search with fuzzy matching for tables
+  const filteredOrders = useMemo(() => {
+    if (!search.trim()) return orders;
+    
+    const query = search.toLowerCase().trim();
+    return orders.filter(order => {
+      // Exact match on order ID
+      if (order.id.toLowerCase().includes(query)) return true;
+      
+      // Fuzzy match on table name
+      if (order.table) {
+        const tableInfo = tableMap.get(order.table);
+        const tableName = tableInfo?.name || `Table ${order.table}`;
+        const tableNumber = String(order.table);
+        
+        if (fuzzyMatch(tableName.toLowerCase(), query) || tableNumber.includes(query)) {
+          return true;
+        }
+      }
+      
+      // Match on customer name if available
+      if (order.customerName && fuzzyMatch(order.customerName.toLowerCase(), query)) {
+        return true;
+      }
+      
+      return false;
+    });
+  }, [orders, search, tableMap]);
+
   const debouncedSearch = useDebounce(itemSearch, 300);
 
   const filteredMenuItems = useMemo(() => {
@@ -333,7 +377,10 @@ export default function OrderManagement() {
     return flow[s] || null;
   };
 
-  const activeOrders = orders.filter(o => o.type !== 'delivery');
+  const allActiveOrders = orders.filter(o => o.type !== 'delivery');
+  const activeOrders = filteredOrders.filter(o => o.type !== 'delivery');
+  const allDineInCount = allActiveOrders.filter(o => o.type === 'dine-in').length;
+  const allTakeawayCount = allActiveOrders.filter(o => o.type === 'takeaway').length;
   const dineInCount = activeOrders.filter(o => o.type === 'dine-in').length;
   const takeawayCount = activeOrders.filter(o => o.type === 'takeaway').length;
 
@@ -356,7 +403,7 @@ export default function OrderManagement() {
             type="search"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search order # or table #..."
+            placeholder="Search order ID, table (e.g., m5 matches mt-5, mh-7)..."
             className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm"
           />
         </div>
@@ -365,8 +412,8 @@ export default function OrderManagement() {
       {/* Order type summary */}
       <div className="grid sm:grid-cols-2 gap-4">
         {[
-          { label: 'Dine-in', count: dineInCount, color: 'text-primary' },
-          { label: 'Takeout', count: takeawayCount, color: 'text-success' },
+          { label: 'Dine-in', count: allDineInCount, color: 'text-primary' },
+          { label: 'Takeout', count: allTakeawayCount, color: 'text-success' },
         ].map(t => (
           <div key={t.label} className="pos-card flex items-center gap-4 cursor-pointer hover:border-primary/30" onClick={() => setTypeFilter(t.label.toLowerCase().replace('takeout', 'takeaway'))}>
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -386,7 +433,7 @@ export default function OrderManagement() {
           <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
           {['all', 'pending', 'preparing', 'ready', 'served', 'taken away', 'completed', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
-              {s} {s !== 'all' && `(${activeOrders.filter(o => o.status === s).length})`}
+              {s} {s !== 'all' && `(${allActiveOrders.filter(o => o.status === s).length})`}
             </button>
           ))}
         </div>

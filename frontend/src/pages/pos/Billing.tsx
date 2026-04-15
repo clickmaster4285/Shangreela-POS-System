@@ -23,6 +23,8 @@ export default function Billing() {
   const [paidAmount, setPaidAmount] = useState<number | string>('');
   const [printedOrderIds, setPrintedOrderIds] = useState<Set<string>>(new Set());
   const [billingStatusFilter, setBillingStatusFilter] = useState<'all' | 'paid' | 'pending' | 'ready'>('all');
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
 
   // Load printed order IDs and billing filter from localStorage on mount
   useEffect(() => {
@@ -185,13 +187,67 @@ export default function Billing() {
     [selectedOrder?.items],
   );
 
+  // Fuzzy search helper - matches characters in sequence
+  const fuzzyMatch = (text: string, query: string): boolean => {
+    let textIndex = 0;
+    let queryIndex = 0;
+    
+    while (textIndex < text.length && queryIndex < query.length) {
+      if (text[textIndex].toLowerCase() === query[queryIndex].toLowerCase()) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+    
+    return queryIndex === query.length;
+  };
+
   // Filter orders based on billing status
   const filteredOrders = useMemo(() => {
-    if (billingStatusFilter === 'all') return orders;
-    return orders.filter(o => getBillingStatusCategory(o) === billingStatusFilter);
-  }, [orders, billingStatusFilter]);
+    let result = orders;
+    
+    // Filter by billing status
+    if (billingStatusFilter !== 'all') {
+      result = result.filter(o => getBillingStatusCategory(o) === billingStatusFilter);
+    }
+    
+    // Filter by floor if selected
+    if (selectedFloor) {
+      result = result.filter(o => {
+        const tableInfo = tableMap.get(o.table);
+        return tableInfo?.floorId === selectedFloor;
+      });
+    }
+    
+    // Filter by table search query (using fuzzy search)
+    if (tableSearchQuery.trim()) {
+      const query = tableSearchQuery.toLowerCase().trim();
+      result = result.filter(o => {
+        const tableInfo = tableMap.get(o.table);
+        const tableName = tableInfo?.name || `Table ${o.table}`;
+        const tableNumber = String(o.table);
+        // Fuzzy search in table name and exact match in table number
+        return fuzzyMatch(tableName.toLowerCase(), query) || tableNumber.includes(query);
+      });
+    }
+    
+    return result;
+  }, [orders, billingStatusFilter, selectedFloor, tableSearchQuery, tableMap]);
 
   const billsByDay = useMemo(() => groupOrdersByCalendarDay(filteredOrders, true), [filteredOrders]);
+
+  const uniqueFloors = useMemo(() => {
+    // Default floors that are always available
+    const defaultFloors = [ ];
+    const floors = new Set<string>(defaultFloors);
+    
+    // Add any additional floors from tables
+    tables.forEach(table => {
+      if (table.floorId) floors.add(table.floorId);
+    });
+    
+    return Array.from(floors).sort();
+  }, [tables]);
 
   useEffect(() => {
     if (!selectedOrder?.dbId || selectedOrder.status === 'completed') return;
@@ -274,6 +330,10 @@ export default function Billing() {
   const pendingCount = orders.filter(o => o.status !== 'completed').length;
   const paidCount = orders.filter(o => o.status === 'completed').length;
   const readyCount = orders.filter(o => o.status !== 'completed' && (o.printed || isOrderPrinted(o.id))).length;
+  
+  const filteredPendingCount = filteredOrders.filter(o => o.status !== 'completed').length;
+  const filteredReadyCount = filteredOrders.filter(o => o.status !== 'completed' && (o.printed || isOrderPrinted(o.id))).length;
+  const filteredPaidCount = filteredOrders.filter(o => o.status === 'completed').length;
 
   const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
 
@@ -292,9 +352,47 @@ export default function Billing() {
              <button onClick={() => setBillingStatusFilter('ready')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'ready' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Ready</button>
              <button onClick={() => setBillingStatusFilter('paid')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'paid' ? 'bg-success text-success-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Paid</button>
           </div>
+
+          {/* Floor Filter */}
+          <div className="flex shrink-0 items-center gap-1 overflow-x-auto scrollbar-none bg-muted/40 p-1 rounded-full border border-border">
+            <button
+              onClick={() => setSelectedFloor(null)}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                selectedFloor === null
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All Floors
+            </button>
+            {uniqueFloors.map(floor => (
+              <button
+                key={floor}
+                onClick={() => setSelectedFloor(floor)}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  selectedFloor === floor
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {floor}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
-            onClick={() => loadOrders().then(() => toast.success('Bills refreshed')).catch(() => toast.error('Failed to refresh bills'))}
+            onClick={() => {
+              Promise.all([loadOrders(), loadTables()])
+                .then(() => {
+                  toast.success('Bills refreshed');
+                  queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+                  queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
+                  queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
+                  queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
+                })
+                .catch(() => toast.error('Failed to refresh bills'));
+            }}
             className="px-4 py-2.5 rounded-full border border-border bg-card text-xs font-bold hover:border-primary/40 hover:bg-primary/5 transition-colors"
           >
             Refresh Bills
@@ -305,24 +403,36 @@ export default function Billing() {
       <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Total Bills</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{orders.length}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{filteredOrders.length}{(selectedFloor || tableSearchQuery.trim()) && orders.length !== filteredOrders.length ? ` / ${orders.length}` : ''}</p>
         </div>
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Pending</p>
-          <p className="text-2xl font-bold text-warning mt-1">{pendingCount}</p>
+          <p className="text-2xl font-bold text-warning mt-1">{filteredPendingCount}{(selectedFloor || tableSearchQuery.trim()) && pendingCount !== filteredPendingCount ? ` / ${pendingCount}` : ''}</p>
         </div>
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Paid</p>
-          <p className="text-2xl font-bold text-success mt-1">{paidCount}</p>
+          <p className="text-2xl font-bold text-success mt-1">{filteredPaidCount}{(selectedFloor || tableSearchQuery.trim()) && paidCount !== filteredPaidCount ? ` / ${paidCount}` : ''}</p>
         </div>
       </div>
 
 
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
         {/* Order selector & details */}
         <div className="pos-card flex min-h-0 flex-col overflow-hidden p-3.5 shadow-sm">
           <h3 className="mb-3 shrink-0 px-1 font-semibold text-sm text-foreground">Bills by day</h3>
+          
+          {/* Table Search */}
+          <div className="mb-3 shrink-0">
+            <input
+              type="text"
+              placeholder="Search by table (e.g., m5 matches mt-5, mh-7)..."
+              value={tableSearchQuery}
+              onChange={(e) => setTableSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 scrollbar-thin">
             {billsByDay.map(group => (
               <div key={group.dayKey} className="space-y-2">
@@ -349,9 +459,16 @@ export default function Billing() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-muted-foreground capitalize">{o.type}</span>
                       {o.table && (
-                        <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
-                          {tableMap.get(o.table)?.name || `Table ${o.table}`}
-                        </span>
+                        <>
+                          <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+                            {tableMap.get(o.table)?.name || `Table ${o.table}`}
+                          </span>
+                          {tableMap.get(o.table)?.floorId && (
+                            <span className="bg-secondary/20 text-secondary px-2 py-0.5 rounded-full text-xs font-bold">
+                              {tableMap.get(o.table)?.floorId}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                       <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o)}`}>
@@ -366,7 +483,16 @@ export default function Billing() {
         </div>
 
         {/* Receipt */}
-        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-5 shadow-sm">
+        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-5 shadow-sm relative print:overflow-visible">
+          {/* Paid Watermark - Print only */}
+          {selectedOrder.status === 'completed' && (
+            <div className="hidden print:flex print:absolute print:inset-0 print:items-center print:justify-center print:pointer-events-none print:z-10 print:overflow-visible">
+              <div className="transform -rotate-45">
+                <p className="font-black tracking-wider" style={{ fontSize: '180px', lineHeight: '1', color: '#ef4444', opacity: 0.3, textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>PAID</p>
+              </div>
+            </div>
+          )}
+
           <div className="mb-5 shrink-0 border-b border-border border-dashed pb-4 text-center">
             <h2 className="font-serif text-xl font-bold text-foreground">Shangreela Heights</h2>
             <p className="text-xs text-muted-foreground">ling Mor Kahuta, Rawalpindi</p>
@@ -379,6 +505,7 @@ export default function Billing() {
             <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(selectedOrder.createdAt)}</span></div>
             <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{selectedOrder.type}</span></div>
             {selectedOrder.table && <div className="flex justify-between"><span className="font-bold text-foreground">Table</span><span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(selectedOrder.table)?.name || selectedOrder.table}</span></div>}
+            {selectedOrder.table && tableMap.get(selectedOrder.table)?.floorId && <div className="flex justify-between"><span className="font-bold text-foreground">Floor</span><span className="bg-secondary/20 text-secondary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(selectedOrder.table)?.floorId}</span></div>}
             {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
             <div className="flex justify-between text-muted-foreground items-center">
               <span>Status</span>
