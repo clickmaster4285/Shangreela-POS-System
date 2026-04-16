@@ -147,6 +147,12 @@ router.get("/orders", authRequired, async (req, res) => {
   const where = {};
   if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
   if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+
+  if (req.query.floorKey && req.query.floorKey !== "all") {
+    const tables = await Table.find({ floorKey: String(req.query.floorKey) }).select("number").lean();
+    const numbers = tables.map((t) => t.number);
+    where.table = { $in: numbers };
+  }
   
   if (req.query.today === "true") {
     const start = new Date();

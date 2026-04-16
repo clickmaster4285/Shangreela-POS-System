@@ -27,6 +27,8 @@ export default function OrderManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [todayFilter, setTodayFilter] = useState<boolean>(true);
+  const [selectedFloor, setSelectedFloor] = useState<string>('all');
+  const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
@@ -69,6 +71,7 @@ export default function OrderManagement() {
         status: statusFilter,
         type: typeFilter,
         today: String(todayFilter),
+        floorKey: selectedFloor,
       });
       // Don't send search to API - we'll filter client-side with fuzzy matching
       const response = await api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
@@ -104,13 +107,23 @@ export default function OrderManagement() {
     }
   };
 
+  const fetchFloors = async () => {
+    try {
+      const response = await api<PaginatedResponse<{ key: string; name: string }>>('/floors?limit=100');
+      setFloors(response.items);
+    } catch (error) {
+      console.error('Failed to load floors:', error);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
-  }, [page, statusFilter, typeFilter, todayFilter, debouncedMainSearch]);
+  }, [page, statusFilter, typeFilter, todayFilter, selectedFloor, debouncedMainSearch]);
 
   useEffect(() => {
     fetchTables();
     fetchMenuItems();
+    fetchFloors();
   }, []);
 
   const updateStatus = (id: string, status: Order['status']) => {
@@ -392,20 +405,41 @@ export default function OrderManagement() {
   return (
     <div className="space-y-6">
       {/* Header with search */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
           <p className="text-sm text-muted-foreground">Track and manage all dine-in and takeout orders.</p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="search"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search order ID, table (e.g., m5 matches mt-5, mh-7)..."
-            className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm"
-          />
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+          {/* Floor Selector */}
+          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border whitespace-nowrap overflow-x-auto scrollbar-none w-full sm:w-auto">
+            <button
+              onClick={() => setSelectedFloor('all')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${selectedFloor === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              All Floors
+            </button>
+            {floors.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setSelectedFloor(f.key)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${selectedFloor === f.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="search"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search ID, table..."
+              className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
         </div>
       </div>
 
