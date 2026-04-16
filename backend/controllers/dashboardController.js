@@ -212,7 +212,7 @@ exports.summary = async (req, res) => {
     lowStock,
     staff,
     totalExpenses,
-    expenseCount: expenses.length,
+    expenseCount,
     totalMenuOut,
     topMenuItems,
   });
