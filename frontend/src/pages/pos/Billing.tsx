@@ -15,6 +15,9 @@ export default function Billing() {
   const [orders, setOrders] = useState<(Order & { dbId?: string; printed?: boolean })[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string; printed?: boolean }) | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
@@ -44,12 +47,23 @@ export default function Billing() {
     if (savedFilter && ['all', 'paid', 'pending', 'ready'].includes(savedFilter)) {
       setBillingStatusFilter(savedFilter as 'all' | 'paid' | 'pending' | 'ready');
     }
+
+    // Load selected floor
+    const savedFloor = localStorage.getItem('selected_floor');
+    if (savedFloor) {
+      setSelectedFloor(savedFloor === 'null' ? null : savedFloor);
+    }
   }, []);
 
   // Save billing status filter to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('billing_status_filter', billingStatusFilter);
   }, [billingStatusFilter]);
+
+  // Save selected floor to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('selected_floor', selectedFloor === null ? 'null' : selectedFloor);
+  }, [selectedFloor]);
 
   // Save printed order IDs to localStorage whenever they change
   useEffect(() => {
@@ -85,8 +99,9 @@ export default function Billing() {
     return 'bg-warning/15 text-warning border-warning/30';
   };
 
-  const loadOrders = () =>
-    api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=200&page=1').then(r => {
+  const loadOrders = (pageNum = 1, append = false) => {
+    setLoading(true);
+    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?status=all&limit=100&page=${pageNum}`).then(r => {
       const filteredOrders = r.items.filter(o => o.status !== 'cancelled');
       
       // Add printed status to orders first so we can use it for sorting
@@ -95,32 +110,39 @@ export default function Billing() {
         printed: isOrderPrinted(o.id)
       }));
 
-      // Sort: Pending (top) -> Ready -> Paid (bottom)
-      const sortedOrders = ordersWithPrinted.sort((a, b) => {
-        const getSortPriority = (order: Order & { printed?: boolean }) => {
-          if (order.status === 'completed') return 3; // Paid (Bottom)
-          if (order.printed || isOrderPrinted(order.id)) return 2; // Ready
-          return 1; // Pending (Top)
-        };
-
-        const aPriority = getSortPriority(a);
-        const bPriority = getSortPriority(b);
-
-        if (aPriority !== bPriority) return aPriority - bPriority;
+      setOrders(prev => {
+        const next = append ? [...prev, ...ordersWithPrinted] : ordersWithPrinted;
         
-        // If same priority, sort by date (newest first)
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        // Sort: Pending (top) -> Ready -> Paid (bottom)
+        return next.sort((a, b) => {
+          const getSortPriority = (order: Order & { printed?: boolean }) => {
+            if (order.status === 'completed') return 3; // Paid (Bottom)
+            if (order.printed || isOrderPrinted(order.id)) return 2; // Ready
+            return 1; // Pending (Top)
+          };
+
+          const aPriority = getSortPriority(a);
+          const bPriority = getSortPriority(b);
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
       });
 
-      setOrders(sortedOrders);
-      setSelectedOrder(prev => {
-        if (prev) {
-          const same = sortedOrders.find(a => a.id === prev.id);
-          if (same) return same;
-        }
-        return sortedOrders[0] ?? null;
+      setHasMore(r.pagination.hasNext);
+      setPage(pageNum);
+      
+      setOrders(currentOrders => {
+         setSelectedOrder(prev => {
+          if (prev) {
+            const same = currentOrders.find(a => a.id === prev.id);
+            if (same) return same;
+          }
+          return currentOrders[0] ?? null;
+        });
+        return currentOrders;
       });
-    });
+    }).finally(() => setLoading(false));
+  };
 
   const loadTables = () =>
     api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500').then(r => {
@@ -477,6 +499,15 @@ export default function Billing() {
                     </div>
                   </button>
                 ))}
+                {hasMore && (
+                  <button
+                    onClick={() => loadOrders(page + 1, true)}
+                    disabled={loading}
+                    className="w-full py-3 mt-2 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-all disabled:opacity-50"
+                   >
+                    {loading ? 'Loading...' : 'Load More Bills'}
+                  </button>
+                )}
               </div>
             ))}
           </div>

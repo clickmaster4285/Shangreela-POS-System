@@ -14,4 +14,9 @@ const menuItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+menuItemSchema.index({ category: 1 });
+menuItemSchema.index({ available: 1 });
+menuItemSchema.index({ name: 1 });
+
 module.exports = mongoose.model("MenuItem", menuItemSchema);

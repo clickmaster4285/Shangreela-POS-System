@@ -36,7 +36,13 @@ export default function POSScreen() {
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [showTablePicker, setShowTablePicker] = useState(false);
-  const [activeFloorId, setActiveFloorId] = useState<string>('ground');
+  const [activeFloorId, setActiveFloorId] = useState<string>(() => {
+    return localStorage.getItem('pos_active_floor_id') || 'ground';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pos_active_floor_id', activeFloorId);
+  }, [activeFloorId]);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');

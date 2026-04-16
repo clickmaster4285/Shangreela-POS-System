@@ -38,4 +38,11 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+orderSchema.index({ status: 1 });
+orderSchema.index({ type: 1 });
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ table: 1 });
+orderSchema.index({ code: 1 }, { unique: true });
+
 module.exports = mongoose.model("Order", orderSchema);
