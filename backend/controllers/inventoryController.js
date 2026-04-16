@@ -288,12 +288,18 @@ exports.getCategories = async (_req, res) => {
   res.json({ categories });
 };
 
-// Get low stock items
+// Get low stock items with pagination
 exports.getLowStockItems = async (req, res) => {
-  const items = await InventoryItem.find({
+  const { page, limit, skip } = parsePagination(req.query);
+  const where = {
     $expr: { $lte: ["$quantity", "$minStock"] },
     isActive: true,
-  }).populate("supplier", "name").sort({ quantity: 1 }).lean();
+  };
 
-  res.json({ items: items.map((i) => ({ ...i, id: String(i._id) })) });
+  const [items, total] = await Promise.all([
+    InventoryItem.find(where).populate("supplier", "name").sort({ quantity: 1 }).skip(skip).limit(limit).lean(),
+    InventoryItem.countDocuments(where),
+  ]);
+
+  res.json(buildPaginatedResponse({ items: items.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };

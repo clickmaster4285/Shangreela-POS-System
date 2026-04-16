@@ -14,4 +14,9 @@ const expenseSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+expenseSchema.index({ category: 1 });
+expenseSchema.index({ paymentDate: -1 });
+expenseSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model("Expense", expenseSchema);

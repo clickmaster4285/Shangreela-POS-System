@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
@@ -76,7 +76,13 @@ export default function Reports() {
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
-  const [selectedFloor, setSelectedFloor] = useState('all');
+  const [selectedFloor, setSelectedFloor] = useState(() => {
+    return localStorage.getItem('reports_selected_floor') || 'all';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('reports_selected_floor', selectedFloor);
+  }, [selectedFloor]);
   const [showAllScreenItems, setShowAllScreenItems] = useState(false);
 
   const { data: floorsData } = useQuery({

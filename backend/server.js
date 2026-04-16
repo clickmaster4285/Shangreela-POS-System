@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const compression = require("compression");
 const path = require("path");
 const fs = require("fs");
 const { connectDb } = require("./config/db");
@@ -8,6 +9,8 @@ const routes = require("./routes");
 const { runAutoInitialization } = require("./utils/autoInitialization");
 const { port, frontendOrigin } = require("./config/config");
 const app = express();
+
+app.use(compression());
 
 // Uploads setup (your existing code)
 const uploadsPath = path.join(__dirname, "uploads");

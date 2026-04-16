@@ -50,9 +50,13 @@ exports.getAttendanceByDate = async (req, res) => {
   res.json({ items: items.map((i) => ({ ...i, id: String(i._id) })) });
 };
 
-exports.listLeaves = async (_req, res) => {
-  const rows = await LeaveRequest.find({}).sort({ createdAt: -1 }).lean();
-  res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
+exports.listLeaves = async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const [rows, total] = await Promise.all([
+    LeaveRequest.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    LeaveRequest.countDocuments({})
+  ]);
+  res.json(buildPaginatedResponse({ items: rows.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };
 
 exports.patchLeaveStatus = async (req, res) => {
@@ -65,9 +69,13 @@ exports.listLeaveBalances = async (_req, res) => {
   res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
 };
 
-exports.listSalary = async (_req, res) => {
-  const rows = await SalaryRecord.find({}).lean();
-  res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
+exports.listSalary = async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const [rows, total] = await Promise.all([
+    SalaryRecord.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    SalaryRecord.countDocuments({})
+  ]);
+  res.json(buildPaginatedResponse({ items: rows.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };
 
 exports.patchSalary = async (req, res) => {

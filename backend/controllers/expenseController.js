@@ -81,10 +81,25 @@ exports.summary = async (req, res) => {
     toDate.setDate(toDate.getDate() + 1);
     where.paymentDate = { ...where.paymentDate, $lt: toDate };
   }
-  const expenses = await Expense.find(where).lean();
+  const stats = await Expense.aggregate([
+    { $match: where },
+    {
+      $group: {
+        _id: "$category",
+        amount: { $sum: "$amount" },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
   const byCategory = {};
-  expenses.forEach((e) => {
-    byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+  let total = 0;
+  let count = 0;
+  stats.forEach((s) => {
+    byCategory[s._id] = s.amount;
+    total += s.amount;
+    count += s.count;
   });
-  res.json({ total: expenses.reduce((s, e) => s + e.amount, 0), byCategory, count: expenses.length });
+
+  res.json({ total, byCategory, count });
 };

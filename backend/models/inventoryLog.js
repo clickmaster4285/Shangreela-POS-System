@@ -17,4 +17,9 @@ const inventoryLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+inventoryLogSchema.index({ itemId: 1 });
+inventoryLogSchema.index({ createdAt: -1 });
+inventoryLogSchema.index({ action: 1 });
+
 module.exports = mongoose.model("InventoryLog", inventoryLogSchema);

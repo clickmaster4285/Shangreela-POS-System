@@ -161,17 +161,25 @@ exports.summary = async (req, res) => {
   const paidQuery = buildPaidOrdersQuery(range, from, to, tableNumbers);
   const expenseQuery = dateFilter ? { createdAt: dateFilter } : {};
   const rates = await getEffectiveTaxRates();
-  const [orders, menuCount, lowStock, staff, cancelledOrders, openOrders, expenses] = await Promise.all([
-    Order.find(paidQuery).lean(),
+  const [orders, menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats] = await Promise.all([
+    // Only fetch needed fields for financials calculation to save memory
+    Order.find(paidQuery)
+      .select("total subtotal discount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name createdAt")
+      .lean(),
     MenuItem.countDocuments({}),
     InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$minStock"] } }),
     Employee.countDocuments({ status: "active" }),
     Order.countDocuments({ status: "cancelled", ...(dateFilter ? { createdAt: dateFilter } : {}) }),
     Order.countDocuments({ status: { $nin: ["completed", "cancelled"] } }),
-    Expense.find(expenseQuery).lean(),
+    // Use aggregation for total expenses calculation
+    Expense.aggregate([
+      { $match: expenseQuery },
+      { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }
+    ]),
   ]);
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const totalExpenses = expenseStats[0]?.total || 0;
+  const expenseCount = expenseStats[0]?.count || 0;
   const revenue = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).total, 0);
   const totalServiceCharges = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).serviceCharge, 0);
   const paymentBreakdown = orders.reduce(
