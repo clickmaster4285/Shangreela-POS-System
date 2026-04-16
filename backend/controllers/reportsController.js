@@ -1,4 +1,4 @@
-const { Order, Delivery } = require("../models");
+const { Order, Delivery, MenuItem, Table } = require("../models");
 const { buildPaidOrdersQuery, parseCustomDateRange } = require("../utils/reportingQueries");
 
 const sumOrderTotal = (order) => Number(order.total || 0);
@@ -7,6 +7,12 @@ const startOfDay = (d) => {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
+};
+
+const getTableNumbers = async (floorKey) => {
+  if (!floorKey || floorKey === "all") return null;
+  const tables = await Table.find({ floorKey }).select("number").lean();
+  return tables.map((t) => t.number);
 };
 
 const buildRevenueSeries = (range, orders, from, to) => {
@@ -112,12 +118,17 @@ const buildRevenueSeries = (range, orders, from, to) => {
 };
 
 exports.weeklySales = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const [orders] = await Promise.all([
+    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean(),
+  ]);
+
   const map = new Map();
   for (const o of orders) {
     for (const i of o.items || []) {
@@ -128,7 +139,7 @@ exports.topItems = async (req, res) => {
       map.set(key, prev);
     }
   }
-  res.json({ items: [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sold - a.sold).slice(0, 10) });
+  res.json({ items: [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sold - a.sold) });
 };
 
 exports.outdoorDelivery = async (_req, res) => {

@@ -76,14 +76,22 @@ export default function Reports() {
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [selectedFloor, setSelectedFloor] = useState('all');
   const [showAllScreenItems, setShowAllScreenItems] = useState(false);
 
+  const { data: floorsData } = useQuery({
+    queryKey: ['floors-list'],
+    queryFn: () => api<{ items: { key: string; name: string }[] }>('/floors'),
+  });
+  const floors = floorsData?.items ?? [];
+
   const reportsQuery = useQuery({
-    queryKey: ['reports-dashboard', startDate, endDate],
+    queryKey: ['reports-dashboard', startDate, endDate, selectedFloor],
     queryFn: async () => {
+      const floorParam = selectedFloor !== 'all' ? `&floorKey=${selectedFloor}` : '';
       const [w, t, s] = await Promise.all([
-        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}&limit=999`),
+        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}${floorParam}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}${floorParam}`),
         api<{
           revenue: number;
           profit: number;
@@ -92,7 +100,7 @@ export default function Reports() {
           totalDiscount: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
-        }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
+        }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}`),
       ]);
       return { weeklySalesData: w.items, topSellingItems: t.items, summary: s };
     },
@@ -127,6 +135,7 @@ export default function Reports() {
       range: 'custom',
       customDateFrom: startDate,
       customDateTo: endDate,
+      floorName: selectedFloor !== 'all' ? floors.find(f => f.key === selectedFloor)?.name : undefined,
       generatedAt: new Date(),
       summary,
       revenueSeries: weeklySalesData,
@@ -271,6 +280,18 @@ export default function Reports() {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
               />
+              <div className="w-px h-4 bg-border mx-1" />
+              <label className="text-xs font-medium text-muted-foreground">Floor:</label>
+              <select
+                value={selectedFloor}
+                onChange={(e) => setSelectedFloor(e.target.value)}
+                className="bg-background border border-border rounded-lg px-2 py-1 text-xs outline-none"
+              >
+                <option value="all">All Floors</option>
+                {floors.map((f) => (
+                  <option key={f.key} value={f.key}>{f.name}</option>
+                ))}
+              </select>
             </div>
             <button
               onClick={handleExportPdf}
@@ -412,7 +433,7 @@ export default function Reports() {
 
           {/* Top Selling Items Table */}
           <table className="tabular-report">
-            <caption>Top Selling Items</caption>
+            <caption>Menu Items Sales</caption>
             <thead>
               <tr>
                 <th>Rank</th>
@@ -470,7 +491,7 @@ export default function Reports() {
 
         {/* Top Selling Items Table - Visible on screen */}
         <div className="pos-card no-print">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Top Selling Items</h3>
+          <h3 className="font-semibold text-foreground text-sm mb-4">Menu Items Sales</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -482,30 +503,19 @@ export default function Reports() {
                  </tr>
               </thead>
               <tbody>
-                {(showAllScreenItems ? topSellingItems : topSellingItems.slice(0, 10)).map((item, i) => {
-                  const actualIndex = showAllScreenItems ? topSellingItems.indexOf(item) : i;
-                  return (
+                {topSellingItems.map((item, i) => (
                   <tr key={item.name} className="border-b border-border/50 last:border-0">
                     <td className="py-3 px-2">
-                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{actualIndex + 1}</span>
+                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
                      </td>
                     <td className="py-3 px-2 font-medium text-foreground">{item.name}</td>
                     <td className="py-3 px-2 text-muted-foreground">{item.sold}</td>
                     <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                   </tr>
-                );
-                })}
+                ))}
               </tbody>
             </table>
           </div>
-          {topSellingItems.length > 10 && (
-            <button
-              onClick={() => setShowAllScreenItems(!showAllScreenItems)}
-              className="mt-4 px-4 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-            >
-              {showAllScreenItems ? `Show Less (${topSellingItems.length} items)` : `See More (${topSellingItems.length} items)`}
-            </button>
-          )}
         </div>
 
         {/* Payment Breakdown - Visible on screen */}

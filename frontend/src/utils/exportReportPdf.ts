@@ -9,6 +9,7 @@ export type ReportPdfPayload = {
   generatedAt: Date;
   customDateFrom?: string;
   customDateTo?: string;
+  floorName?: string;
   summary: {
     revenue: number;
     profit: number;
@@ -67,7 +68,8 @@ export function exportReportPdf(payload: ReportPdfPayload) {
 
   const brand = payload.business?.name || 'Restaurant POS';
   const title = 'Sales & Payments Report';
-  const sub = `Period: ${rangeLabel(payload)}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
+  const floorLine = payload.floorName ? `   •   Floor: ${payload.floorName}` : '';
+  const sub = `Period: ${rangeLabel(payload)}${floorLine}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
 
   // Header
   doc.setFillColor(primary[0], primary[1], primary[2]);
@@ -196,10 +198,10 @@ export function exportReportPdf(payload: ReportPdfPayload) {
     },
   });
 
-  // Top items
+  // Menu items sales
   autoTable(doc, {
     startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6,
-    head: [['#', 'Item', 'Units', 'Revenue (PKR)']],
+    head: [['#', 'Menu Item', 'Units Sold', 'Revenue (PKR)']],
     body: (payload.topItems || []).map((it, i) => [
       String(i + 1),
       String(it.name || ''),

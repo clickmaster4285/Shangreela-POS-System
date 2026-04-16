@@ -45,7 +45,7 @@ const parseCustomDateRange = (from, to) => {
 };
 
 /** Paid (completed) orders in the selected period — used for revenue, profit, charts. */
-const buildPaidOrdersQuery = (range, from, to) => {
+const buildPaidOrdersQuery = (range, from, to, tableNumbers = null) => {
   const query = { status: "completed" };
   
   // Support custom date range if from/to are provided
@@ -56,6 +56,11 @@ const buildPaidOrdersQuery = (range, from, to) => {
     // Legacy support for preset ranges
     const dateFilter = parseDateRange(range);
     if (dateFilter) query.createdAt = dateFilter;
+  }
+
+  // Filter by specific tables (floors) if provided
+  if (Array.isArray(tableNumbers)) {
+    query.table = { $in: tableNumbers };
   }
   
   return query;

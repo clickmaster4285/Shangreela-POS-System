@@ -1,4 +1,4 @@
-const { Order, MenuItem, InventoryItem, Employee, Expense, TaxConfig } = require("../models");
+const { Order, MenuItem, InventoryItem, Employee, Expense, TaxConfig, Table } = require("../models");
 const { parseDateRange, parseCustomDateRange, buildPaidOrdersQuery } = require("../utils/reportingQueries");
 
 const getEffectiveTaxRates = async () => {
@@ -9,6 +9,12 @@ const getEffectiveTaxRates = async () => {
     gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
     serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
   };
+};
+
+const getTableNumbers = async (floorKey) => {
+  if (!floorKey || floorKey === "all") return null;
+  const tables = await Table.find({ floorKey }).select("number").lean();
+  return tables.map((t) => t.number);
 };
 
 const normalizeOrderFinancials = (order, rates = { gstRate: 0.16, serviceChargeRate: 0.05 }) => {
@@ -39,8 +45,7 @@ const buildTopMenuItems = (orders) => {
   }
   return [...map.entries()]
     .map(([name, value]) => ({ name, ...value }))
-    .sort((a, b) => b.sold - a.sold)
-    .slice(0, 10);
+    .sort((a, b) => b.sold - a.sold);
 };
 
 const startOfDay = (d) => {
@@ -150,8 +155,10 @@ exports.summary = async (req, res) => {
   const range = String(req.query.range || "all");
   const from = req.query.from;
   const to = req.query.to;
+  const floorKey = req.query.floorKey;
+  const tableNumbers = await getTableNumbers(floorKey);
   const dateFilter = from || to ? parseCustomDateRange(from, to) : parseDateRange(range);
-  const paidQuery = buildPaidOrdersQuery(range, from, to);
+  const paidQuery = buildPaidOrdersQuery(range, from, to, tableNumbers);
   const expenseQuery = dateFilter ? { createdAt: dateFilter } : {};
   const rates = await getEffectiveTaxRates();
   const [orders, menuCount, lowStock, staff, cancelledOrders, openOrders, expenses] = await Promise.all([
@@ -181,7 +188,7 @@ exports.summary = async (req, res) => {
   );
   const totalMenuOut = orders.reduce((sum, o) => sum + (o.items || []).reduce((count, it) => count + Number(it.quantity || 0), 0), 0);
   const totalDiscount = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).discount, 0);
-  const topMenuItems = buildTopMenuItems(orders).slice(0, 5);
+  const topMenuItems = buildTopMenuItems(orders);
   const profit = revenue - totalExpenses;
 
   res.json({
@@ -205,7 +212,8 @@ exports.summary = async (req, res) => {
 
 exports.salesDaily = async (req, res) => {
   const rates = await getEffectiveTaxRates();
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean();
   const buckets = new Map();
   for (let i = 9; i <= 20; i += 1) buckets.set(i, 0);
   for (const o of orders) {
@@ -221,17 +229,27 @@ exports.salesDaily = async (req, res) => {
 };
 
 exports.revenueWeekly = async (req, res) => {
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean();
+  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
-  const items = buildTopMenuItems(await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to)).lean());
+  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const [orders] = await Promise.all([
+    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean(),
+  ]);
+  const items = buildTopMenuItems(orders);
   res.json({ items });
 };
 
-exports.recentOrders = async (_req, res) => {
-  const items = await Order.find({ status: { $ne: "cancelled" } }).sort({ createdAt: -1 }).limit(10).lean();
+exports.recentOrders = async (req, res) => {
+  const floorKey = req.query.floorKey;
+  const tableNumbers = await getTableNumbers(floorKey);
+  const query = { status: { $ne: "cancelled" } };
+  if (tableNumbers) query.table = { $in: tableNumbers };
+
+  const items = await Order.find(query).sort({ createdAt: -1 }).limit(10).lean();
   res.json({
     items: items.map((o) => ({
       id: o.code,
