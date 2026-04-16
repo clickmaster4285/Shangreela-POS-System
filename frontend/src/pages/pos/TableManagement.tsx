@@ -46,7 +46,13 @@ export default function TableManagement() {
 
   const [floorsState, setFloorsState] = useState<FloorInfo[]>([]);
   const [tablesState, setTablesState] = useState<TableInfo[]>([]);
-  const [floorId, setFloorId] = useState<string>('all');
+  const [floorId, setFloorId] = useState<string>(() => {
+    return localStorage.getItem('table_management_floor_id') || 'all';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('table_management_floor_id', floorId);
+  }, [floorId]);
 
   const [selectedTables, setSelectedTables] = useState<Set<number>>(new Set());
   const [bulkModal, setBulkModal] = useState(false);
