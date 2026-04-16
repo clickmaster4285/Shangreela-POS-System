@@ -27,7 +27,7 @@ export default function OrderManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [todayFilter, setTodayFilter] = useState<boolean>(true);
-  const [selectedFloor, setSelectedFloor] = useState<string>('all');
+  const [selectedFloor, setSelectedFloor] = useState<string>(() => localStorage.getItem('order_floor_filter') || 'all');
   const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -125,6 +125,10 @@ export default function OrderManagement() {
     fetchMenuItems();
     fetchFloors();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('order_floor_filter', selectedFloor);
+  }, [selectedFloor]);
 
   const updateStatus = (id: string, status: Order['status']) => {
     const order = orders.find(o => o.id === id) as (Order & { dbId?: string }) | undefined;
