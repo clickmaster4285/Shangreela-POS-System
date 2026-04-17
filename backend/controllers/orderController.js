@@ -7,6 +7,24 @@ const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliverie
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const resolveTableIdentifiers = async (rawTable) => {
+  if (rawTable === undefined || rawTable === null || rawTable === "") {
+    return { number: null, name: null };
+  }
+
+  const asNumber = Number(rawTable);
+  if (Number.isInteger(asNumber) && asNumber > 0) {
+    const tableByNumber = await Table.findOne({ number: asNumber }).select("name number").lean();
+    return { number: asNumber, name: tableByNumber?.name || null };
+  }
+
+  const asName = String(rawTable).trim();
+  if (!asName) return { number: null, name: null };
+  const tableByName = await Table.findOne({ name: asName }).select("name number").lean();
+  if (!tableByName) return { number: null, name: asName };
+  return { number: Number(tableByName.number), name: tableByName.name || asName };
+};
+
 const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
@@ -70,7 +88,7 @@ exports.list = async (req, res) => {
 
     if (req.query.floorKey && req.query.floorKey !== "all") {
       const floorKey = String(req.query.floorKey);
-      const floorTables = await Table.find({ floorKey }).select("number").lean();
+      const floorTables = await Table.find({ floorKey }).select("number name").lean();
       const floorTableNumbers = floorTables.map((t) => Number(t.number)).filter((n) => Number.isFinite(n));
       if (!floorTableNumbers.length) {
         return res.json(
@@ -191,9 +209,12 @@ exports.changeTable = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const payload = req.body || {};
+    const { number: tableNumber } = await resolveTableIdentifiers(payload.table);
 
-    if (payload.type === "dine-in" && payload.table) {
-      const tableNumber = Number(payload.table);
+    if (payload.type === "dine-in") {
+      if (!tableNumber) {
+        return res.status(400).json({ message: "Invalid dine-in table selected." });
+      }
       const existingOrder = await Order.findOne({
         table: tableNumber,
         type: "dine-in",
@@ -214,7 +235,7 @@ exports.create = async (req, res) => {
       code,
       type: payload.type || "dine-in",
       status: payload.status || "pending",
-      table: payload.table,
+      table: payload.type === "dine-in" ? tableNumber : payload.table,
       customerName: payload.customerName || "",
       orderTaker: req.user.name || req.user.email || "Unknown",
       notes: payload.notes || "",
@@ -229,9 +250,9 @@ exports.create = async (req, res) => {
       items,
     });
     
-    if (payload.type === "dine-in" && payload.table) {
+    if (payload.type === "dine-in" && tableNumber) {
       const tableUpdateResult = await Table.findOneAndUpdate(
-        { number: Number(payload.table) },
+        { number: tableNumber },
         { status: "occupied", currentOrder: code },
         { new: true }
       );
@@ -270,7 +291,8 @@ exports.create = async (req, res) => {
 
 exports.openByTable = async (req, res) => {
   try {
-    const tableNumber = Number(req.params.tableNumber);
+    const { number: tableNumber } = await resolveTableIdentifiers(req.params.tableNumber);
+    if (!tableNumber) return res.json({ item: null });
     const includeCompleted = String(req.query.includeCompleted || "") === "true";
     const where = {
       table: tableNumber,
