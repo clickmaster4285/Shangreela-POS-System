@@ -12,16 +12,34 @@ const resolveTableIdentifiers = async (rawTable) => {
     return { number: null, name: null };
   }
 
+  const raw = String(rawTable).trim();
+  if (!raw) return { number: null, name: null };
+
+  // Support table ObjectId values passed by some clients.
+  if (/^[a-fA-F0-9]{24}$/.test(raw)) {
+    const tableById = await Table.findById(raw).select("name number").lean();
+    if (tableById) {
+      return { number: Number(tableById.number), name: tableById.name || null };
+    }
+  }
+
   const asNumber = Number(rawTable);
   if (Number.isInteger(asNumber) && asNumber > 0) {
     const tableByNumber = await Table.findOne({ number: asNumber }).select("name number").lean();
     return { number: asNumber, name: tableByNumber?.name || null };
   }
 
-  const asName = String(rawTable).trim();
-  if (!asName) return { number: null, name: null };
+  const asName = raw;
   const tableByName = await Table.findOne({ name: asName }).select("name number").lean();
-  if (!tableByName) return { number: null, name: asName };
+  if (!tableByName) {
+    const tableByNameInsensitive = await Table.findOne({
+      name: { $regex: `^${escapeRegex(asName)}$`, $options: "i" },
+    })
+      .select("name number")
+      .lean();
+    if (!tableByNameInsensitive) return { number: null, name: asName };
+    return { number: Number(tableByNameInsensitive.number), name: tableByNameInsensitive.name || asName };
+  }
   return { number: Number(tableByName.number), name: tableByName.name || asName };
 };
 
@@ -160,7 +178,7 @@ exports.patchStatus = async (req, res) => {
 
 exports.changeTable = async (req, res) => {
   try {
-    const newTableNumber = Number(req.body.table);
+    const { number: newTableNumber } = await resolveTableIdentifiers(req.body.table);
     if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
       return res.status(400).json({ message: "Provide a valid table number." });
     }
