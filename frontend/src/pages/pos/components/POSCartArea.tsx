@@ -1,5 +1,6 @@
 import { Trash2, Minus, Plus, ShoppingBag, X } from 'lucide-react';
-import { type CartItem, type MenuItem, type TableInfo, COMMON_ADDONS } from '@/data/mockData';
+import { type CartItem, type MenuItem, type TableInfo } from '@/data/mockData';
+import { COMMON_ADDONS } from '@/data/posConstants';
 
 interface POSCartAreaProps {
   orderType: 'dine-in' | 'takeaway' | 'delivery';

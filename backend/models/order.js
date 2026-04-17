@@ -45,5 +45,7 @@ orderSchema.index({ createdAt: -1 });
 orderSchema.index({ table: 1 });
 orderSchema.index({ code: 1 }, { unique: true });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ table: 1, status: 1, createdAt: -1 });
+orderSchema.index({ type: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

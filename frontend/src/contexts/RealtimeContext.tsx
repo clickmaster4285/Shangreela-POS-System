@@ -32,15 +32,25 @@ function invalidateForScopes(
 
   if (hit("orders") || hit("tables")) {
     qc.invalidateQueries({ queryKey: ["pos-tables"] });
+    qc.invalidateQueries({ queryKey: ["pos-init-data"] });
+    qc.invalidateQueries({ queryKey: ["orders-init-data"] });
   }
 
   if (hit("menu")) {
     qc.invalidateQueries({ queryKey: ["pos-menu-items"] });
+    qc.invalidateQueries({ queryKey: ["pos-init-data"] });
+    qc.invalidateQueries({ queryKey: ["orders-init-data"] });
   }
 
   if (hit("floors") || hit("tables")) {
     qc.invalidateQueries({ queryKey: ["floors-list"] });
     qc.invalidateQueries({ queryKey: ["pos-floors"] });
+    qc.invalidateQueries({ queryKey: ["pos-init-data"] });
+    qc.invalidateQueries({ queryKey: ["orders-init-data"] });
+  }
+
+  if (hit("users")) {
+    qc.invalidateQueries({ queryKey: ["orders-init-data"] });
   }
 }
 

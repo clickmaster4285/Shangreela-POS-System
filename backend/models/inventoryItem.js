@@ -85,5 +85,7 @@ const inventoryItemSchema = new mongoose.Schema(
 // Index for faster queries
 inventoryItemSchema.index({ name: "text", category: 1 });
 inventoryItemSchema.index({ category: 1, isActive: 1 });
+inventoryItemSchema.index({ isActive: 1, createdAt: -1 });
+inventoryItemSchema.index({ supplier: 1, isActive: 1 });
 
 module.exports = mongoose.model("InventoryItem", inventoryItemSchema);

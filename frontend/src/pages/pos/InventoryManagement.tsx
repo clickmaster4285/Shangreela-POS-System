@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Package, AlertTriangle, Plus, Minus, Trash2, Search, Clock, TrendingDown, Archive, Truck, ArrowRightLeft, Edit2, X, Phone, Mail, MapPin, RotateCcw, Save } from 'lucide-react';
 import { type InventoryItem, type InventoryLog, type Supplier, type StockTransfer, inventoryCategories, transferCategories } from '@/data/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/use-submit-lock';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 type Tab = 'stock' | 'transfers' | 'alerts' | 'logs' | 'suppliers';
 
@@ -32,14 +33,9 @@ const BASE_UNITS = [
 ] as const;
 
 export default function InventoryManagement() {
+  const queryClient = useQueryClient();
   const { isLocked, runLocked } = useSubmitLock();
   const [tab, setTab] = useState<Tab>('stock');
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [logs, setLogs] = useState<InventoryLog[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [transfers, setTransfers] = useState<StockTransfer[]>([]);
-  const [locations, setLocations] = useState<string[]>([]);
-  
   const [search, setSearch] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('All');
@@ -68,12 +64,8 @@ export default function InventoryManagement() {
   const [logsPage, setLogsPage] = useState(1);
   const [transferPage, setTransferPage] = useState(1);
   const [supplierPage, setSupplierPage] = useState(1);
+  const [stockScrollTop, setStockScrollTop] = useState(0);
   
-  const [stockMeta, setStockMeta] = useState({ hasNext: false, hasPrev: false });
-  const [logsMeta, setLogsMeta] = useState({ hasNext: false, hasPrev: false });
-  const [transferMeta, setTransferMeta] = useState({ hasNext: false, hasPrev: false });
-  const [supplierMeta, setSupplierMeta] = useState({ hasNext: false, hasPrev: false });
-
   // Supplier Form State
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [supplierData, setSupplierData] = useState({
@@ -84,96 +76,68 @@ export default function InventoryManagement() {
     items: [] as string[]
   });
 
-  const fetchStock = async () => {
-    try {
+  const stockQuery = useQuery({
+    queryKey: ['inventory-stock', stockPage, search, catFilter, perishableOnly],
+    queryFn: async () => {
       const params = new URLSearchParams({
         page: String(stockPage),
-        limit: '12',
+        limit: '50',
         search,
         category: catFilter,
         perishableOnly: String(perishableOnly),
       });
-      const response = await api<PaginatedResponse<InventoryItem>>(`/inventory/items?${params.toString()}`);
-      setInventory(response.items);
-      setStockMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
-    } catch (error) {
-      toast.error('Failed to load inventory');
-    }
-  };
+      return api<PaginatedResponse<InventoryItem>>(`/inventory/items?${params.toString()}`);
+    },
+    enabled: tab === 'stock' || tab === 'alerts',
+  });
 
-  const fetchSuppliers = async () => {
-    try {
+  const suppliersQuery = useQuery({
+    queryKey: ['inventory-suppliers', supplierPage, supplierSearch],
+    queryFn: async () => {
       const params = new URLSearchParams({
         page: String(supplierPage),
-        limit: '9',
+        limit: '30',
         search: supplierSearch,
       });
-      const response = await api<PaginatedResponse<Supplier>>(`/inventory/suppliers?${params.toString()}`);
-      setSuppliers(response.items || []);
-      setSupplierMeta({ 
-        hasNext: response.pagination?.hasNext || false, 
-        hasPrev: response.pagination?.hasPrev || false 
-      });
-    } catch (error) {
-      console.error("Supplier fetch error:", error);
-      toast.error('Failed to load suppliers');
-    }
-  };
+      return api<PaginatedResponse<Supplier>>(`/inventory/suppliers?${params.toString()}`);
+    },
+    enabled: tab === 'suppliers' || showAddForm || !!restockItem,
+  });
 
-  const fetchLogs = async () => {
-    try {
-      const response = await api<PaginatedResponse<InventoryLog>>(`/inventory/logs?page=${logsPage}&limit=15`);
-      setLogs(response.items);
-      setLogsMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
-    } catch (error) {
-      toast.error('Failed to load inventory logs');
-    }
-  };
+  const logsQuery = useQuery({
+    queryKey: ['inventory-logs', logsPage],
+    queryFn: async () => api<PaginatedResponse<InventoryLog>>(`/inventory/logs?page=${logsPage}&limit=30`),
+    enabled: tab === 'logs',
+  });
 
-  const fetchTransfers = async () => {
-    try {
-      const response = await api<PaginatedResponse<StockTransfer>>(`/inventory/transfers?page=${transferPage}&limit=10`);
-      setTransfers(response.items);
-      setTransferMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
-    } catch (error) {
-      toast.error('Failed to load transfers');
-    }
-  };
+  const transfersQuery = useQuery({
+    queryKey: ['inventory-transfers', transferPage],
+    queryFn: async () => api<PaginatedResponse<StockTransfer>>(`/inventory/transfers?page=${transferPage}&limit=30`),
+    enabled: tab === 'transfers',
+  });
 
-  const fetchLocations = async () => {
-    try {
-      const r = await api<{ locations: string[] }>('/inventory/locations');
-      setLocations(r.locations);
-    } catch (error) {}
-  };
+  const locationsQuery = useQuery({
+    queryKey: ['inventory-locations'],
+    queryFn: async () => api<{ locations: string[] }>('/inventory/locations'),
+  });
 
-  // Performance: Lazy load data based on active tab
-  useEffect(() => {
-    if (tab === 'stock' || tab === 'alerts') fetchStock();
-  }, [stockPage, search, catFilter, perishableOnly, tab]);
-
-  useEffect(() => {
-    if (tab === 'logs') fetchLogs();
-  }, [logsPage, tab]);
-
-  useEffect(() => {
-    if (tab === 'transfers') fetchTransfers();
-  }, [transferPage, tab]);
-
-  useEffect(() => {
-    if (tab === 'suppliers' || showAddForm || !!restockItem) fetchSuppliers();
-  }, [supplierPage, supplierSearch, tab, showAddForm, !!restockItem]);
-
-  useEffect(() => {
-    fetchLocations();
-  }, []);
+  const inventory = stockQuery.data?.items ?? [];
+  const logs = logsQuery.data?.items ?? [];
+  const suppliers = suppliersQuery.data?.items ?? [];
+  const transfers = transfersQuery.data?.items ?? [];
+  const locations = locationsQuery.data?.locations ?? [];
+  const stockMeta = stockQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
+  const logsMeta = logsQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
+  const transferMeta = transfersQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
+  const supplierMeta = suppliersQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
 
   const refreshInventoryViews = useCallback(() => {
-    void fetchStock();
-    void fetchLogs();
-    void fetchTransfers();
-    void fetchSuppliers();
-  }, [stockPage, search, catFilter, perishableOnly, logsPage, transferPage, supplierPage, supplierSearch, tab]);
+    void queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-logs'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-transfers'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-suppliers'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-locations'] });
+  }, [queryClient]);
 
   usePosRealtimeScopes(['inventory', 'dashboard'], refreshInventoryViews);
 
@@ -189,6 +153,21 @@ export default function InventoryManagement() {
   });
 
   const perishableCount = inventory.filter(i => i.perishable).length;
+  const supplierId = (s: Supplier) => s.id || (s as any)._id || '';
+  const transferId = (t: StockTransfer) => t.id || (t as any)._id || '';
+  const logId = (l: InventoryLog) => l.id || (l as any)._id || '';
+  const STOCK_ROW_HEIGHT = 66;
+  const STOCK_VIEWPORT_HEIGHT = 520;
+  const STOCK_OVERSCAN = 6;
+  const stockStartIndex = Math.max(0, Math.floor(stockScrollTop / STOCK_ROW_HEIGHT) - STOCK_OVERSCAN);
+  const stockEndIndex = Math.min(
+    inventory.length,
+    stockStartIndex + Math.ceil(STOCK_VIEWPORT_HEIGHT / STOCK_ROW_HEIGHT) + STOCK_OVERSCAN * 2
+  );
+  const virtualStockRows = useMemo(
+    () => inventory.slice(stockStartIndex, stockEndIndex),
+    [inventory, stockStartIndex, stockEndIndex]
+  );
 
   const handleAdjust = async () => {
     if (!adjustItem || !adjustQty) return;
@@ -208,8 +187,7 @@ export default function InventoryManagement() {
       setAdjustItem(null);
       setAdjustQty('');
       setAdjustNote('');
-      fetchStock();
-      if (tab === 'logs') fetchLogs();
+      refreshInventoryViews();
     } catch (error) {
       toast.error('Failed to adjust stock');
     }
@@ -234,8 +212,7 @@ export default function InventoryManagement() {
       toast.success(`Restocked ${qty} ${restockItem.unit} of ${restockItem.name}`);
       setRestockItem(null);
       setRestockData({ quantity: '', costPerUnit: '', supplier: '', note: '' });
-      fetchStock();
-      if (tab === 'logs') fetchLogs();
+      refreshInventoryViews();
     } catch (error) {
       toast.error('Failed to restock');
     }
@@ -277,8 +254,7 @@ export default function InventoryManagement() {
       setShowAddForm(false);
       setEditingItem(null);
       setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
-      fetchStock();
-      if (tab === 'logs') fetchLogs();
+      refreshInventoryViews();
     } catch (error) {
       toast.error('Failed to add item');
     }
@@ -294,8 +270,7 @@ export default function InventoryManagement() {
     try {
       await api(`/inventory/items/${itemId}`, { method: 'DELETE' });
       toast.success('Item deleted');
-      await fetchStock();
-      if (tab === 'logs') await fetchLogs();
+      refreshInventoryViews();
     } catch {
       toast.error('Failed to delete item');
     }
@@ -347,7 +322,7 @@ export default function InventoryManagement() {
       setShowSupplierForm(false);
       setEditingSupplier(null);
       setSupplierData({ name: '', phone: '', email: '', address: '', items: [] });
-      fetchSuppliers();
+      refreshInventoryViews();
     } catch (error) {
       toast.error('Operation failed');
     }
@@ -358,7 +333,7 @@ export default function InventoryManagement() {
     try {
       await api(`/inventory/suppliers/${id}`, { method: 'DELETE' });
       toast.success('Supplier removed');
-      fetchSuppliers();
+      refreshInventoryViews();
     } catch (error) {
       toast.error('Failed to delete supplier');
     }
@@ -421,9 +396,7 @@ export default function InventoryManagement() {
         note: '',
         items: [{ itemId: '', quantity: '', name: '', unit: '' }]
       });
-      fetchStock();
-      if (tab === 'transfers') fetchTransfers();
-      if (tab === 'logs') fetchLogs();
+      refreshInventoryViews();
     } catch (error: any) {
       toast.error(error.message || 'Transfer failed');
     }
@@ -543,7 +516,11 @@ export default function InventoryManagement() {
             </label>
           </div>
           <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto overflow-y-auto"
+              style={{ maxHeight: `${STOCK_VIEWPORT_HEIGHT}px` }}
+              onScroll={(e) => setStockScrollTop(e.currentTarget.scrollTop)}
+            >
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
@@ -557,7 +534,12 @@ export default function InventoryManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inventory.map(item => {
+                  {stockStartIndex > 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ height: stockStartIndex * STOCK_ROW_HEIGHT }} />
+                    </tr>
+                  )}
+                  {virtualStockRows.map(item => {
                     const isLow = item.quantity <= item.minStock;
                     const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date();
                     return (
@@ -609,6 +591,11 @@ export default function InventoryManagement() {
                   {inventory.length === 0 && (
                     <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground italic">No items in inventory.</td></tr>
                   )}
+                  {stockEndIndex < inventory.length && (
+                    <tr>
+                      <td colSpan={7} style={{ height: (inventory.length - stockEndIndex) * STOCK_ROW_HEIGHT }} />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -628,7 +615,7 @@ export default function InventoryManagement() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {suppliers.map(s => (
-              <div key={s.id || s._id} className="bg-card rounded-2xl border border-border p-5 space-y-4 shadow-sm hover:shadow-md transition-shadow relative group">
+              <div key={supplierId(s)} className="bg-card rounded-2xl border border-border p-5 space-y-4 shadow-sm hover:shadow-md transition-shadow relative group">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"><Truck className="w-5 h-5" /></div>
@@ -636,7 +623,7 @@ export default function InventoryManagement() {
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => openEditSupplier(s)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground border border-border"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDeleteSupplier(s.id || s._id || '')} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive border border-destructive/20"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDeleteSupplier(supplierId(s))} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive border border-destructive/20"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
                 <div className="space-y-2 pt-1 border-t border-border/50 text-xs text-muted-foreground">
@@ -677,7 +664,7 @@ export default function InventoryManagement() {
                 </thead>
                 <tbody>
                   {transfers.map(tr => (
-                    <tr key={tr.id || tr._id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <tr key={transferId(tr)} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-bold text-foreground">{tr.transferNumber}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">{tr.transferCategory}</td>
                       <td className="px-4 py-3 text-muted-foreground">{tr.fromLocation}</td>
@@ -718,7 +705,7 @@ export default function InventoryManagement() {
                 </thead>
                 <tbody>
                   {logs.map(log => (
-                    <tr key={log.id || log._id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <tr key={logId(log)} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 text-muted-foreground text-[10px]">{new Date(log.timestamp).toLocaleString()}</td>
                       <td className="px-4 py-3 font-bold">{log.itemName}</td>
                       <td className="px-4 py-3">
@@ -765,7 +752,7 @@ export default function InventoryManagement() {
                       <td className="px-4 py-3 font-bold">{item.name}</td>
                       <td className="px-4 py-3 text-warning text-xs font-bold uppercase tracking-tight flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Low Stock (Min: {item.minStock})</td>
                       <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
-                      <td className="px-4 py-3 text-center"><button onClick={() => { setRestockItem(item); setRestockData({ quantity: '', costPerUnit: item.costPerUnit?.toString() || '', supplier: typeof item.supplier === 'object' ? item.supplier._id : '', note: '' }); }} className="bg-primary text-primary-foreground px-3 py-1 rounded-lg text-xs font-bold">Restock</button></td>
+                      <td className="px-4 py-3 text-center"><button onClick={() => { setRestockItem(item); setRestockData({ quantity: '', costPerUnit: item.costPerUnit?.toString() || '', supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : '', note: '' }); }} className="bg-primary text-primary-foreground px-3 py-1 rounded-lg text-xs font-bold">Restock</button></td>
                     </tr>
                   ))}
                   {expiredItems.map(item => (
@@ -804,7 +791,7 @@ export default function InventoryManagement() {
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Min Stock</label><input type="number" value={newItem.minStock} onChange={e => setNewItem(p => ({ ...p, minStock: e.target.value }))} placeholder="5" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Cost/Unit</label><input type="number" value={newItem.costPerUnit} onChange={e => setNewItem(p => ({ ...p, costPerUnit: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
             </div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Supplier (Optional)</label><select value={newItem.supplier} onChange={e => setNewItem(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={s.id || s._id} value={s.id || s._id}>{s.name}</option>)}</select></div>
+            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Supplier (Optional)</label><select value={newItem.supplier} onChange={e => setNewItem(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={supplierId(s)} value={supplierId(s)}>{s.name}</option>)}</select></div>
             <label className="flex items-center gap-2 text-sm py-1 cursor-pointer"><input type="checkbox" checked={newItem.perishable} onChange={e => setNewItem(p => ({ ...p, perishable: e.target.checked }))} className="rounded accent-primary" /><span className="text-muted-foreground text-xs">Perishable item (has expiry date)</span></label>
             {newItem.perishable && (
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Expiry Date</label><input type="date" value={newItem.expiryDate} onChange={e => setNewItem(p => ({ ...p, expiryDate: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
@@ -823,7 +810,7 @@ export default function InventoryManagement() {
               <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">New Quantity</label><input type="number" value={restockData.quantity} onChange={e => setRestockData(p => ({ ...p, quantity: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
               <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Cost Per {restockItem.unit}</label><input type="number" value={restockData.costPerUnit} onChange={e => setRestockData(p => ({ ...p, costPerUnit: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
             </div>
-            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Supplier</label><select value={restockData.supplier} onChange={e => setRestockData(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={s.id || s._id} value={s.id || s._id}>{s.name}</option>)}</select></div>
+            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Supplier</label><select value={restockData.supplier} onChange={e => setRestockData(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={supplierId(s)} value={supplierId(s)}>{s.name}</option>)}</select></div>
             <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Note</label><input value={restockData.note} onChange={e => setRestockData(p => ({ ...p, note: e.target.value }))} placeholder="Purchase details..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
             <div className="flex gap-2 pt-2"><button onClick={() => setRestockItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-restock', handleRestockSubmit); }} disabled={isLocked('inventory-restock')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-restock') ? 'Saving...' : 'Confirm'}</button></div>
           </div>

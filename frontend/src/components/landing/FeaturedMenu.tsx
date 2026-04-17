@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { menuCategories, type MenuItem } from '@/data/mockData';
+import { type MenuItem } from '@/data/mockData';
 import { api, type PaginatedResponse } from '@/lib/api';
 
 export default function FeaturedMenu() {
@@ -11,6 +11,7 @@ export default function FeaturedMenu() {
       .then((response) => setMenuItems(response.items))
       .catch(() => {});
   }, []);
+  const categories = ['All', ...Array.from(new Set(menuItems.map((i) => i.category))).sort((a, b) => a.localeCompare(b))];
   const filtered = active === 'All' ? menuItems : menuItems.filter(i => i.category === active);
   const formatPKR = (price: number) => `Rs. ${price.toLocaleString('en-PK')}`;
 
@@ -25,7 +26,7 @@ export default function FeaturedMenu() {
 
         {/* Category tabs */}
         <div className="flex flex-wrap justify-center gap-2 mb-10">
-          {menuCategories.map(cat => (
+          {categories.map(cat => (
             <button
               key={cat}
               onClick={() => setActive(cat)}

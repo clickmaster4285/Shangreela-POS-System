@@ -165,9 +165,11 @@ exports.createTransfer = async (req, res) => {
     return res.status(400).json({ message: "One or more items not found." });
   }
 
+  const inventoryById = new Map(inventoryItems.map((i) => [String(i._id), i]));
+
   // Check quantity for each item
   for (const transferItem of normalizedItems) {
-    const invItem = inventoryItems.find((i) => String(i._id) === String(transferItem.itemId));
+    const invItem = inventoryById.get(String(transferItem.itemId));
     if (!invItem) {
       return res.status(400).json({ message: `Item not found: ${transferItem.itemId}` });
     }
@@ -178,11 +180,15 @@ exports.createTransfer = async (req, res) => {
     }
   }
 
-  // Deduct quantities from source location
-  for (const transferItem of normalizedItems) {
-    await InventoryItem.findByIdAndUpdate(transferItem.itemId, {
-      $inc: { quantity: -transferItem.quantity },
-    });
+  // Deduct quantities from source location in one batch write
+  const transferUpdates = normalizedItems.map((transferItem) => ({
+    updateOne: {
+      filter: { _id: transferItem.itemId },
+      update: { $inc: { quantity: -transferItem.quantity } },
+    },
+  }));
+  if (transferUpdates.length) {
+    await InventoryItem.bulkWrite(transferUpdates, { ordered: true });
   }
 
   // Create the transfer record
@@ -191,7 +197,7 @@ exports.createTransfer = async (req, res) => {
     toLocation,
     transferCategory: transferCategory || "General",
     items: normalizedItems.map((item) => {
-      const invItem = inventoryItems.find((i) => String(i._id) === String(item.itemId));
+      const invItem = inventoryById.get(String(item.itemId));
       return {
         itemId: item.itemId,
         itemName: invItem.name,
@@ -204,10 +210,10 @@ exports.createTransfer = async (req, res) => {
     createdBy: req.user._id,
   });
 
-  // Log each item transfer
-  const logs = normalizedItems.map((item) => {
-    const invItem = inventoryItems.find((i) => String(i._id) === String(item.itemId));
-    return InventoryLog.create({
+  // Log each item transfer in one batch write
+  const logDocs = normalizedItems.map((item) => {
+    const invItem = inventoryById.get(String(item.itemId));
+    return {
       itemId: String(item.itemId),
       itemName: invItem.name,
       action: "transferred",
@@ -216,9 +222,11 @@ exports.createTransfer = async (req, res) => {
       note: `Transferred from ${fromLocation} to ${toLocation}${transferCategory ? ` (${transferCategory})` : ""}`,
       timestamp: new Date().toISOString(),
       userId: String(req.user._id),
-    });
+    };
   });
-  await Promise.all(logs);
+  if (logDocs.length) {
+    await InventoryLog.insertMany(logDocs, { ordered: true });
+  }
 
   emitPosChange(["inventory", "dashboard"]);
   res.status(201).json({ ok: true, transfer });

@@ -34,36 +34,31 @@ app.use(
   cors({
     origin: frontendOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 86400,
     credentials: true,
   })
 );
 
-// ========== ADD CACHE CONTROL MIDDLEWARE HERE ==========
-// Disable ETag to prevent 304 responses
-app.set('etag', false);
+// Keep ETag enabled for lightweight conditional GETs.
+app.set("etag", "weak");
 
-// Cache control middleware for API routes
+// Route-level cache policy:
+// - GET requests can revalidate/private cache briefly
+// - mutating requests stay no-store
 app.use("/api", (req, res, next) => {
-  // Store original send function
-  const originalSend = res.send;
-  
-  // Remove ETag header if present
-  res.removeHeader('ETag');
-  
-  // Set headers to prevent caching
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  
-  // For debugging - log when cache headers are applied
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[CACHE DISABLED] ${req.method} ${req.url}`);
+  const isGet = req.method === "GET";
+  if (isGet) {
+    res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
+    return next();
   }
-  
+
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
   next();
 });
-// ======================================================
 
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
@@ -71,8 +66,7 @@ app.use("/api", routes);
 
 // Optional: Add version header to help client debugging
 app.use("/api", (req, res, next) => {
-  res.setHeader('X-API-Version', '1.0.0');
-  res.setHeader('X-Cache-Disabled', 'true');
+  res.setHeader("X-API-Version", "1.0.0");
   next();
 });
 
@@ -84,7 +78,7 @@ async function boot() {
   server.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
     console.log(`Socket.IO at ws://localhost:${port}/socket.io`);
-    console.log(`Cache disabled for all /api routes - 304 responses prevented`);
+    console.log("Cache policy enabled: GET revalidation + no-store for writes");
   });
 }
 

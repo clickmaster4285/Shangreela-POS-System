@@ -4,12 +4,12 @@ import { toast } from 'sonner';
 import { Search, ShoppingCart, X, Plus, Minus, Trash2, Edit3, ChevronDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { api, type PaginatedResponse } from '@/lib/api';
-import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 import { billBreakdownForOrder } from '@/utils/pakistanTax';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import Fuse from 'fuse.js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 type OrderWithDb = Order & { dbId?: string };
 
@@ -24,6 +24,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function OrderManagement() {
+  const queryClient = useQueryClient();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -50,6 +51,7 @@ export default function OrderManagement() {
   const [tableNumberInput, setTableNumberInput] = useState('');
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const [itemSearch, setItemSearch] = useState('');
+  const [ordersRenderCount, setOrdersRenderCount] = useState(24);
   const debouncedMainSearch = useDebounce(search, 500);
 
   useEffect(() => {
@@ -66,67 +68,59 @@ export default function OrderManagement() {
   }, []);
 
   const fetchOrders = async () => {
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: '12',
-        status: statusFilter,
-        type: typeFilter,
-        today: String(todayFilter),
-        floorKey: selectedFloor,
-      });
-      // Don't send search to API - we'll filter client-side with fuzzy matching
-      const response = await api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
-      setOrders(response.items);
-      setMeta({ hasNext: response.pagination.hasNext, hasPrev: response.pagination.hasPrev });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load orders');
-    }
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: '12',
+      status: statusFilter,
+      type: typeFilter,
+      today: String(todayFilter),
+      floorKey: selectedFloor,
+    });
+    // Don't send search to API - we'll filter client-side with fuzzy matching
+    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
   };
 
-  const fetchTables = async () => {
-    try {
-      const response = await api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`);
-      setTables(response.items.map(table => ({
-        id: table.number,
-        name: table.name,
-        seats: table.seats,
-        floorId: table.floorKey,
-        status: table.status,
-        currentOrder: table.currentOrder,
-      })));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load tables');
-    }
-  };
+  const ordersQuery = useQuery({
+    queryKey: ['orders-list', page, statusFilter, typeFilter, todayFilter, selectedFloor],
+    queryFn: fetchOrders,
+  });
 
-  const fetchMenuItems = async () => {
-    try {
-      const response = await api<PaginatedResponse<MenuItem & { id: string }>>(`/menu?page=1&limit=${MAX_LIST_LIMIT}`);
-      setMenuItems(response.items);
-    } catch (error) {
-      console.error('Failed to load menu items:', error);
-    }
-  };
+  const initDataQuery = useQuery({
+    queryKey: ['orders-init-data'],
+    queryFn: fetchInitData,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const fetchFloors = async () => {
-    try {
-      const response = await api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`);
-      setFloors(response.items);
-    } catch (error) {
-      console.error('Failed to load floors:', error);
-    }
-  };
+  async function fetchInitData() {
+    return api<{
+      menu: Array<MenuItem & { id: string }>;
+      floors: Array<{ id: string; key: string; name: string }>;
+      tables: Array<{ id: string; number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>;
+    }>('/init-data?include=menu,floors,tables');
+  }
 
   useEffect(() => {
-    fetchOrders();
-  }, [page, statusFilter, typeFilter, todayFilter, selectedFloor, debouncedMainSearch]);
+    if (!ordersQuery.data) return;
+    setOrders(ordersQuery.data.items);
+    setMeta({
+      hasNext: ordersQuery.data.pagination.hasNext,
+      hasPrev: ordersQuery.data.pagination.hasPrev,
+    });
+  }, [ordersQuery.data]);
 
   useEffect(() => {
-    fetchTables();
-    fetchMenuItems();
-    fetchFloors();
-  }, []);
+    if (!initDataQuery.data) return;
+    setTables(initDataQuery.data.tables.map(table => ({
+      id: table.number,
+      name: table.name,
+      seats: table.seats,
+      floorId: table.floorKey,
+      status: table.status,
+      currentOrder: table.currentOrder,
+    })));
+    setMenuItems(initDataQuery.data.menu);
+    setFloors(initDataQuery.data.floors.map((f) => ({ key: f.key, name: f.name })));
+  }, [initDataQuery.data]);
 
   useEffect(() => {
     if (selectedFloor === 'all') return;
@@ -143,12 +137,14 @@ export default function OrderManagement() {
     localStorage.setItem('order_floor_filter', selectedFloor);
   }, [selectedFloor]);
 
+  useEffect(() => {
+    setOrdersRenderCount(24);
+  }, [search, statusFilter, typeFilter, todayFilter, selectedFloor, page]);
+
   const refreshOrderPage = useCallback(() => {
-    void fetchOrders();
-    void fetchTables();
-    void fetchMenuItems();
-    void fetchFloors();
-  }, [page, statusFilter, typeFilter, todayFilter, selectedFloor, debouncedMainSearch]);
+    void queryClient.invalidateQueries({ queryKey: ['orders-list'] });
+    void queryClient.invalidateQueries({ queryKey: ['orders-init-data'] });
+  }, [queryClient, page, statusFilter, typeFilter, todayFilter, selectedFloor, debouncedMainSearch]);
 
   usePosRealtimeScopes(['orders', 'tables', 'menu', 'floors'], refreshOrderPage);
 
@@ -250,8 +246,6 @@ export default function OrderManagement() {
       notes: '',
       extraName: addItemExtraName,
       extraPrice: Number(addItemExtraPrice) || 0,
-      requestId: '',
-      requestAt: new Date(),
     };
 
     if (replaceItemIndex !== null) {
@@ -418,6 +412,10 @@ export default function OrderManagement() {
 
   const allActiveOrders = orders.filter(o => o.type !== 'delivery');
   const activeOrders = filteredOrders.filter(o => o.type !== 'delivery');
+  const visibleActiveOrders = useMemo(
+    () => activeOrders.slice(0, ordersRenderCount),
+    [activeOrders, ordersRenderCount]
+  );
   const allDineInCount = allActiveOrders.filter(o => o.type === 'dine-in').length;
   const allTakeawayCount = allActiveOrders.filter(o => o.type === 'takeaway').length;
   const dineInCount = activeOrders.filter(o => o.type === 'dine-in').length;
@@ -526,8 +524,18 @@ export default function OrderManagement() {
         </div>
       </div>
 
+      <div
+        className="max-h-[70vh] overflow-y-auto pr-1"
+        onScroll={(e) => {
+          const node = e.currentTarget;
+          const nearBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 120;
+          if (nearBottom && ordersRenderCount < activeOrders.length) {
+            setOrdersRenderCount((prev) => Math.min(prev + 18, activeOrders.length));
+          }
+        }}
+      >
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {activeOrders.map(order => (
+        {visibleActiveOrders.map(order => (
           <div key={order.id} className="pos-card space-y-3">
             <div className="flex justify-between items-start">
               <div className="flex-1">
@@ -605,6 +613,7 @@ export default function OrderManagement() {
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       <AlertDialog open={switchTableDialogOpen} onOpenChange={value => { if (!value) closeSwitchTableDialog(); setSwitchTableDialogOpen(value); }}>
@@ -762,8 +771,6 @@ export default function OrderManagement() {
                                     notes: '',
                                     extraName: '',
                                     extraPrice: 0,
-                                    requestId: '',
-                                    requestAt: new Date(),
                                   };
                                   if (replaceItemIndex !== null) {
                                     setEditingItems(prev => prev.map((oldItem, i) => i === replaceItemIndex ? newItem : oldItem));

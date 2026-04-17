@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { type CartItem, type MenuItem, type TableInfo } from '@/data/mockData';
 import {
@@ -10,17 +10,16 @@ import { X, MessageSquare, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
-import { api, type PaginatedResponse } from '@/lib/api';
-import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
+import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '@/contexts/CartContext';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/use-submit-lock';
-import { COMMON_ADDONS } from '@/data/mockData';
+import { COMMON_ADDONS } from '@/data/posConstants';
 import Fuse from 'fuse.js';
-import { POSMenuArea } from './components/POSMenuArea';
-import { POSCartArea } from './components/POSCartArea';
+const POSMenuArea = lazy(() => import('./components/POSMenuArea').then((m) => ({ default: m.POSMenuArea })));
+const POSCartArea = lazy(() => import('./components/POSCartArea').then((m) => ({ default: m.POSCartArea })));
 
 export default function POSScreen() {
   const { isLocked, runLocked } = useSubmitLock();
@@ -61,38 +60,33 @@ export default function POSScreen() {
     localStorage.setItem('pos_gst_enabled', gstEnabled.toString());
   }, [gstEnabled]);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
-  const menuQuery = useQuery({
-    queryKey: ['pos-menu-items'],
-    queryFn: () => api<PaginatedResponse<MenuItem & { id: string }>>(`/menu?page=1&limit=${MAX_LIST_LIMIT}`),
-  });
-  const floorsQuery = useQuery({
-    queryKey: ['pos-floors'],
-    queryFn: () => api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`),
-  });
-  const tablesQuery = useQuery({
-    queryKey: ['pos-tables'],
+  const initDataQuery = useQuery({
+    queryKey: ['pos-init-data'],
     queryFn: () =>
-      api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(
-        `/tables?page=1&limit=${MAX_LIST_LIMIT}`
-      ),
+      api<{
+        menu: Array<MenuItem & { id: string }>;
+        floors: Array<{ id: string; key: string; name: string }>;
+        tables: Array<{ id: string; number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>;
+      }>('/init-data?include=menu,floors,tables'),
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
-    if (menuQuery.data?.items) setMenuItems(menuQuery.data.items);
-  }, [menuQuery.data]);
+    if (initDataQuery.data?.menu) setMenuItems(initDataQuery.data.menu);
+  }, [initDataQuery.data]);
 
   useEffect(() => {
-    if (floorsQuery.data?.items) {
-      const fs = floorsQuery.data.items.map(x => ({ id: x.key, name: x.name }));
+    if (initDataQuery.data?.floors) {
+      const fs = initDataQuery.data.floors.map(x => ({ id: x.key, name: x.name }));
       setFloors(fs);
       if (fs.length && !fs.some(f => f.id === activeFloorId)) setActiveFloorId(fs[0].id);
     }
-  }, [floorsQuery.data, activeFloorId]);
+  }, [initDataQuery.data, activeFloorId]);
 
   useEffect(() => {
-    if (tablesQuery.data?.items) {
+    if (initDataQuery.data?.tables) {
       setTables(
-        tablesQuery.data.items.map(x => ({
+        initDataQuery.data.tables.map(x => ({
           id: x.number,
           name: x.name,
           seats: x.seats,
@@ -102,7 +96,7 @@ export default function POSScreen() {
         }))
       );
     }
-  }, [tablesQuery.data]);
+  }, [initDataQuery.data]);
 
   const loadTaxRates = useCallback(() => {
     api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
@@ -539,6 +533,7 @@ export default function POSScreen() {
 
   return (
     <div className="relative flex flex-col lg:flex-row gap-4 h-[calc(100vh-7rem)]">
+      <Suspense fallback={<div className="w-full lg:flex-1 pos-card p-6 text-sm text-muted-foreground">Loading menu...</div>}>
       <POSMenuArea
         openFolder={openFolder}
         pakistaniSub={pakistaniSub}
@@ -558,14 +553,16 @@ export default function POSScreen() {
         addToCart={addToCart}
         posSearchInputClass={posSearchInputClass}
       />
+      </Suspense>
 
+      <Suspense fallback={<div className="w-full lg:w-[min(100%,28rem)] xl:w-[30rem] pos-card p-6 text-sm text-muted-foreground">Loading cart...</div>}>
       <POSCartArea
         orderType={orderType}
         handleOrderTypeChange={handleOrderTypeChange}
         selectedTable={selectedTable}
         floors={floors}
         setSelectedTableId={setSelectedTableId}
-        tablesQuery={tablesQuery}
+        tablesQuery={initDataQuery}
         setShowTablePicker={setShowTablePicker}
         deliveryCustomerName={deliveryCustomerName}
         setDeliveryCustomerName={setDeliveryCustomerName}
@@ -597,6 +594,7 @@ export default function POSScreen() {
         placeOrderDisabled={isLocked('place-order')}
         gstAmount={gstAmount}
       />
+      </Suspense>
 
       {/* Note modal - reused logic if needed, or keeping for now */}
       {noteItem && (
