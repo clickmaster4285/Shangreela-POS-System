@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Order, TableInfo, MenuItem } from '@/data/mockData';
 import { toast } from 'sonner';
 import { Search, ShoppingCart, X, Plus, Minus, Trash2, Edit3, ChevronDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 import { billBreakdownForOrder } from '@/utils/pakistanTax';
 import { useDebounce } from '@/hooks/use-debounce';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import Fuse from 'fuse.js';
 
 type OrderWithDb = Order & { dbId?: string };
@@ -84,7 +86,7 @@ export default function OrderManagement() {
 
   const fetchTables = async () => {
     try {
-      const response = await api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500');
+      const response = await api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`);
       setTables(response.items.map(table => ({
         id: table.number,
         name: table.name,
@@ -100,7 +102,7 @@ export default function OrderManagement() {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await api<PaginatedResponse<MenuItem & { id: string }>>('/menu?limit=500&page=1');
+      const response = await api<PaginatedResponse<MenuItem & { id: string }>>(`/menu?page=1&limit=${MAX_LIST_LIMIT}`);
       setMenuItems(response.items);
     } catch (error) {
       console.error('Failed to load menu items:', error);
@@ -109,7 +111,7 @@ export default function OrderManagement() {
 
   const fetchFloors = async () => {
     try {
-      const response = await api<PaginatedResponse<{ key: string; name: string }>>('/floors?limit=100');
+      const response = await api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`);
       setFloors(response.items);
     } catch (error) {
       console.error('Failed to load floors:', error);
@@ -127,8 +129,28 @@ export default function OrderManagement() {
   }, []);
 
   useEffect(() => {
+    if (selectedFloor === 'all') return;
+    if (!floors.some((f) => f.key === selectedFloor)) {
+      setSelectedFloor('all');
+    }
+  }, [floors, selectedFloor]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedFloor]);
+
+  useEffect(() => {
     localStorage.setItem('order_floor_filter', selectedFloor);
   }, [selectedFloor]);
+
+  const refreshOrderPage = useCallback(() => {
+    void fetchOrders();
+    void fetchTables();
+    void fetchMenuItems();
+    void fetchFloors();
+  }, [page, statusFilter, typeFilter, todayFilter, selectedFloor, debouncedMainSearch]);
+
+  usePosRealtimeScopes(['orders', 'tables', 'menu', 'floors'], refreshOrderPage);
 
   const updateStatus = (id: string, status: Order['status']) => {
     const order = orders.find(o => o.id === id) as (Order & { dbId?: string }) | undefined;

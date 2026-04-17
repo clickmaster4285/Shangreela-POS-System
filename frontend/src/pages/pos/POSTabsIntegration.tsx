@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LayoutGrid, MonitorSmartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 export type POSTabSlot = {
   id: string;
@@ -20,11 +21,17 @@ const DEFAULT_TABS: POSTabSlot[] = [
 export default function POSTabsIntegration() {
   const [tabs, setTabs] = useState<POSTabSlot[]>(DEFAULT_TABS);
 
-  useEffect(() => {
+  const loadTabs = useCallback(() => {
     api<{ items: POSTabSlot[] }>('/settings/pos-tabs')
       .then(r => setTabs(r.items.length ? r.items : DEFAULT_TABS))
       .catch(() => setTabs(DEFAULT_TABS));
   }, []);
+
+  useEffect(() => {
+    loadTabs();
+  }, [loadTabs]);
+
+  usePosRealtimeScopes(['settings'], loadTabs);
 
   const patch = (id: string, partial: Partial<POSTabSlot>) => {
     setTabs(prev => {

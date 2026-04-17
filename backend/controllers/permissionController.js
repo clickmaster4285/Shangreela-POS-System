@@ -1,3 +1,4 @@
+const { emitPosChange } = require("../utils/realtime");
 const { Permission } = require("../models");
 
 exports.getAll = async (_req, res) => {
@@ -12,5 +13,6 @@ exports.putAll = async (req, res) => {
   for (const [role, value] of Object.entries(config)) {
     await Permission.findOneAndUpdate({ role }, { role, ...value }, { upsert: true, new: true });
   }
+  emitPosChange(["permissions"]);
   res.json({ ok: true });
 };

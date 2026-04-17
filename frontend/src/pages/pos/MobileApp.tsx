@@ -1,6 +1,7 @@
 import { Smartphone, QrCode, Bell, MapPin, CreditCard } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 const features = [
   { icon: MapPin, title: 'Table & outdoor orders', text: 'Wait staff and supervisors track floors and delivery handoff.' },
@@ -12,11 +13,17 @@ const features = [
 export default function MobileApp() {
   const [pairingToken, setPairingToken] = useState('');
 
-  useEffect(() => {
+  const loadMobile = useCallback(() => {
     api<{ pairingToken: string }>('/mobile/config')
       .then(r => setPairingToken(r.pairingToken || ''))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadMobile();
+  }, [loadMobile]);
+
+  usePosRealtimeScopes(['mobile'], loadMobile);
 
   return (
     <div className="space-y-6">

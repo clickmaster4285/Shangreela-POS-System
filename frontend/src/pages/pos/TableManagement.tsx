@@ -1,10 +1,13 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { type FloorInfo, type TableInfo } from '@/data/mockData';
-import { Users, Plus, Pencil, Trash2, Layers, LayoutGrid } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Layers, LayoutGrid, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, MANAGER_ROLES } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT, fetchAllPaginatedItems } from '@/lib/paginatedFetch';
+import { useSubmitLock } from '@/hooks/use-submit-lock';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 function newFloorId(name: string, existing: FloorInfo[]): string {
   const base =
@@ -39,6 +42,7 @@ const statusDot: Record<string, string> = {
 };
 
 export default function TableManagement() {
+  const { isLocked, runLocked } = useSubmitLock();
   const { user, hasAction } = useAuth();
   const navigate = useNavigate();
   const canManage = user ? MANAGER_ROLES.includes(user.role) : false;
@@ -64,15 +68,22 @@ export default function TableManagement() {
     namePrefix: 'Table ',
   });
 
-  const load = () =>
-    Promise.all([api<PaginatedResponse<{ id: string; key: string; name: string }>>('/floors?page=1&limit=200'), api<PaginatedResponse<{ id: string; number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500')]).then(([f, t]) => {
+  const load = useCallback(() =>
+    Promise.all([
+      api<PaginatedResponse<{ id: string; key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`),
+      api<PaginatedResponse<{ id: string; number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`),
+    ]).then(([f, t]) => {
       if (f.items.length) setFloorsState(f.items.map(x => ({ id: x.key, name: x.name })));
       if (t.items.length) setTablesState(t.items.map(x => ({ id: x.number, name: x.name, seats: x.seats, floorId: x.floorKey, status: x.status, currentOrder: x.currentOrder })));
-    });
+    }), []);
 
   useEffect(() => {
     load().catch(() => {});
-  }, []);
+  }, [load]);
+
+  usePosRealtimeScopes(['tables', 'floors'], () => {
+    void load().catch(() => {});
+  });
 
   const [floorModal, setFloorModal] = useState(false);
   const [floorEditing, setFloorEditing] = useState<FloorInfo | null>(null);
@@ -97,20 +108,21 @@ export default function TableManagement() {
     setFloorName(f.name);
     setFloorModal(true);
   };
-  const saveFloor = () => {
+  const saveFloor = async () => {
     const n = floorName.trim();
     if (!n) {
       toast.error('Enter a floor name');
       return;
     }
     if (floorEditing) {
-      api(`/floors/${floorEditing.id}`, { method: 'PUT', body: JSON.stringify({ key: floorEditing.id, name: n }) }).then(load);
+      await api(`/floors/${floorEditing.id}`, { method: 'PUT', body: JSON.stringify({ key: floorEditing.id, name: n }) });
       toast.success('Floor updated');
     } else {
       const id = newFloorId(n, floorsState);
-      api('/floors', { method: 'POST', body: JSON.stringify({ key: id, name: n }) }).then(load);
+      await api('/floors', { method: 'POST', body: JSON.stringify({ key: id, name: n }) });
       toast.success('Floor added');
     }
+    await load();
     setFloorModal(false);
   };
   const deleteFloor = (f: FloorInfo) => {
@@ -119,8 +131,11 @@ export default function TableManagement() {
       return;
     }
     if (!window.confirm(`Remove floor “${f.name}”?`)) return;
-    api<PaginatedResponse<{ id: string; key: string; name: string }>>('/floors?page=1&limit=200').then(async r => {
-      const row = r.items.find(x => x.key === f.id);
+    fetchAllPaginatedItems<{ id: string; key: string; name: string }>(
+      (page, limit) => `/floors?page=${page}&limit=${limit}`,
+      200
+    ).then(async items => {
+      const row = items.find(x => x.key === f.id);
       if (row) await api(`/floors/${row.id}`, { method: 'DELETE' });
       load();
     });
@@ -152,7 +167,7 @@ export default function TableManagement() {
     });
     setTableModal(true);
   };
-  const saveTable = () => {
+  const saveTable = async () => {
     const name = tableForm.name.trim();
     const seats = parseInt(tableForm.seats, 10);
     if (!name || !tableForm.floorId || isNaN(seats) || seats < 1) {
@@ -164,23 +179,28 @@ export default function TableManagement() {
       return;
     }
     if (tableEditing) {
-      api<PaginatedResponse<{ id: string; number: number }>>('/tables?page=1&limit=500').then(async rows => {
-        const row = rows.items.find(x => x.number === tableEditing.id);
-        if (row) await api(`/tables/${row.id}`, { method: 'PUT', body: JSON.stringify({ number: tableEditing.id, name, floorKey: tableForm.floorId, seats, status: tableForm.status }) });
-        load();
-      });
+      const rows = await fetchAllPaginatedItems<{ id: string; number: number }>(
+        (page, limit) => `/tables?page=${page}&limit=${limit}`,
+        200
+      );
+      const row = rows.find(x => x.number === tableEditing.id);
+      if (row) await api(`/tables/${row.id}`, { method: 'PUT', body: JSON.stringify({ number: tableEditing.id, name, floorKey: tableForm.floorId, seats, status: tableForm.status }) });
       toast.success('Table updated');
     } else {
       const id = nextTableId(tablesState);
-      api('/tables', { method: 'POST', body: JSON.stringify({ number: id, name, floorKey: tableForm.floorId, seats, status: tableForm.status }) }).then(load);
+      await api('/tables', { method: 'POST', body: JSON.stringify({ number: id, name, floorKey: tableForm.floorId, seats, status: tableForm.status }) });
       toast.success('Table added');
     }
+    await load();
     setTableModal(false);
   };
   const deleteTable = (t: TableInfo) => {
     if (!window.confirm(`Remove ${t.name}?`)) return;
-    api<PaginatedResponse<{ id: string; number: number }>>('/tables?page=1&limit=500').then(async rows => {
-      const row = rows.items.find(x => x.number === t.id);
+    fetchAllPaginatedItems<{ id: string; number: number }>(
+      (page, limit) => `/tables?page=${page}&limit=${limit}`,
+      200
+    ).then(async rows => {
+      const row = rows.find(x => x.number === t.id);
       if (row) await api(`/tables/${row.id}`, { method: 'DELETE' });
       load();
     });
@@ -202,7 +222,7 @@ export default function TableManagement() {
     setBulkModal(true);
   };
 
-  const saveBulkAdd = () => {
+  const saveBulkAdd = async () => {
     const count = parseInt(bulkForm.count, 10);
     const startNumber = parseInt(bulkForm.startNumber, 10);
     const seats = parseInt(bulkForm.seats, 10);
@@ -239,21 +259,21 @@ export default function TableManagement() {
       });
     }
 
-    api('/tables/bulk', { method: 'POST', body: JSON.stringify({ tables }) })
-      .then(() => {
-        load();
-        setBulkModal(false);
-        toast.success(`${count} tables added`);
-      })
-      .catch(() => toast.error('Failed to add tables'));
+    await api('/tables/bulk', { method: 'POST', body: JSON.stringify({ tables }) });
+    await load();
+    setBulkModal(false);
+    toast.success(`${count} tables added`);
   };
 
   const bulkDelete = () => {
     if (selectedTables.size === 0) return;
     if (!window.confirm(`Remove ${selectedTables.size} selected tables?`)) return;
 
-    api<PaginatedResponse<{ id: string; number: number }>>('/tables?page=1&limit=500').then(async rows => {
-      const ids = Array.from(selectedTables).map(num => rows.items.find(x => x.number === num)?.id).filter(Boolean) as string[];
+    fetchAllPaginatedItems<{ id: string; number: number }>(
+      (page, limit) => `/tables?page=${page}&limit=${limit}`,
+      200
+    ).then(async rows => {
+      const ids = Array.from(selectedTables).map(num => rows.find(x => x.number === num)?.id).filter(Boolean) as string[];
       if (ids.length !== selectedTables.size) {
         toast.error('Some tables were not found');
         return;
@@ -490,9 +510,14 @@ export default function TableManagement() {
 
       {/* Bulk add modal */}
       {bulkModal && (
-        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setBulkModal(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">Bulk add tables</h3>
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-foreground">Bulk add tables</h3>
+              <button type="button" onClick={() => setBulkModal(false)} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Close bulk add">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div>
               <label className="text-xs text-muted-foreground">Number of tables</label>
               <input
@@ -553,8 +578,13 @@ export default function TableManagement() {
               <button type="button" onClick={() => setBulkModal(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">
                 Cancel
               </button>
-              <button type="button" onClick={saveBulkAdd} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">
-                Add tables
+              <button
+                type="button"
+                onClick={() => { void runLocked('save-bulk-tables', saveBulkAdd).catch(() => toast.error('Failed to add tables')); }}
+                disabled={isLocked('save-bulk-tables')}
+                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isLocked('save-bulk-tables') ? 'Saving...' : 'Add tables'}
               </button>
             </div>
           </div>
@@ -563,9 +593,14 @@ export default function TableManagement() {
 
       {/* Floor modal */}
       {floorModal && (
-        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setFloorModal(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">{floorEditing ? 'Rename floor' : 'Add floor'}</h3>
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-foreground">{floorEditing ? 'Rename floor' : 'Add floor'}</h3>
+              <button type="button" onClick={() => setFloorModal(false)} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Close floor modal">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div>
               <label className="text-xs text-muted-foreground">Floor name</label>
               <input
@@ -579,8 +614,13 @@ export default function TableManagement() {
               <button type="button" onClick={() => setFloorModal(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">
                 Cancel
               </button>
-              <button type="button" onClick={saveFloor} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">
-                {floorEditing ? 'Save' : 'Add'}
+              <button
+                type="button"
+                onClick={() => { void runLocked('save-floor', saveFloor).catch(() => toast.error('Failed to save floor')); }}
+                disabled={isLocked('save-floor')}
+                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isLocked('save-floor') ? 'Saving...' : floorEditing ? 'Save' : 'Add'}
               </button>
             </div>
           </div>
@@ -589,9 +629,14 @@ export default function TableManagement() {
 
       {/* Table modal */}
       {tableModal && (
-        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setTableModal(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto shadow-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">{tableEditing ? 'Edit table' : 'Add table'}</h3>
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto shadow-lg">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-foreground">{tableEditing ? 'Edit table' : 'Add table'}</h3>
+              <button type="button" onClick={() => setTableModal(false)} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Close table modal">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div>
               <label className="text-xs text-muted-foreground">Table name</label>
               <input
@@ -643,8 +688,13 @@ export default function TableManagement() {
               <button type="button" onClick={() => setTableModal(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">
                 Cancel
               </button>
-              <button type="button" onClick={saveTable} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">
-                {tableEditing ? 'Save' : 'Add'}
+              <button
+                type="button"
+                onClick={() => { void runLocked('save-table', saveTable).catch(() => toast.error('Failed to save table')); }}
+                disabled={isLocked('save-table')}
+                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isLocked('save-table') ? 'Saving...' : tableEditing ? 'Save' : 'Add'}
               </button>
             </div>
           </div>

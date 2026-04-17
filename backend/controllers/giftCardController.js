@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { GiftCard } = require("../models");
 
 exports.list = async (req, res) => {
@@ -12,6 +13,7 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const row = await GiftCard.create(req.body || {});
+  emitPosChange(["giftcards"]);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
@@ -22,5 +24,6 @@ exports.redeem = async (req, res) => {
   row.balance = Math.max(0, Number(row.balance || 0) - amount);
   if (row.balance === 0) row.status = "redeemed";
   await row.save();
+  emitPosChange(["giftcards"]);
   res.json({ ok: true, balance: row.balance, status: row.status });
 };

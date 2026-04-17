@@ -1,19 +1,26 @@
 import { Percent, FileText } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 export default function TaxDetails() {
   const [salesTaxRate, setSalesTaxRate] = useState(16);
   const [serviceChargeRate, setServiceChargeRate] = useState(10);
   const [withholdingLabel, setWithholdingLabel] = useState('As per FBR');
 
-  useEffect(() => {
+  const loadTax = useCallback(() => {
     api<{ salesTaxRate: number; serviceChargeRate: number; withholdingLabel: string }>('/settings/tax').then(r => {
       setSalesTaxRate(r.salesTaxRate ?? 16);
       setServiceChargeRate(r.serviceChargeRate ?? 10);
       setWithholdingLabel(r.withholdingLabel ?? 'As per FBR');
     });
   }, []);
+
+  useEffect(() => {
+    loadTax();
+  }, [loadTax]);
+
+  usePosRealtimeScopes(['settings'], loadTax);
 
   const rows = [
     { name: 'Sales tax (provincial)', rate: `${salesTaxRate}%`, applies: 'Taxable food & beverages (configurable by item)' },

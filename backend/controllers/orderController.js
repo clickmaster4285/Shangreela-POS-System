@@ -1,6 +1,9 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
 const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
+const { emitPosChange } = require("../utils/realtime");
 const { Order, Table, Delivery } = require("../models");
+
+const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliveries", "dashboard"]);
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -64,6 +67,24 @@ exports.list = async (req, res) => {
         }
       }
     }
+
+    if (req.query.floorKey && req.query.floorKey !== "all") {
+      const floorKey = String(req.query.floorKey);
+      const floorTables = await Table.find({ floorKey }).select("number").lean();
+      const floorTableNumbers = floorTables.map((t) => Number(t.number)).filter((n) => Number.isFinite(n));
+      if (!floorTableNumbers.length) {
+        return res.json(
+          buildPaginatedResponse({
+            items: [],
+            total: 0,
+            page,
+            limit,
+          })
+        );
+      }
+      where.table = { $in: floorTableNumbers };
+    }
+
     const rates = await getEffectiveTaxRates();
     const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
     res.json(
@@ -111,6 +132,7 @@ exports.patchStatus = async (req, res) => {
     }
     const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
     if (!order) return res.status(404).json({ message: "Order not found" });
+    broadcastOrderDomain();
     res.json({ ok: true, id: String(order._id), status: order.status });
   } catch (error) {
     console.error("Patch status error:", error);
@@ -158,6 +180,7 @@ exports.changeTable = async (req, res) => {
     order.table = newTableNumber;
     await order.save();
 
+    broadcastOrderDomain();
     res.json({ ok: true, table: newTableNumber });
   } catch (error) {
     console.error("Change table error:", error);
@@ -237,6 +260,7 @@ exports.create = async (req, res) => {
       }
     }
 
+    broadcastOrderDomain();
     res.status(201).json({ id: row.code, dbId: String(row._id) });
   } catch (error) {
     console.error("Order creation error:", error);
@@ -319,6 +343,7 @@ exports.addItems = async (req, res) => {
     if (wasCompleted && row.type === "dine-in" && row.table) {
       await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
     }
+    broadcastOrderDomain();
     res.json({ ok: true, id: row.code, dbId: String(row._id) });
   } catch (error) {
     console.error("Add items error:", error);
@@ -367,6 +392,7 @@ exports.editItems = async (req, res) => {
     if (row.type === "delivery") {
       await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
     }
+    broadcastOrderDomain();
     res.json({ ok: true, id: row.code, dbId: String(row._id) });
   } catch (error) {
     console.error("Edit items error:", error);
@@ -390,6 +416,7 @@ exports.patchBillingTotals = async (req, res) => {
     if (updated.type === "delivery" && updated.code) {
       await Delivery.findOneAndUpdate({ orderId: updated.code }, { total: Number(updated.total || 0) });
     }
+    broadcastOrderDomain();
     res.json({ ok: true });
   } catch (error) {
     console.error("Patch billing totals error:", error);
@@ -413,6 +440,7 @@ exports.payment = async (req, res) => {
       await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
     }
 
+    broadcastOrderDomain();
     res.json({ ok: true });
   } catch (error) {
     console.error("Payment error:", error);
@@ -435,6 +463,7 @@ exports.cancel = async (req, res) => {
     if (row.type === "dine-in" && row.table) {
       await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
     }
+    broadcastOrderDomain();
     res.json({ ok: true });
   } catch (error) {
     console.error("Cancel order error:", error);
@@ -452,6 +481,7 @@ exports.remove = async (req, res) => {
     }
 
     await Order.findByIdAndDelete(req.params.id);
+    broadcastOrderDomain();
     res.json({ ok: true });
   } catch (error) {
     console.error("Remove order error:", error);

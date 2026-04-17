@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil, X } from 'lucide-react';
 import {
   type Employee,
   type AttendanceRecord,
@@ -10,6 +10,7 @@ import {
 } from '@/data/hrData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 type Tab = 'employees' | 'attendance' | 'shifts' | 'leaves' | 'salary';
 
@@ -31,7 +32,7 @@ export default function HRManagement() {
   const [employeePage, setEmployeePage] = useState(1);
   const [employeeMeta, setEmployeeMeta] = useState({ hasNext: false, hasPrev: false });
 
-  useEffect(() => {
+  const loadHrData = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     Promise.all([
       api<PaginatedResponse<Employee>>(`/hr/employees?page=${employeePage}&limit=10&search=${encodeURIComponent(search)}`),
@@ -52,6 +53,12 @@ export default function HRManagement() {
       })
       .catch(() => toast.error('Failed to load HR data'));
   }, [employeePage, search]);
+
+  useEffect(() => {
+    loadHrData();
+  }, [loadHrData]);
+
+  usePosRealtimeScopes(['hr', 'dashboard'], loadHrData);
 
   const getEmployee = (id: string) => employees.find(e => e.id === id);
 
@@ -522,9 +529,14 @@ export default function HRManagement() {
 
       {/* Salary Adjust Modal */}
       {showSalaryAdjust && (
-        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => setShowSalaryAdjust(null)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">Adjust Salary — {getEmployee(showSalaryAdjust)?.name}</h3>
+        <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-serif text-lg font-bold text-foreground">Adjust Salary — {getEmployee(showSalaryAdjust)?.name}</h3>
+              <button type="button" onClick={() => setShowSalaryAdjust(null)} className="rounded-full p-1 text-muted-foreground hover:bg-muted" aria-label="Close salary adjust">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div>
               <label className="text-xs text-muted-foreground">Bonus (Rs)</label>
               <input type="number" value={adjustBonus} onChange={e => setAdjustBonus(e.target.value)} placeholder="0" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm mt-1" />

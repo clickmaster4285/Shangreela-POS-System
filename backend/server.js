@@ -1,3 +1,4 @@
+const http = require("http");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -7,8 +8,10 @@ const fs = require("fs");
 const { connectDb } = require("./config/db");
 const routes = require("./routes");
 const { runAutoInitialization } = require("./utils/autoInitialization");
-const { port, frontendOrigin } = require("./config/config");
+const { initSocket } = require("./socket");
+const { port, frontendOrigins } = require("./config/config");
 const app = express();
+const server = http.createServer(app);
 
 app.use(compression());
 
@@ -26,8 +29,14 @@ uploadSubfolders.forEach((sub) => {
 });
 app.use("/uploads", express.static(uploadsPath));
 
-// CORS setup
-app.use(cors({ origin: frontendOrigin, credentials: true }));
+// CORS setup (same origins as Socket.IO — see `socket/index.js`)
+app.use(
+  cors({
+    origin: frontendOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    credentials: true,
+  })
+);
 
 // ========== ADD CACHE CONTROL MIDDLEWARE HERE ==========
 // Disable ETag to prevent 304 responses
@@ -70,8 +79,11 @@ app.use("/api", (req, res, next) => {
 async function boot() {
   await connectDb();
   await runAutoInitialization();
-  app.listen(port, () => {
+  const io = initSocket(server);
+  app.set("io", io);
+  server.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
+    console.log(`Socket.IO at ws://localhost:${port}/socket.io`);
     console.log(`Cache disabled for all /api routes - 304 responses prevented`);
   });
 }

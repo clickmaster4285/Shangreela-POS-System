@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Printer, Usb, Wifi, CheckCircle2, Circle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 export type PrinterSlot = {
   id: string;
@@ -21,11 +22,17 @@ const DEFAULT_PRINTERS: PrinterSlot[] = [
 export default function PrinterIntegration() {
   const [slots, setSlots] = useState<PrinterSlot[]>(DEFAULT_PRINTERS);
 
-  useEffect(() => {
+  const loadPrinters = useCallback(() => {
     api<{ items: PrinterSlot[] }>('/settings/printers')
       .then(r => setSlots(r.items.length ? r.items : DEFAULT_PRINTERS))
       .catch(() => setSlots(DEFAULT_PRINTERS));
   }, []);
+
+  useEffect(() => {
+    loadPrinters();
+  }, [loadPrinters]);
+
+  usePosRealtimeScopes(['settings'], loadPrinters);
 
   const update = (id: string, patch: Partial<PrinterSlot>) => {
     setSlots(prev => {

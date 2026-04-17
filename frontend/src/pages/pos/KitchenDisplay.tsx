@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Order, TableInfo } from '@/data/mockData';
 import { Clock, ChefHat, CheckCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT, fetchAllPaginatedItems } from '@/lib/paginatedFetch';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
@@ -25,7 +27,9 @@ export default function KitchenDisplay() {
   };
 
   const fetchTables = () =>
-    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=200').then(r => {
+    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(
+      `/tables?page=1&limit=${MAX_LIST_LIMIT}`
+    ).then(r => {
       setTables(r.items.map(table => ({
         id: table.number,
         name: table.name,
@@ -36,15 +40,25 @@ export default function KitchenDisplay() {
       })));
     });
 
-  const fetchOrders = () =>
-    api<{ items: (Order & { dbId: string })[] }>('/orders?status=all&limit=100&page=1').then(r => {
-      setOrders(r.items.filter(o => o.status !== 'completed' && o.status !== 'served'));
-    });
+  const fetchOrders = async () => {
+    const items = await fetchAllPaginatedItems<Order & { dbId: string }>(
+      (page, limit) => `/orders?status=all&page=${page}&limit=${limit}`,
+      200
+    );
+    setOrders(items.filter(o => o.status !== 'completed' && o.status !== 'served'));
+  };
 
   useEffect(() => {
     fetchTables().catch(() => toast.error('Failed to load table labels'));
     fetchOrders().catch(() => toast.error('Failed to load kitchen queue'));
   }, []);
+
+  const refreshKitchen = useCallback(() => {
+    fetchTables().catch(() => toast.error('Failed to load table labels'));
+    fetchOrders().catch(() => toast.error('Failed to load kitchen queue'));
+  }, []);
+
+  usePosRealtimeScopes(['orders', 'tables'], refreshKitchen);
 
   const updateStatus = (id: string, status: Order['status']) => {
     const row = orders.find(o => o.id === id);

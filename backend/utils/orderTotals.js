@@ -14,14 +14,23 @@ const calculateOrderTotals = (items = [], tax = 0, discount = 0) => {
   };
 };
 
+const TAX_RATES_TTL_MS = 60_000;
+let taxRatesCache = { value: null, fetchedAt: 0 };
+
 const getEffectiveTaxRates = async () => {
+  const now = Date.now();
+  if (taxRatesCache.value && now - taxRatesCache.fetchedAt < TAX_RATES_TTL_MS) {
+    return taxRatesCache.value;
+  }
   const row = await TaxConfig.findOne({}).lean();
   const gstRate = Number(row?.salesTaxRate ?? 16) / 100;
   const serviceChargeRate = Number(row?.serviceChargeRate ?? 5) / 100;
-  return {
+  const value = {
     gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
     serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
   };
+  taxRatesCache = { value, fetchedAt: now };
+  return value;
 };
 
 /** Service charge applies only to dine-in; takeaway and delivery use subtotal + GST only. */
@@ -51,8 +60,13 @@ const calculateGrandTotal = (
   };
 };
 
+const invalidateTaxRatesCache = () => {
+  taxRatesCache = { value: null, fetchedAt: 0 };
+};
+
 module.exports = {
   calculateOrderTotals,
   getEffectiveTaxRates,
   calculateGrandTotal,
+  invalidateTaxRatesCache,
 };

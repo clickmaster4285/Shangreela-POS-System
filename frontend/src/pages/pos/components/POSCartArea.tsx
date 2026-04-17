@@ -35,6 +35,7 @@ interface POSCartAreaProps {
   currentOrderForEdit: { dbId: string; id: string } | null;
   setCurrentOrderForEdit: (v: { dbId: string; id: string } | null) => void;
   onPlaceOrder: () => void;
+  placeOrderDisabled?: boolean;
   gstAmount: number;
   setIsCustomAddon: (v: boolean) => void;
 }
@@ -73,6 +74,7 @@ export function POSCartArea({
   currentOrderForEdit,
   setCurrentOrderForEdit,
   onPlaceOrder,
+  placeOrderDisabled = false,
   gstAmount,
   setIsCustomAddon,
 }: POSCartAreaProps) {
@@ -310,9 +312,10 @@ export function POSCartArea({
 
           <button
             onClick={onPlaceOrder}
-            className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors"
+            disabled={placeOrderDisabled}
+            className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Place Order
+            {placeOrderDisabled ? 'Saving...' : 'Place Order'}
           </button>
         </div>
       </div>

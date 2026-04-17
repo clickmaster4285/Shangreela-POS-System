@@ -19,8 +19,12 @@ interface DeliveryOrder {
   createdAt?: string;
 }
 
-import { api } from '@/lib/api';
+import { api, type PaginatedResponse } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+type DeliveryListResponse = PaginatedResponse<DeliveryOrder> & {
+  statusCounts?: Record<string, number>;
+};
 
 const statusConfig: Record<DeliveryStatus, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: 'Pending', color: 'bg-warning/10 text-warning border-warning/20', icon: Clock },
@@ -41,8 +45,11 @@ export default function DeliveryTracking() {
   const queryClient = useQueryClient();
 
   const deliveriesQuery = useQuery({
-    queryKey: ['deliveries', page],
-    queryFn: () => api<{ items: DeliveryOrder[]; pagination: { hasNext: boolean; hasPrev: boolean } }>(`/deliveries?page=${page}&limit=12`),
+    queryKey: ['deliveries', page, filter],
+    queryFn: () => {
+      const statusParam = filter !== 'all' ? `&status=${encodeURIComponent(filter)}` : '';
+      return api<DeliveryListResponse>(`/deliveries?page=${page}&limit=50${statusParam}`);
+    },
   });
 
   const updateStatusMutation = useMutation({
@@ -55,17 +62,23 @@ export default function DeliveryTracking() {
 
   const deliveries = deliveriesQuery.data?.items ?? [];
 
-  const filtered = filter === 'all' ? deliveries : deliveries.filter(d => d.status === filter);
+  const statusCounts = deliveriesQuery.data?.statusCounts;
 
   const updateStatus = (id: string, status: DeliveryStatus) => {
     updateStatusMutation.mutate({ id, status });
   };
 
-  const counts = {
-    pending: deliveries.filter(d => d.status === 'pending').length,
-    out_for_delivery: deliveries.filter(d => d.status === 'out_for_delivery').length,
-    delivered: deliveries.filter(d => d.status === 'delivered').length,
-  };
+  const counts = statusCounts
+    ? {
+        pending: statusCounts.pending ?? 0,
+        out_for_delivery: statusCounts.out_for_delivery ?? 0,
+        delivered: statusCounts.delivered ?? 0,
+      }
+    : {
+        pending: deliveries.filter(d => d.status === 'pending').length,
+        out_for_delivery: deliveries.filter(d => d.status === 'out_for_delivery').length,
+        delivered: deliveries.filter(d => d.status === 'delivered').length,
+      };
 
   return (
     <div className="space-y-6">
@@ -81,7 +94,7 @@ export default function DeliveryTracking() {
           { key: 'out_for_delivery' as const, label: 'Out for Delivery', icon: Truck, count: counts.out_for_delivery, color: 'text-primary' },
           { key: 'delivered' as const, label: 'Delivered', icon: CheckCircle2, count: counts.delivered, color: 'text-success' },
         ]).map(s => (
-          <div key={s.key} className="pos-card flex items-center gap-4 cursor-pointer hover:border-primary/30" onClick={() => setFilter(s.key)}>
+          <div key={s.key} className="pos-card flex items-center gap-4 cursor-pointer hover:border-primary/30" onClick={() => { setFilter(s.key); setPage(1); }}>
             <div className={`w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center`}>
               <s.icon className={`w-6 h-6 ${s.color}`} />
             </div>
@@ -96,7 +109,7 @@ export default function DeliveryTracking() {
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
         {(['all', 'pending', 'out_for_delivery', 'delivered'] as const).map(s => (
-          <button key={s} onClick={() => setFilter(s)}
+          <button key={s} onClick={() => { setFilter(s); setPage(1); }}
             className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${filter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}
           >
             {s === 'out_for_delivery' ? 'Out for Delivery' : s} {s !== 'all' && `(${counts[s]})`}
@@ -106,7 +119,7 @@ export default function DeliveryTracking() {
 
       {/* Delivery cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map(delivery => {
+        {deliveries.map(delivery => {
           const config = statusConfig[delivery.status];
           const StatusIcon = config.icon;
           return (

@@ -1,7 +1,8 @@
 import { DollarSign, ShoppingCart, TrendingUp, XCircle, ArrowUpRight, Percent, ClipboardList, Tag } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
 
@@ -18,7 +19,8 @@ export default function POSDashboard() {
 
   const { data: floorsData } = useQuery({
     queryKey: ['floors-list'],
-    queryFn: () => api<{ items: { key: string; name: string }[] }>('/floors'),
+    queryFn: () =>
+      api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`),
   });
   const floors = floorsData?.items ?? [];
 
@@ -26,14 +28,35 @@ export default function POSDashboard() {
     queryKey: ['dashboard-overview', startDate, endDate, selectedFloor],
     queryFn: async () => {
       const floorParam = selectedFloor !== 'all' ? `&floorKey=${selectedFloor}` : '';
-      const [s, d, w, t, r] = await Promise.all([
-        api<{ revenue: number; profit: number; totalServiceCharges: number; totalDiscount: number; paymentBreakdown: { cash: number; card: number; easypesa: number; other: number }; totalOrders: number; openOrders: number; cancelledOrders: number; menuCount: number; lowStock: number; staff: number; totalExpenses: number; expenseCount: number; totalMenuOut: number }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}`),
-        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?from=${startDate}&to=${endDate}${floorParam}`),
-        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?from=${startDate}&to=${endDate}${floorParam}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}${floorParam}`),
-        api<{ items: RecentOrderRow[] }>(`/dashboard/recent-orders?floorKey=${selectedFloor}`),
-      ]);
-      return { summary: s, dailySalesData: d.items, weeklySalesData: w.items, topSellingItems: t.items, sampleOrders: r.items };
+      const b = await api<{
+        summary: {
+          revenue: number;
+          profit: number;
+          totalServiceCharges: number;
+          totalDiscount: number;
+          paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
+          totalOrders: number;
+          openOrders: number;
+          cancelledOrders: number;
+          menuCount: number;
+          lowStock: number;
+          staff: number;
+          totalExpenses: number;
+          expenseCount: number;
+          totalMenuOut: number;
+        };
+        salesDaily: { items: { hour: string; sales: number }[] };
+        revenueWeekly: { items: { day: string; revenue: number }[] };
+        topItems: { items: { name: string; sold: number; revenue: number }[] };
+        recentOrders: { items: RecentOrderRow[] };
+      }>(`/dashboard/bundle?from=${startDate}&to=${endDate}${floorParam}`);
+      return {
+        summary: b.summary,
+        dailySalesData: b.salesDaily.items,
+        weeklySalesData: b.revenueWeekly.items,
+        topSellingItems: b.topItems.items,
+        sampleOrders: b.recentOrders.items,
+      };
     },
   });
 

@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { InventoryItem, InventoryLog, Supplier, StockTransfer } = require("../models");
 
 // Fixed locations for stock transfers
@@ -19,7 +20,7 @@ const TRANSFER_CATEGORIES = [
 // List all inventory items with filtering
 exports.listItems = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
-  const where = {};
+  const where = { isActive: { $ne: false } };
   if (req.query.search) where.name = { $regex: String(req.query.search), $options: "i" };
   if (req.query.category && req.query.category !== "All") where.category = String(req.query.category);
   if (req.query.perishableOnly === "true") where.perishable = true;
@@ -32,7 +33,9 @@ exports.listItems = async (req, res) => {
 
 // Get single item with full history
 exports.getItem = async (req, res) => {
-  const item = await InventoryItem.findById(req.params.id).populate("supplier", "name").lean();
+  const item = await InventoryItem.findOne({ _id: req.params.id, isActive: { $ne: false } })
+    .populate("supplier", "name")
+    .lean();
   if (!item) return res.status(404).json({ message: "Item not found" });
   res.json({ ...item, id: String(item._id) });
 };
@@ -40,6 +43,7 @@ exports.getItem = async (req, res) => {
 // Create new inventory item
 exports.createItem = async (req, res) => {
   const row = await InventoryItem.create(req.body || {});
+  emitPosChange(["inventory", "dashboard"]);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
@@ -47,6 +51,7 @@ exports.createItem = async (req, res) => {
 exports.updateItem = async (req, res) => {
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true }).lean();
   if (!item) return res.status(404).json({ message: "Item not found" });
+  emitPosChange(["inventory", "dashboard"]);
   res.json({ ...item, id: String(item._id) });
 };
 
@@ -54,6 +59,7 @@ exports.updateItem = async (req, res) => {
 exports.deleteItem = async (req, res) => {
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true }).lean();
   if (!item) return res.status(404).json({ message: "Item not found" });
+  emitPosChange(["inventory", "dashboard"]);
   res.json({ ok: true });
 };
 
@@ -90,12 +96,14 @@ exports.restockItem = async (req, res) => {
     itemName: item.name,
     action: "restocked",
     quantity: qty,
+    unit: item.unit,
     price: cost,
     note: `Restocked @ ${cost}/unit. Total: ${totalPrice}`,
     timestamp: new Date().toISOString(),
     userId: String(req.user._id),
   });
 
+  emitPosChange(["inventory", "dashboard"]);
   res.json({ ok: true, item });
 };
 
@@ -119,11 +127,13 @@ exports.adjustItem = async (req, res) => {
     itemName: item.name,
     action: action === "add" ? "restocked" : action === "waste" ? "wasted" : "used",
     quantity: qty,
+    unit: item.unit,
     note: note || "",
     timestamp: new Date().toISOString(),
     userId: String(req.user._id),
   });
 
+  emitPosChange(["inventory", "dashboard"]);
   res.json({ ok: true });
 };
 
@@ -139,8 +149,16 @@ exports.createTransfer = async (req, res) => {
     return res.status(400).json({ message: "Source and destination locations must be different." });
   }
 
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    quantity: Number(item.quantity),
+  }));
+  if (normalizedItems.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+    return res.status(400).json({ message: "Each transfer quantity must be a number greater than 0." });
+  }
+
   // Validate all items exist and have sufficient quantity
-  const itemIds = items.map((item) => item.itemId);
+  const itemIds = normalizedItems.map((item) => item.itemId);
   const inventoryItems = await InventoryItem.find({ _id: { $in: itemIds } }).lean();
 
   if (inventoryItems.length !== itemIds.length) {
@@ -148,7 +166,7 @@ exports.createTransfer = async (req, res) => {
   }
 
   // Check quantity for each item
-  for (const transferItem of items) {
+  for (const transferItem of normalizedItems) {
     const invItem = inventoryItems.find((i) => String(i._id) === String(transferItem.itemId));
     if (!invItem) {
       return res.status(400).json({ message: `Item not found: ${transferItem.itemId}` });
@@ -161,7 +179,7 @@ exports.createTransfer = async (req, res) => {
   }
 
   // Deduct quantities from source location
-  for (const transferItem of items) {
+  for (const transferItem of normalizedItems) {
     await InventoryItem.findByIdAndUpdate(transferItem.itemId, {
       $inc: { quantity: -transferItem.quantity },
     });
@@ -172,7 +190,7 @@ exports.createTransfer = async (req, res) => {
     fromLocation,
     toLocation,
     transferCategory: transferCategory || "General",
-    items: items.map((item) => {
+    items: normalizedItems.map((item) => {
       const invItem = inventoryItems.find((i) => String(i._id) === String(item.itemId));
       return {
         itemId: item.itemId,
@@ -187,13 +205,14 @@ exports.createTransfer = async (req, res) => {
   });
 
   // Log each item transfer
-  const logs = items.map((item) => {
+  const logs = normalizedItems.map((item) => {
     const invItem = inventoryItems.find((i) => String(i._id) === String(item.itemId));
     return InventoryLog.create({
       itemId: String(item.itemId),
       itemName: invItem.name,
       action: "transferred",
       quantity: item.quantity,
+      unit: invItem.unit,
       note: `Transferred from ${fromLocation} to ${toLocation}${transferCategory ? ` (${transferCategory})` : ""}`,
       timestamp: new Date().toISOString(),
       userId: String(req.user._id),
@@ -201,6 +220,7 @@ exports.createTransfer = async (req, res) => {
   });
   await Promise.all(logs);
 
+  emitPosChange(["inventory", "dashboard"]);
   res.status(201).json({ ok: true, transfer });
 };
 
@@ -265,6 +285,7 @@ exports.listSuppliers = async (req, res) => {
 // Create supplier
 exports.createSupplier = async (req, res) => {
   const row = await Supplier.create(req.body || {});
+  emitPosChange(["inventory"]);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
@@ -272,6 +293,7 @@ exports.createSupplier = async (req, res) => {
 exports.updateSupplier = async (req, res) => {
   const row = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true }).lean();
   if (!row) return res.status(404).json({ message: "Supplier not found" });
+  emitPosChange(["inventory"]);
   res.json({ ...row, id: String(row._id) });
 };
 
@@ -279,6 +301,7 @@ exports.updateSupplier = async (req, res) => {
 exports.deleteSupplier = async (req, res) => {
   const row = await Supplier.findByIdAndDelete(req.params.id);
   if (!row) return res.status(404).json({ message: "Supplier not found" });
+  emitPosChange(["inventory"]);
   res.json({ ok: true });
 };
 

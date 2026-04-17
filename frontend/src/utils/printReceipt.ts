@@ -40,6 +40,7 @@ export interface ReceiptData {
   orderCreatedAt?: string;
   amountPaid?: number;
   changeDue?: number;
+  isPaid?: boolean;
 }
 
 const fmtPKR = (v: number) =>
@@ -94,6 +95,26 @@ export function printReceipt(data: ReceiptData) {
       background: #fff;
       font-size: 10px;
       line-height: 1.35;
+      position: relative;
+    }
+    .paid-stamp {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .paid-stamp span {
+      font-size: 54px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      color: rgba(220, 38, 38, 0.24);
+      border: 4px solid rgba(220, 38, 38, 0.24);
+      padding: 10px 18px;
+      border-radius: 10px;
+      transform: rotate(-28deg);
     }
     .doc-title {
       text-align: center;
@@ -172,6 +193,7 @@ export function printReceipt(data: ReceiptData) {
   </style>
 </head>
 <body>
+  ${data.isPaid ? '<div class="paid-stamp"><span>PAID</span></div>' : ''}
   <div class="doc-title">Tax invoice — Computerized POS</div>
 
   <div class="brand">

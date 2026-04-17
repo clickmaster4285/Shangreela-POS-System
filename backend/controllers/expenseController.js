@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { Expense } = require("../models");
 
 const deleteFileIfExists = (filePath) => {
@@ -9,6 +10,22 @@ const deleteFileIfExists = (filePath) => {
   if (fs.existsSync(storagePath)) {
     fs.unlinkSync(storagePath);
   }
+};
+
+const normalizePaymentFields = ({ amount, paymentStatus, paidAmount }) => {
+  const totalAmount = Math.max(0, Number(amount || 0));
+  const status = ["paid", "unpaid", "half"].includes(String(paymentStatus)) ? String(paymentStatus) : "paid";
+
+  let normalizedPaidAmount = Number(paidAmount);
+  if (!Number.isFinite(normalizedPaidAmount)) {
+    normalizedPaidAmount = status === "paid" ? totalAmount : 0;
+  }
+  normalizedPaidAmount = Math.max(0, Math.min(totalAmount, normalizedPaidAmount));
+
+  if (status === "paid") normalizedPaidAmount = totalAmount;
+  if (status === "unpaid") normalizedPaidAmount = 0;
+
+  return { totalAmount, status, normalizedPaidAmount };
 };
 
 exports.list = async (req, res) => {
@@ -34,16 +51,24 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const receiptFile = req.file ? `/uploads/expenses/${req.file.filename}` : req.body.receiptFile || "";
+  const { totalAmount, status, normalizedPaidAmount } = normalizePaymentFields({
+    amount: req.body.amount,
+    paymentStatus: req.body.paymentStatus,
+    paidAmount: req.body.paidAmount,
+  });
   const row = await Expense.create({
     category: req.body.category || "other",
     description: req.body.description || "",
-    amount: Number(req.body.amount || 0),
+    amount: totalAmount,
+    paymentStatus: status,
+    paidAmount: normalizedPaidAmount,
     paymentMethod: req.body.paymentMethod || "cash",
     paymentDate: req.body.paymentDate || new Date(),
     notes: req.body.notes || "",
     vendor: req.body.vendor || "",
     receiptFile,
   });
+  emitPosChange(["expenses", "dashboard"]);
   res.status(201).json({ id: String(row._id), ok: true });
 };
 
@@ -62,7 +87,19 @@ exports.update = async (req, res) => {
     req.body.receiptFile = `/uploads/expenses/${req.file.filename}`;
   }
 
+  if (req.body.amount !== undefined || req.body.paymentStatus !== undefined || req.body.paidAmount !== undefined) {
+    const { totalAmount, status, normalizedPaidAmount } = normalizePaymentFields({
+      amount: req.body.amount !== undefined ? req.body.amount : expense.amount,
+      paymentStatus: req.body.paymentStatus !== undefined ? req.body.paymentStatus : expense.paymentStatus,
+      paidAmount: req.body.paidAmount !== undefined ? req.body.paidAmount : expense.paidAmount,
+    });
+    req.body.amount = totalAmount;
+    req.body.paymentStatus = status;
+    req.body.paidAmount = normalizedPaidAmount;
+  }
+
   const row = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true }).lean();
+  emitPosChange(["expenses", "dashboard"]);
   res.json({ ...row, id: String(row._id) });
 };
 
@@ -70,6 +107,7 @@ exports.delete = async (req, res) => {
   const row = await Expense.findByIdAndDelete(req.params.id);
   if (!row) return res.status(404).json({ message: "Expense not found" });
   if (row.receiptFile) deleteFileIfExists(row.receiptFile);
+  emitPosChange(["expenses", "dashboard"]);
   res.json({ ok: true });
 };
 

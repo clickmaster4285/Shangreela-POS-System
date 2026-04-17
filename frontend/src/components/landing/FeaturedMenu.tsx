@@ -7,7 +7,7 @@ export default function FeaturedMenu() {
   const [active, setActive] = useState('All');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   useEffect(() => {
-    api<PaginatedResponse<MenuItem>>('/menu?page=1&limit=12')
+    api<PaginatedResponse<MenuItem>>('/menu?page=1&limit=50')
       .then((response) => setMenuItems(response.items))
       .catch(() => {});
   }, []);

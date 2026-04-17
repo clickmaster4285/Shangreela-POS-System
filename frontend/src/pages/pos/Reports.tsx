@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
 import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { exportReportPdf } from '@/utils/exportReportPdf';
 
@@ -87,7 +88,8 @@ export default function Reports() {
 
   const { data: floorsData } = useQuery({
     queryKey: ['floors-list'],
-    queryFn: () => api<{ items: { key: string; name: string }[] }>('/floors'),
+    queryFn: () =>
+      api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`),
   });
   const floors = floorsData?.items ?? [];
 

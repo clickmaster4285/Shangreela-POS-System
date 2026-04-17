@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Order, TableInfo } from '@/data/mockData';
 import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,10 +6,14 @@ import { printReceipt } from '@/utils/printReceipt';
 import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { useQueryClient } from '@tanstack/react-query';
 import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
+import { useSubmitLock } from '@/hooks/use-submit-lock';
 
 export default function Billing() {
+  const { isLocked, runLocked } = useSubmitLock();
   const { hasAction } = useAuth();
   const queryClient = useQueryClient();
   const [orders, setOrders] = useState<(Order & { dbId?: string; printed?: boolean })[]>([]);
@@ -101,7 +105,7 @@ export default function Billing() {
 
   const loadOrders = (pageNum = 1, append = false) => {
     setLoading(true);
-    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?status=all&limit=100&page=${pageNum}`).then(r => {
+    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?status=all&limit=50&page=${pageNum}`).then(r => {
       const filteredOrders = r.items.filter(o => o.status !== 'cancelled');
       
       // Add printed status to orders first so we can use it for sorting
@@ -145,7 +149,7 @@ export default function Billing() {
   };
 
   const loadTables = () =>
-    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>('/tables?page=1&limit=500').then(r => {
+    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`).then(r => {
       setTables(r.items.map(table => ({
         id: table.number,
         name: table.name,
@@ -168,7 +172,7 @@ export default function Billing() {
     loadTables().catch(() => toast.error('Failed to load tables'));
   }, []);
 
-  useEffect(() => {
+  const loadTaxRates = useCallback(() => {
     api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
       .then((r) => {
         const gstRate = Number(r.salesTaxRate ?? 16) / 100;
@@ -182,6 +186,16 @@ export default function Billing() {
         // keep defaults
       });
   }, []);
+
+  useEffect(() => {
+    loadTaxRates();
+  }, [loadTaxRates]);
+
+  usePosRealtimeScopes(['orders', 'tables', 'settings'], () => {
+    loadOrders().catch(() => toast.error('Failed to refresh bills'));
+    loadTables().catch(() => toast.error('Failed to refresh tables'));
+    loadTaxRates();
+  });
 
   useEffect(() => {
     if (!selectedOrder) return;
@@ -358,6 +372,57 @@ export default function Billing() {
   const filteredPaidCount = filteredOrders.filter(o => o.status === 'completed').length;
 
   const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
+  const buildReceiptData = (
+    order: Order & { dbId?: string; printed?: boolean },
+    paidStamp: boolean,
+    overridePaymentMethod?: string
+  ) => {
+    const orderSubtotal = order.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
+    const orderDiscount =
+      order.id === selectedOrder.id
+        ? discountAmt
+        : Number(order.discount || 0);
+    const orderTaxBreakdown = computePakistanTaxTotals(
+      orderSubtotal,
+      orderDiscount,
+      order.gstEnabled !== false,
+      taxRates,
+      { applyServiceCharge: order.type === 'dine-in' }
+    );
+    const orderGrandTotal = order.status === 'completed' && Number.isFinite(Number(order.total))
+      ? Number(order.total)
+      : orderTaxBreakdown.grandTotal;
+    const tableInfo = order.table ? tableMap.get(order.table) : null;
+    return {
+      orderId: order.id,
+      orderType: order.type,
+      table: order.table,
+      tableName: tableInfo?.name,
+      items: order.items,
+      subtotal: orderSubtotal,
+      discount: orderDiscount,
+      discountPercent: 0,
+      gstEnabled: order.gstEnabled !== false,
+      gstRate: taxRates.gstRate,
+      serviceChargeRate: taxRates.serviceChargeRate,
+      paymentMethod: order.status === 'completed'
+        ? String(overridePaymentMethod || (order as any).paymentMethod || paymentLabel)
+        : paymentLabel,
+      customerName: order.customerName,
+      orderCreatedAt: order.createdAt,
+      amountPaid: order.status === 'completed'
+        ? orderGrandTotal
+        : paymentMethod === 'cash'
+          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) : orderGrandTotal)
+          : undefined,
+      changeDue: order.status === 'completed'
+        ? 0
+        : paymentMethod === 'cash'
+          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) - orderGrandTotal : 0)
+          : undefined,
+      isPaid: paidStamp || order.status === 'completed',
+    };
+  };
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4 overflow-hidden lg:h-[calc(100vh-7rem)]">
@@ -763,22 +828,7 @@ export default function Billing() {
               <Trash2 className="w-4 h-4" /> Delete
             </button>
             <button onClick={() => {
-              const tableInfo = selectedOrder.table ? tableMap.get(selectedOrder.table) : null;
-              const tableDisplay = tableInfo ? `${tableInfo.name} (${selectedOrder.table})` : selectedOrder.table;
-              printReceipt({
-                orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
-                tableName: tableInfo?.name,
-                items: selectedOrder.items, subtotal,
-                discount: discountMode === 'amount' ? discountValue : 0,
-                discountPercent: discountMode === 'percent' ? discountValue : 0,
-                gstEnabled,
-                gstRate: taxRates.gstRate,
-                serviceChargeRate: taxRates.serviceChargeRate,
-                paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
-                orderCreatedAt: selectedOrder.createdAt,
-                amountPaid: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal) : undefined,
-                changeDue: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0) : undefined,
-              });
+              printReceipt(buildReceiptData(selectedOrder, false));
               // Mark order as printed
               markOrderAsPrinted(selectedOrder.id);
               // Update the order in the list to show printed status
@@ -788,30 +838,17 @@ export default function Billing() {
               <Printer className="w-4 h-4" /> Print
             </button>
             <button onClick={() => {
+              void runLocked('complete-payment', async () => {
               if (selectedOrder.status === 'completed') {
-                toast.info('This bill is already paid');
+                printReceipt(buildReceiptData(selectedOrder, true, (selectedOrder as any).paymentMethod));
+                markOrderAsPrinted(selectedOrder.id);
+                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, printed: true } : o));
+                toast.success('Paid bill reprinted');
                 return;
               }
-              const tableInfo = selectedOrder.table ? tableMap.get(selectedOrder.table) : null;
-              const tableDisplay = tableInfo ? `${tableInfo.name} (${selectedOrder.table})` : selectedOrder.table;
-              printReceipt({
-                orderId: selectedOrder.id, orderType: selectedOrder.type, table: selectedOrder.table,
-                tableName: tableInfo?.name,
-                items: selectedOrder.items, subtotal,
-                discount: discountMode === 'amount' ? discountValue : 0,
-                discountPercent: discountMode === 'percent' ? discountValue : 0,
-                gstEnabled,
-                gstRate: taxRates.gstRate,
-                serviceChargeRate: taxRates.serviceChargeRate,
-                paymentMethod: paymentLabel, customerName: selectedOrder.customerName,
-                orderCreatedAt: selectedOrder.createdAt,
-                amountPaid: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal) : undefined,
-                changeDue: paymentMethod === 'cash' ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0) : undefined,
-              });
-              // Mark order as printed
-              markOrderAsPrinted(selectedOrder.id);
+              const orderSnapshot = { ...selectedOrder };
               if (selectedOrder.dbId) {
-                api(`/orders/${selectedOrder.dbId}/payment`, {
+                await api(`/orders/${selectedOrder.dbId}/payment`, {
                   method: 'POST',
                   body: JSON.stringify({
                     paymentMethod,
@@ -823,20 +860,21 @@ export default function Billing() {
                     gstAmount,
                     serviceCharge,
                   }),
-                })
-                  .then(() => {
-                    toast.success('Payment completed and receipt printed');
-                    loadOrders();
-                    queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
-                    queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-                    queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
-                    queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
-                  })
-                  .catch(() => toast.error('Payment failed'));
+                });
+                printReceipt(buildReceiptData({ ...orderSnapshot, status: 'completed' }, true, paymentMethod));
+                markOrderAsPrinted(orderSnapshot.id);
+                setOrders(prev => prev.map(o => o.id === orderSnapshot.id ? { ...o, printed: true, status: 'completed', paymentMethod } : o));
+                toast.success('Payment completed and receipt printed');
+                await loadOrders();
+                queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
+                queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+                queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
+                queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
               } else {
                 toast.success('Payment processed!');
               }
-            }} className="py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" disabled={selectedOrder.status === 'completed'}>
+              }).catch(() => toast.error('Payment failed'));
+            }} className="py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" disabled={isLocked('complete-payment')}>
               Complete Payment
             </button>
           </div>

@@ -11,15 +11,19 @@ import { toast } from 'sonner';
 import { computePakistanTaxTotals } from '@/utils/pakistanTax';
 import { useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '@/contexts/CartContext';
 import { useDebounce } from '@/hooks/use-debounce';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
+import { useSubmitLock } from '@/hooks/use-submit-lock';
 import { COMMON_ADDONS } from '@/data/mockData';
 import Fuse from 'fuse.js';
 import { POSMenuArea } from './components/POSMenuArea';
 import { POSCartArea } from './components/POSCartArea';
 
 export default function POSScreen() {
+  const { isLocked, runLocked } = useSubmitLock();
   const { cart, setCart, showDiscardPopup, setShowDiscardPopup, pendingNavigation, setPendingNavigation } = useCart();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [floors, setFloors] = useState<{ id: string; name: string }[]>([]);
@@ -59,17 +63,17 @@ export default function POSScreen() {
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
   const menuQuery = useQuery({
     queryKey: ['pos-menu-items'],
-    queryFn: () => api<PaginatedResponse<MenuItem & { id: string }>>('/menu?limit=500&page=1'),
+    queryFn: () => api<PaginatedResponse<MenuItem & { id: string }>>(`/menu?page=1&limit=${MAX_LIST_LIMIT}`),
   });
   const floorsQuery = useQuery({
     queryKey: ['pos-floors'],
-    queryFn: () => api<PaginatedResponse<{ key: string; name: string }>>('/floors?page=1&limit=200'),
+    queryFn: () => api<PaginatedResponse<{ key: string; name: string }>>(`/floors?page=1&limit=${MAX_LIST_LIMIT}`),
   });
   const tablesQuery = useQuery({
     queryKey: ['pos-tables'],
     queryFn: () =>
       api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(
-        '/tables?page=1&limit=500'
+        `/tables?page=1&limit=${MAX_LIST_LIMIT}`
       ),
   });
 
@@ -100,7 +104,7 @@ export default function POSScreen() {
     }
   }, [tablesQuery.data]);
 
-  useEffect(() => {
+  const loadTaxRates = useCallback(() => {
     api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
       .then((r) => {
         const gstRate = Number(r.salesTaxRate ?? 16) / 100;
@@ -114,6 +118,12 @@ export default function POSScreen() {
         // keep defaults
       });
   }, []);
+
+  useEffect(() => {
+    loadTaxRates();
+  }, [loadTaxRates]);
+
+  usePosRealtimeScopes(['settings'], loadTaxRates);
 
   const [searchParams] = useSearchParams();
   useEffect(() => {
@@ -497,8 +507,9 @@ export default function POSScreen() {
         return 'created';
       };
 
-      createOrAppend()
+      void runLocked('place-order', createOrAppend)
         .then(mode => {
+          if (!mode) return;
           toast.success(mode === 'updated' ? 'New items sent to kitchen' : 'Order placed to kitchen', {
             style: {
               background: '#22c55e',
@@ -513,6 +524,9 @@ export default function POSScreen() {
           });
           setCart([]);
           setCurrentOrderForEdit(null);
+          if (orderType === 'dine-in') {
+            setSelectedTableId(null);
+          }
           if (orderType === 'delivery') {
             setDeliveryCustomerName('');
             setDeliveryPhone('');
@@ -524,7 +538,7 @@ export default function POSScreen() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-7rem)]">
+    <div className="relative flex flex-col lg:flex-row gap-4 h-[calc(100vh-7rem)]">
       <POSMenuArea
         openFolder={openFolder}
         pakistaniSub={pakistaniSub}
@@ -580,6 +594,7 @@ export default function POSScreen() {
         currentOrderForEdit={currentOrderForEdit}
         setCurrentOrderForEdit={setCurrentOrderForEdit}
         onPlaceOrder={handlePlaceOrder}
+        placeOrderDisabled={isLocked('place-order')}
         gstAmount={gstAmount}
       />
 
@@ -651,8 +666,8 @@ export default function POSScreen() {
       {/* Table selection modal */}
       {showTablePicker && (
         <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-40 p-4">
-          <div className="bg-card rounded-2xl p-4 w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-3">
+          <div className="bg-card rounded-2xl p-5 w-full max-w-2xl max-h-[88vh] flex flex-col min-h-0">
+            <div className="flex shrink-0 justify-between items-start gap-3 pb-3">
               <div>
                 <h3 className="font-semibold text-sm">Select table</h3>
                 <p className="text-[11px] text-muted-foreground">
@@ -662,14 +677,14 @@ export default function POSScreen() {
               <button
                 type="button"
                 onClick={() => setShowTablePicker(false)}
-                className="p-1 rounded-full hover:bg-muted text-muted-foreground"
+                className="p-1 rounded-full hover:bg-muted text-muted-foreground shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Floor tabs */}
-            <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-thin pb-1">
+            {/* Floor tabs — shrink-0 so flex-1 table list never squashes this row */}
+            <div className="flex shrink-0 flex-wrap items-center gap-2 overflow-x-auto overflow-y-visible scrollbar-thin py-2.5 pb-3 -mx-1 px-1">
               {floors.map(floor => {
                 const isActive = floor.id === activeFloorId;
                 return (
@@ -677,7 +692,7 @@ export default function POSScreen() {
                     key={floor.id}
                     type="button"
                     onClick={() => setActiveFloorId(floor.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border ${
+                    className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border px-4 py-3 font-sans text-xs font-medium leading-normal whitespace-nowrap ${
                       isActive
                         ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-card text-muted-foreground border-border hover:border-primary/40'
@@ -690,7 +705,7 @@ export default function POSScreen() {
             </div>
 
             {/* Tables grid */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {tables
                   .filter(t => t.floorId === activeFloorId)

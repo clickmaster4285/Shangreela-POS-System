@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Truck, UserCircle, Banknote, Package } from 'lucide-react';
 import { useEffect } from 'react';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 type ShiftRow = {
   id: string;
@@ -16,11 +17,18 @@ type ShiftRow = {
 export default function OutdoorDeliveryReport() {
   const [data, setData] = useState<ShiftRow[]>([]);
   const [filter, setFilter] = useState('');
-  useEffect(() => {
+  const loadOutdoor = useCallback(() => {
     api<{ items: Omit<ShiftRow, 'id'>[] }>('/reports/outdoor-delivery').then(r =>
       setData(r.items.map((x, i) => ({ ...x, id: String(i + 1) })))
     );
   }, []);
+
+  useEffect(() => {
+    loadOutdoor();
+  }, [loadOutdoor]);
+
+  usePosRealtimeScopes(['orders', 'deliveries', 'dashboard'], loadOutdoor);
+
   const rows = useMemo(() => data.filter(r => r.supervisor.toLowerCase().includes(filter.toLowerCase()) || r.shiftLabel.toLowerCase().includes(filter.toLowerCase())), [filter, data]);
 
   const totals = useMemo(

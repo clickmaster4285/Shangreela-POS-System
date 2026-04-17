@@ -1,3 +1,4 @@
+const { emitPosChange } = require("../utils/realtime");
 const { FbrConfig } = require("../models");
 
 exports.getConfig = async (_req, res) => {
@@ -11,6 +12,7 @@ exports.putConfig = async (req, res) => {
   const row = existing
     ? await FbrConfig.findByIdAndUpdate(existing._id, req.body || {}, { new: true })
     : await FbrConfig.create(req.body || {});
+  emitPosChange(["fbr"]);
   res.json({ id: String(row._id), ntn: row.ntn, posId: row.posId, sandbox: row.sandbox, linked: row.linked });
 };
 
@@ -20,5 +22,6 @@ exports.testConnection = async (_req, res) => {
     row.linked = true;
     await row.save();
   }
+  emitPosChange(["fbr"]);
   res.json({ ok: true, message: "Connection successful (simulated)" });
 };

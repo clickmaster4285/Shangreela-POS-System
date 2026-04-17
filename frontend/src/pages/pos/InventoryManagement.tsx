@@ -1,12 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Package, AlertTriangle, Plus, Minus, Trash2, Search, Clock, TrendingDown, Archive, Truck, ArrowRightLeft, Edit2, X, Phone, Mail, MapPin, RotateCcw, Save } from 'lucide-react';
 import { type InventoryItem, type InventoryLog, type Supplier, type StockTransfer, inventoryCategories, transferCategories } from '@/data/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
+import { useSubmitLock } from '@/hooks/use-submit-lock';
 
 type Tab = 'stock' | 'transfers' | 'alerts' | 'logs' | 'suppliers';
 
+const BASE_UNITS = [
+  'kg',
+  'g',
+  'liter',
+  'ml',
+  'dozen',
+  'tray',
+  'piece',
+  'pack',
+  'box',
+  'bottle',
+  'can',
+  'jar',
+  'bag',
+  'sack',
+  'cup',
+  'tbsp',
+  'tsp',
+  'slice',
+  'portion',
+  'plate',
+] as const;
+
 export default function InventoryManagement() {
+  const { isLocked, runLocked } = useSubmitLock();
   const [tab, setTab] = useState<Tab>('stock');
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
@@ -142,6 +168,15 @@ export default function InventoryManagement() {
     fetchLocations();
   }, []);
 
+  const refreshInventoryViews = useCallback(() => {
+    void fetchStock();
+    void fetchLogs();
+    void fetchTransfers();
+    void fetchSuppliers();
+  }, [stockPage, search, catFilter, perishableOnly, logsPage, transferPage, supplierPage, supplierSearch, tab]);
+
+  usePosRealtimeScopes(['inventory', 'dashboard'], refreshInventoryViews);
+
   const lowStockItems = inventory.filter(i => i.quantity <= i.minStock);
   const expiringItems = inventory.filter(i => {
     if (!i.expiryDate) return false;
@@ -217,6 +252,7 @@ export default function InventoryManagement() {
     expiryDate: '', 
     supplier: '' 
   });
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
   const handleAddItem = async () => {
     if (!newItem.name || !newItem.quantity) return;
@@ -228,15 +264,63 @@ export default function InventoryManagement() {
         costPerUnit: parseFloat(newItem.costPerUnit) || 0,
         supplier: newItem.supplier || null,
       };
-      await api('/inventory/items', { method: 'POST', body: JSON.stringify(itemData) });
-      toast.success('Item added to inventory');
+      if (editingItem?.id || editingItem?._id) {
+        await api(`/inventory/items/${editingItem.id || editingItem._id}`, {
+          method: 'PUT',
+          body: JSON.stringify(itemData),
+        });
+        toast.success('Item updated');
+      } else {
+        await api('/inventory/items', { method: 'POST', body: JSON.stringify(itemData) });
+        toast.success('Item added to inventory');
+      }
       setShowAddForm(false);
+      setEditingItem(null);
       setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
       fetchStock();
       if (tab === 'logs') fetchLogs();
     } catch (error) {
       toast.error('Failed to add item');
     }
+  };
+
+  const handleDeleteItem = async (item: InventoryItem) => {
+    const itemId = item.id || item._id;
+    if (!itemId) {
+      toast.error('Item id missing');
+      return;
+    }
+    if (!window.confirm(`Delete "${item.name}" from inventory?`)) return;
+    try {
+      await api(`/inventory/items/${itemId}`, { method: 'DELETE' });
+      toast.success('Item deleted');
+      await fetchStock();
+      if (tab === 'logs') await fetchLogs();
+    } catch {
+      toast.error('Failed to delete item');
+    }
+  };
+
+  const openAddItemForm = () => {
+    setEditingItem(null);
+    setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
+    setShowAddForm(true);
+  };
+
+  const openEditItemForm = (item: InventoryItem) => {
+    setEditingItem(item);
+    setNewItem({
+      name: item.name || '',
+      category: item.category || 'Meat',
+      quantity: String(item.quantity ?? ''),
+      unit: item.unit || 'kg',
+      minStock: String(item.minStock ?? ''),
+      costPerUnit: String(item.costPerUnit ?? ''),
+      perishable: Boolean(item.perishable),
+      expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : '',
+      supplier: typeof item.supplier === 'object' ? ((item.supplier as any)?._id || '') : (item.supplier || ''),
+    });
+    setShowAddForm(true);
   };
 
   // Supplier Management Handlers
@@ -398,7 +482,7 @@ export default function InventoryManagement() {
               <button onClick={() => setShowTransferForm(true)} className="bg-muted text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors">
                 <ArrowRightLeft className="w-4 h-4" /> Transfer
               </button>
-              <button onClick={() => setShowAddForm(true)} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
+              <button onClick={openAddItemForm} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
                 <Plus className="w-4 h-4" /> Add Item
               </button>
             </>
@@ -491,10 +575,32 @@ export default function InventoryManagement() {
                         <td className={`px-4 py-3 text-xs ${isExpired ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{item.expiryDate || '—'}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => { setRestockItem(item); setRestockData({ quantity: '', costPerUnit: item.costPerUnit?.toString() || '', supplier: typeof item.supplier === 'object' ? item.supplier._id : '', note: '' }); }} className="bg-primary/10 text-primary px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-primary hover:text-primary-foreground transition-colors">
-                              <RotateCcw className="w-3 h-3" /> Restock
+                            <button
+                              onClick={() => {
+                                setRestockItem(item);
+                                setRestockData({
+                                  quantity: '',
+                                  costPerUnit: item.costPerUnit?.toString() || '',
+                                  supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : '',
+                                  note: '',
+                                });
+                              }}
+                              className="bg-success/10 text-success px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-success hover:text-white transition-colors"
+                            >
+                              <Plus className="w-3 h-3" /> Restock
                             </button>
-                            <button onClick={() => { setAdjustItem(item); setAdjustAction('use'); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground border border-border" title="Adjustment"><Edit2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => openEditItemForm(item)} className="bg-primary/10 text-primary px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-primary hover:text-primary-foreground transition-colors">
+                              <Edit2 className="w-3 h-3" /> Edit
+                            </button>
+                            <button onClick={() => { setAdjustItem(item); setAdjustAction('use'); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground border border-border" title="Adjustment"><RotateCcw className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => { void runLocked(`inventory-delete-item-${item.id || item._id}`, () => handleDeleteItem(item)); }}
+                              disabled={isLocked(`inventory-delete-item-${item.id || item._id}`)}
+                              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive border border-destructive/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Delete item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -618,7 +724,7 @@ export default function InventoryManagement() {
                       <td className="px-4 py-3">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${log.action === 'restocked' ? 'bg-green-100 text-green-700' : log.action === 'wasted' ? 'bg-red-100 text-red-700' : 'bg-muted text-muted-foreground'}`}>{log.action}</span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold">{log.quantity}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">{log.quantity}{(log as any).unit ? ` ${(log as any).unit}` : ''}</td>
                       <td className="px-4 py-3 text-right font-mono text-primary font-bold">
                         {log.price ? `Rs. ${log.price}` : '—'}
                       </td>
@@ -682,13 +788,16 @@ export default function InventoryManagement() {
 
       {/* Modals */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddForm(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground">Add Inventory Item</h3>
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-foreground">{editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}</h3>
+              <button type="button" onClick={() => { setShowAddForm(false); setEditingItem(null); }}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button>
+            </div>
             <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Item Name</label><input value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Basmati Rice" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Category</label><select value={newItem.category} onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20">{inventoryCategories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Base Unit</label><input value={newItem.unit} onChange={e => setNewItem(p => ({ ...p, unit: e.target.value }))} placeholder="kg, pcs, liter" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
+              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Base Unit</label><select value={newItem.unit} onChange={e => setNewItem(p => ({ ...p, unit: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20">{BASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Opening Qty</label><input type="number" value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: e.target.value }))} placeholder="0" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
@@ -700,14 +809,14 @@ export default function InventoryManagement() {
             {newItem.perishable && (
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Expiry Date</label><input type="date" value={newItem.expiryDate} onChange={e => setNewItem(p => ({ ...p, expiryDate: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
             )}
-            <div className="flex gap-2 pt-2"><button onClick={() => setShowAddForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={handleAddItem} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all">Add Item</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={() => { setShowAddForm(false); setEditingItem(null); }} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-add-item', handleAddItem); }} disabled={isLocked('inventory-add-item')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-add-item') ? 'Saving...' : editingItem ? 'Save Changes' : 'Add Item'}</button></div>
           </div>
         </div>
       )}
 
       {restockItem && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setRestockItem(null)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground flex items-center gap-2"><RotateCcw className="w-5 h-5 text-primary" /> Restock Item</h3><button onClick={() => setRestockItem(null)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
             <div className="p-3 bg-primary/5 border border-primary/10 rounded-xl"><p className="text-sm font-bold text-foreground">{restockItem.name}</p><p className="text-xs text-muted-foreground">Current Stock: {restockItem.quantity} {restockItem.unit}</p></div>
             <div className="grid grid-cols-2 gap-3">
@@ -716,28 +825,31 @@ export default function InventoryManagement() {
             </div>
             <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Supplier</label><select value={restockData.supplier} onChange={e => setRestockData(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={s.id || s._id} value={s.id || s._id}>{s.name}</option>)}</select></div>
             <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Note</label><input value={restockData.note} onChange={e => setRestockData(p => ({ ...p, note: e.target.value }))} placeholder="Purchase details..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setRestockItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={handleRestockSubmit} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20">Confirm</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={() => setRestockItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-restock', handleRestockSubmit); }} disabled={isLocked('inventory-restock')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-restock') ? 'Saving...' : 'Confirm'}</button></div>
           </div>
         </div>
       )}
 
       {adjustItem && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setAdjustItem(null)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground">Stock Adjustment</h3><button onClick={() => setAdjustItem(null)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
             <div className="p-3 bg-muted/50 rounded-xl"><p className="text-sm font-bold text-foreground">{adjustItem.name}</p><p className="text-xs text-muted-foreground">Current Balance: {adjustItem.quantity} {adjustItem.unit}</p></div>
             <div className="flex gap-1 bg-muted rounded-xl p-1">{(['use', 'waste'] as const).map(a => (<button key={a} onClick={() => setAdjustAction(a)} className={`flex-1 py-2 rounded-lg text-xs font-bold capitalize transition-all ${adjustAction === a ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>{a}</button>))}</div>
             <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Quantity to {adjustAction}</label><input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
             <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Reason / Note</label><input value={adjustNote} onChange={e => setAdjustNote(e.target.value)} placeholder="e.g. Daily prep..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setAdjustItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={handleAdjust} className={`flex-1 py-2 rounded-xl text-sm font-bold text-primary-foreground transition-all shadow-md ${adjustAction === 'waste' ? 'bg-red-600 hover:bg-red-700' : 'bg-foreground hover:bg-black'}`}>Confirm</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={() => setAdjustItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-adjust', handleAdjust); }} disabled={isLocked('inventory-adjust')} className={`flex-1 py-2 rounded-xl text-sm font-bold text-primary-foreground transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed ${adjustAction === 'waste' ? 'bg-red-600 hover:bg-red-700' : 'bg-foreground hover:bg-black'}`}>{isLocked('inventory-adjust') ? 'Saving...' : 'Confirm'}</button></div>
           </div>
         </div>
       )}
 
       {showTransferForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowTransferForm(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-            <h3 className="font-serif text-lg font-bold text-foreground flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-primary" /> Stock Transfer</h3>
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-foreground flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-primary" /> Stock Transfer</h3>
+              <button type="button" onClick={() => setShowTransferForm(false)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button>
+            </div>
             <div className="space-y-3">
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Section</label><select value={newTransfer.transferCategory} onChange={e => setNewTransfer(p => ({ ...p, transferCategory: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm">{transferCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>
               <div className="grid grid-cols-2 gap-3">
@@ -749,22 +861,24 @@ export default function InventoryManagement() {
               <div className="flex justify-between items-center"><label className="text-xs font-medium text-muted-foreground ml-1">Items to Transfer</label><button onClick={addTransferItem} className="text-xs text-primary font-bold hover:underline">+ Add</button></div>
               <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
                 {newTransfer.items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 p-2 border border-border rounded-xl bg-muted/30">
-                    <select value={item.itemId} onChange={e => updateTransferItem(idx, e.target.value)} className="flex-1 bg-transparent border-none text-sm outline-none"><option value="">Select Item</option>{inventory.map(i => <option key={i.id || i._id} value={i.id || i._id}>{i.name} ({i.quantity})</option>)}</select>
-                    <input type="number" value={item.quantity} onChange={e => { const newItems = [...newTransfer.items]; newItems[idx].quantity = e.target.value; setNewTransfer(p => ({ ...p, items: newItems })); }} placeholder="Qty" className="w-20 bg-transparent border-none text-sm text-right outline-none" /><button onClick={() => removeTransferItem(idx)} className="text-destructive p-1 hover:bg-destructive/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div key={idx} className="flex gap-2 p-2 border border-border rounded-xl bg-muted/30 items-center">
+                    <select value={item.itemId} onChange={e => updateTransferItem(idx, e.target.value)} className="flex-1 bg-transparent border-none text-sm outline-none"><option value="">Select Item</option>{inventory.map(i => <option key={i.id || i._id} value={i.id || i._id}>{i.name} ({i.quantity} {i.unit})</option>)}</select>
+                    <input type="number" step="0.01" min="0.01" value={item.quantity} onChange={e => { const newItems = [...newTransfer.items]; newItems[idx].quantity = e.target.value; setNewTransfer(p => ({ ...p, items: newItems })); }} placeholder="Qty" className="w-20 bg-transparent border-none text-sm text-right outline-none" />
+                    <span className="text-xs text-muted-foreground w-12 text-left">{item.unit || 'unit'}</span>
+                    <button onClick={() => removeTransferItem(idx)} className="text-destructive p-1 hover:bg-destructive/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
               </div>
             </div>
             <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Reason (Optional)</label><input value={newTransfer.note} onChange={e => setNewTransfer(p => ({ ...p, note: e.target.value }))} placeholder="Reason for transfer..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setShowTransferForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={handleCreateTransfer} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20">Complete Transfer</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={() => setShowTransferForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-transfer', handleCreateTransfer); }} disabled={isLocked('inventory-transfer')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-transfer') ? 'Saving...' : 'Complete Transfer'}</button></div>
           </div>
         </div>
       )}
 
       {showSupplierForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowSupplierForm(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground">{editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}</h3><button onClick={() => setShowSupplierForm(false)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
             <div className="space-y-3">
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Business Name</label><input value={supplierData.name} onChange={e => setSupplierData(p => ({ ...p, name: e.target.value }))} placeholder="Business Name" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
@@ -774,7 +888,7 @@ export default function InventoryManagement() {
               </div>
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Address</label><textarea value={supplierData.address} onChange={e => setSupplierData(p => ({ ...p, address: e.target.value }))} placeholder="Address" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm min-h-[60px] shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
             </div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setShowSupplierForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={handleSupplierSubmit} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all">{editingSupplier ? 'Save Changes' : 'Add Supplier'}</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={() => setShowSupplierForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-supplier', handleSupplierSubmit); }} disabled={isLocked('inventory-supplier')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-supplier') ? 'Saving...' : editingSupplier ? 'Save Changes' : 'Add Supplier'}</button></div>
           </div>
         </div>
       )}

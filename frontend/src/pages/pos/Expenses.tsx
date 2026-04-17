@@ -1,16 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Trash2, Plus, Calendar, Filter, List, LayoutGrid } from 'lucide-react';
+import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
+import { useSubmitLock } from '@/hooks/use-submit-lock';
 
 type ExpenseCategory = 'supplies' | 'utilities' | 'rent' | 'wages' | 'maintenance' | 'other';
 type PaymentMethod = 'cash' | 'bank' | 'check';
+type PaymentStatus = 'paid' | 'unpaid' | 'half';
 
 interface Expense {
   id?: string;
   category: ExpenseCategory;
   description: string;
   amount: number;
+  paymentStatus: PaymentStatus;
+  paidAmount: number;
   paymentMethod: PaymentMethod;
   paymentDate: string;
   notes: string;
@@ -44,18 +49,38 @@ const categoryLabels: Record<ExpenseCategory, string> = {
   other: 'Other',
 };
 
+const paymentStatusLabel: Record<PaymentStatus, string> = {
+  paid: 'Paid',
+  unpaid: 'Unpaid',
+  half: 'Half Paid',
+};
+
+const paymentStatusCardColors: Record<PaymentStatus, string> = {
+  paid: 'border-success/40 bg-success/5',
+  half: 'border-warning/40 bg-warning/5',
+  unpaid: 'border-destructive/40 bg-destructive/5',
+};
+
 export default function Expenses() {
+  const { isLocked, runLocked } = useSubmitLock();
+  const getDefaultForm = useCallback(
+    (): Expense => ({
+      category: 'supplies',
+      description: '',
+      amount: 0,
+      paymentStatus: 'paid',
+      paidAmount: 0,
+      paymentMethod: 'cash',
+      paymentDate: new Date().toISOString().split('T')[0],
+      notes: '',
+      vendor: '',
+    }),
+    []
+  );
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<Expense>({
-    category: 'supplies',
-    description: '',
-    amount: 0,
-    paymentMethod: 'cash',
-    paymentDate: new Date().toISOString().split('T')[0],
-    notes: '',
-    vendor: '',
-  });
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [form, setForm] = useState<Expense>(getDefaultForm);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedReceiptFileName, setSelectedReceiptFileName] = useState<string>('');
@@ -90,6 +115,10 @@ export default function Expenses() {
     fetchExpenses();
   }, [fetchExpenses]);
 
+  usePosRealtimeScopes(['expenses', 'dashboard'], () => {
+    void fetchExpenses();
+  });
+
   const getReceiptUrl = (filePath: string) => {
     if (!filePath) return '';
     return filePath.startsWith('http') ? filePath : `${uploadHost}${filePath}`;
@@ -110,42 +139,60 @@ export default function Expenses() {
     setSelectedReceiptIsImage(false);
   };
 
+  const openCreateForm = () => {
+    setEditingExpenseId(null);
+    setForm(getDefaultForm());
+    setReceiptFile(null);
+    setShowForm(true);
+  };
+
+  const openEditForm = (expense: Expense) => {
+    setEditingExpenseId(expense.id || null);
+    setForm({
+      ...expense,
+      paymentDate: expense.paymentDate ? String(expense.paymentDate).split('T')[0] : new Date().toISOString().split('T')[0],
+      paymentStatus: expense.paymentStatus || 'paid',
+      paidAmount: Number(expense.paidAmount || 0),
+    });
+    setReceiptFile(null);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingExpenseId(null);
+    setReceiptFile(null);
+    setForm(getDefaultForm());
+  };
+
   const handleSubmit = async () => {
     if (!form.description || form.amount <= 0) {
       toast.error('Please fill all required fields');
       return;
     }
-    try {
+    await runLocked('expense-submit', async () => {
       const body = new FormData();
       body.append('category', form.category);
       body.append('description', form.description);
       body.append('amount', String(form.amount));
+      body.append('paymentStatus', form.paymentStatus);
+      body.append('paidAmount', String(form.paidAmount));
       body.append('paymentMethod', form.paymentMethod);
       body.append('paymentDate', form.paymentDate);
       body.append('notes', form.notes);
       body.append('vendor', form.vendor);
       if (receiptFile) body.append('receiptFile', receiptFile);
 
-      await api('/expenses', {
-        method: 'POST',
+      await api(editingExpenseId ? `/expenses/${editingExpenseId}` : '/expenses', {
+        method: editingExpenseId ? 'PATCH' : 'POST',
         body,
       });
-      toast.success('Expense added');
-      setForm({
-        category: 'supplies',
-        description: '',
-        amount: 0,
-        paymentMethod: 'cash',
-        paymentDate: new Date().toISOString().split('T')[0],
-        notes: '',
-        vendor: '',
-      });
-      setReceiptFile(null);
-      setShowForm(false);
+      toast.success(editingExpenseId ? 'Expense updated' : 'Expense added');
+      closeForm();
       fetchExpenses();
-    } catch (error) {
-      toast.error('Failed to add expense');
-    }
+    }).catch(() => {
+      toast.error(editingExpenseId ? 'Failed to update expense' : 'Failed to add expense');
+    });
   };
 
   const handleDelete = async (id: string | undefined) => {
@@ -169,7 +216,7 @@ export default function Expenses() {
           <p className="text-sm text-muted-foreground">Track and manage business expenses.</p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={openCreateForm}
           className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2 hover:bg-secondary transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Expense
@@ -246,7 +293,10 @@ export default function Expenses() {
       {viewMode === 'grid' ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {expenses.map((expense, i) => (
-            <div key={expense.id || i} className={`pos-card space-y-3 border ${categoryColors[expense.category]}`}>
+            <div
+              key={expense.id || i}
+              className={`pos-card space-y-3 border ${paymentStatusCardColors[expense.paymentStatus || 'paid']}`}
+            >
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-semibold text-foreground text-sm">{expense.description}</p>
@@ -260,6 +310,7 @@ export default function Expenses() {
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>📅 {new Date(expense.paymentDate).toLocaleDateString()}</p>
                 <p>💳 {expense.paymentMethod}</p>
+                <p>📌 {paymentStatusLabel[expense.paymentStatus || 'paid']} {expense.paymentStatus === 'half' ? `• Paid Rs. ${(expense.paidAmount || 0).toLocaleString()}` : ''}</p>
                 {expense.notes && <p>📝 {expense.notes}</p>}
                 {expense.receiptFile && (
                   <button
@@ -271,12 +322,20 @@ export default function Expenses() {
                   </button>
                 )}
               </div>
-              <button
-                onClick={() => handleDelete(expense.id)}
-                className="w-full py-2 rounded-lg bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center justify-center gap-1"
-              >
-                <Trash2 className="w-3 h-3" /> Delete
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => openEditForm(expense)}
+                  className="py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/15 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(expense.id)}
+                  className="py-2 rounded-lg bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -290,6 +349,7 @@ export default function Expenses() {
                 <th className="px-3 py-3 font-medium">Vendor</th>
                 <th className="px-3 py-3 font-medium">Date</th>
                 <th className="px-3 py-3 font-medium">Payment</th>
+                <th className="px-3 py-3 font-medium">Status</th>
                 <th className="px-3 py-3 font-medium">Receipt</th>
                 <th className="px-3 py-3 font-medium text-right">Amount</th>
                 <th className="px-3 py-3 font-medium">Action</th>
@@ -303,6 +363,10 @@ export default function Expenses() {
                   <td className="px-3 py-3 text-sm text-muted-foreground">{expense.vendor}</td>
                   <td className="px-3 py-3 text-sm text-muted-foreground">{new Date(expense.paymentDate).toLocaleDateString()}</td>
                   <td className="px-3 py-3 text-sm text-muted-foreground">{expense.paymentMethod}</td>
+                  <td className="px-3 py-3 text-sm text-muted-foreground">
+                    {paymentStatusLabel[expense.paymentStatus || 'paid']}
+                    {expense.paymentStatus === 'half' ? ` (Rs. ${(expense.paidAmount || 0).toLocaleString()})` : ''}
+                  </td>
                   <td className="px-3 py-3 text-sm text-muted-foreground">
                     {expense.receiptFile ? (
                       <button
@@ -318,12 +382,20 @@ export default function Expenses() {
                   </td>
                   <td className="px-3 py-3 text-right font-semibold text-foreground">Rs. {expense.amount.toLocaleString()}</td>
                   <td className="px-3 py-3">
-                    <button
-                      onClick={() => handleDelete(expense.id)}
-                      className="rounded-lg bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/15 transition-colors"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditForm(expense)}
+                        className="rounded-lg bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(expense.id)}
+                        className="rounded-lg bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/15 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -373,9 +445,19 @@ export default function Expenses() {
 
       {/* Add Expense Form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="font-semibold text-foreground">Add Expense</h2>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-foreground">{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</h2>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="rounded-full p-1.5 text-muted-foreground hover:bg-muted"
+                aria-label="Close expense form"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <input
               type="text"
               placeholder="Description"
@@ -394,9 +476,61 @@ export default function Expenses() {
               type="number"
               placeholder="Amount (Rs)"
               value={form.amount}
-              onChange={e => setForm({ ...form, amount: Number(e.target.value) })}
+              onChange={e => {
+                const amount = Number(e.target.value);
+                const nextAmount = Number.isFinite(amount) ? amount : 0;
+                setForm(prev => ({
+                  ...prev,
+                  amount: nextAmount,
+                  paidAmount:
+                    prev.paymentStatus === 'paid'
+                      ? nextAmount
+                      : prev.paymentStatus === 'unpaid'
+                        ? 0
+                        : Math.min(prev.paidAmount, Math.max(0, nextAmount)),
+                }));
+              }}
               className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
             />
+            <select
+              value={form.paymentStatus}
+              onChange={e => {
+                const paymentStatus = e.target.value as PaymentStatus;
+                setForm(prev => ({
+                  ...prev,
+                  paymentStatus,
+                  paidAmount:
+                    paymentStatus === 'paid'
+                      ? prev.amount
+                      : paymentStatus === 'unpaid'
+                        ? 0
+                        : prev.paidAmount > 0
+                          ? Math.min(prev.paidAmount, Math.max(0, prev.amount))
+                          : Math.max(0, prev.amount) / 2,
+                }));
+              }}
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+            >
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="half">Half Paid</option>
+            </select>
+            {form.paymentStatus === 'half' && (
+              <input
+                type="number"
+                placeholder="Paid Amount (Rs)"
+                value={form.paidAmount}
+                min={0}
+                max={form.amount || 0}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    paidAmount: Math.min(Math.max(0, Number(e.target.value) || 0), Math.max(0, form.amount)),
+                  })
+                }
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+              />
+            )}
             <input
               type="text"
               placeholder="Vendor"
@@ -438,16 +572,17 @@ export default function Expenses() {
             </label>
             <div className="flex gap-2">
               <button
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
+                disabled={isLocked('expense-submit')}
                 className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary"
               >
-                Add
+                {isLocked('expense-submit') ? 'Saving...' : editingExpenseId ? 'Update' : 'Add'}
               </button>
             </div>
           </div>

@@ -1,3 +1,13 @@
+/** When no date range is given, never scan all completed orders — cap lookback. */
+const REPORTING_LOOKBACK_DAYS = 366;
+
+const getReportingWindowStart = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - REPORTING_LOOKBACK_DAYS);
+  return d;
+};
+
 const parseDateRange = (range) => {
   const now = new Date();
   if (!range || range === "all") return null;
@@ -28,7 +38,7 @@ const parseDateRange = (range) => {
 /** Parse custom date range from from/to parameters */
 const parseCustomDateRange = (from, to) => {
   if (!from && !to) return null;
-  
+
   const query = {};
   if (from) {
     const startDate = new Date(from);
@@ -40,29 +50,34 @@ const parseCustomDateRange = (from, to) => {
     endDate.setHours(23, 59, 59, 999);
     query.$lte = endDate;
   }
-  
+
   return Object.keys(query).length > 0 ? query : null;
 };
 
-/** Paid (completed) orders in the selected period — used for revenue, profit, charts. */
+/**
+ * Paid (completed) orders in the selected period — used for revenue, profit, charts.
+ * If `range` is "all" (or unknown) and no `from`/`to`, applies a rolling lookback window
+ * so the query is never unbounded.
+ */
 const buildPaidOrdersQuery = (range, from, to, tableNumbers = null) => {
   const query = { status: "completed" };
-  
-  // Support custom date range if from/to are provided
+
   if (from || to) {
     const dateFilter = parseCustomDateRange(from, to);
     if (dateFilter) query.createdAt = dateFilter;
   } else {
-    // Legacy support for preset ranges
     const dateFilter = parseDateRange(range);
     if (dateFilter) query.createdAt = dateFilter;
   }
 
-  // Filter by specific tables (floors) if provided
+  if (!query.createdAt) {
+    query.createdAt = { $gte: getReportingWindowStart() };
+  }
+
   if (Array.isArray(tableNumbers)) {
     query.table = { $in: tableNumbers };
   }
-  
+
   return query;
 };
 
@@ -70,4 +85,6 @@ module.exports = {
   parseDateRange,
   parseCustomDateRange,
   buildPaidOrdersQuery,
+  getReportingWindowStart,
+  REPORTING_LOOKBACK_DAYS,
 };

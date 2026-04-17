@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, setToken, type PaginatedResponse } from '@/lib/api';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { api, setToken } from '@/lib/api';
+import { fetchAllPaginatedItems } from '@/lib/paginatedFetch';
+import { POS_REALTIME_EVENT } from '@/hooks/use-pos-realtime';
 
 export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier' | 'store_manager';
 
@@ -248,8 +250,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(upgradeLegacyUser(me.user));
       const all = await api<{ [key: string]: RolePermissions }>('/permissions');
       setPermissions(migratePermissionsFromStorage(all as Record<string, RolePermissions>));
-      const u = await api<PaginatedResponse<User>>('/users?page=1&limit=200');
-      setUsers(normalizeUsers(u.items));
+      const uItems = await fetchAllPaginatedItems<User>(
+        (page, limit) => `/users?page=${page}&limit=${limit}`,
+        200
+      );
+      setUsers(normalizeUsers(uItems));
     } catch (error) {
       console.error('Session fetch failed:', error);
       // If no token, clear user and any legacy user data
@@ -263,6 +268,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchSession();
+  }, []);
+
+  const fetchSessionRef = useRef(fetchSession);
+  fetchSessionRef.current = fetchSession;
+
+  useEffect(() => {
+    const onPosRealtime = (e: Event) => {
+      const ce = e as CustomEvent<{ scopes?: string[] }>;
+      const scopes = ce.detail?.scopes ?? [];
+      if (!scopes.length) return;
+      if (scopes.includes('all') || scopes.includes('users') || scopes.includes('permissions')) {
+        void fetchSessionRef.current();
+      }
+    };
+    window.addEventListener(POS_REALTIME_EVENT, onPosRealtime);
+    return () => window.removeEventListener(POS_REALTIME_EVENT, onPosRealtime);
   }, []);
 
   const login = async (email: string, password: string): Promise<string | null> => {

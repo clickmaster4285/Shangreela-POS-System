@@ -22,20 +22,29 @@ export default function SalesAnalytics() {
   const analyticsQuery = useQuery({
     queryKey: ['analytics-dashboard', startDate, endDate],
     queryFn: async () => {
-      const [w, d, top, typeData, month, summary] = await Promise.all([
-        api<{ items: { day: string; revenue: number }[] }>(`/dashboard/revenue-weekly?from=${startDate}&to=${endDate}`),
-        api<{ items: { hour: string; sales: number }[] }>(`/dashboard/sales-daily?from=${startDate}&to=${endDate}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/dashboard/top-items?from=${startDate}&to=${endDate}`),
-        api<{ items: { name: string; value: number; revenue: number; count?: number }[] }>(`/analytics/order-type-breakdown?from=${startDate}&to=${endDate}`),
+      const [b, month] = await Promise.all([
+        api<{
+          summary: {
+            revenue: number;
+            totalOrders: number;
+            totalExpenses: number;
+            cancelledOrders: number;
+            totalDiscount: number;
+          };
+          salesDaily: { items: { hour: string; sales: number }[] };
+          revenueWeekly: { items: { day: string; revenue: number }[] };
+          topItems: { items: { name: string; sold: number; revenue: number }[] };
+          orderTypeBreakdown: { items: { name: string; value: number; revenue: number; count?: number }[] };
+        }>(`/dashboard/bundle?from=${startDate}&to=${endDate}`),
         api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
-        api<{ revenue: number; totalOrders: number; avgOrder: number; totalExpenses: number; cancelledOrders: number; totalDiscount: number }>(`/dashboard/summary?from=${startDate}&to=${endDate}`),
       ]);
+      const summary = b.summary;
       return {
-        weeklySalesData: w.items,
-        dailySalesData: d.items,
-        topSellingItems: top.items,
+        weeklySalesData: b.revenueWeekly.items,
+        dailySalesData: b.salesDaily.items,
+        topSellingItems: b.topItems.items,
         cancelledOrders: summary.cancelledOrders,
-        orderTypeData: typeData.items,
+        orderTypeData: b.orderTypeBreakdown.items,
         monthlyTrend: month.items,
         totalExpenses: summary.totalExpenses,
         paidRevenue: summary.revenue,

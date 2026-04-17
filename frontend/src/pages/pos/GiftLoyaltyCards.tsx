@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Gift, Star, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 type GiftCard = { id: string; code: string; balance: number; issued: string; status: 'active' | 'redeemed' | 'expired' };
 type LoyaltyMember = { id: string; name: string; phone: string; points: number; tier: string };
@@ -11,16 +12,18 @@ export default function GiftLoyaltyCards() {
   const [loyalty, setLoyalty] = useState<LoyaltyMember[]>([]);
   const [q, setQ] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     Promise.all([api<{ items: GiftCard[] }>('/gift-cards'), api<{ items: LoyaltyMember[] }>('/loyalty/members')]).then(([g, l]) => {
       setGiftCards(g.items);
       setLoyalty(l.items);
     });
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  usePosRealtimeScopes(['giftcards', 'loyalty'], load);
 
   const filteredLoyalty = loyalty.filter(m => m.name.toLowerCase().includes(q.toLowerCase()) || m.phone.includes(q));
 

@@ -3,6 +3,7 @@ import { type MenuItem } from '@/data/mockData';
 import { Plus, Pencil, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 type MenuCategoriesResponse = { categories: string[] };
 const DEFAULT_SPECIAL_CATEGORIES = ['Deals', 'Platters'] as const;
@@ -74,6 +75,13 @@ export default function MenuManagement() {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  const refreshMenuAdmin = useCallback(() => {
+    void fetchCategories();
+    void fetchItems();
+  }, [fetchCategories, fetchItems]);
+
+  usePosRealtimeScopes(['menu'], refreshMenuAdmin);
 
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);

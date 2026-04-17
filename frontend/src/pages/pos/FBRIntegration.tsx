@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Building2, Link2, ShieldCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useEffect } from 'react';
 import { api } from '@/lib/api';
+import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 export default function FBRIntegration() {
   const [ntn, setNtn] = useState('');
@@ -10,7 +10,7 @@ export default function FBRIntegration() {
   const [sandbox, setSandbox] = useState(true);
   const [linked, setLinked] = useState(false);
 
-  useEffect(() => {
+  const loadFbr = useCallback(() => {
     api<{ ntn: string; posId: string; sandbox: boolean; linked: boolean }>('/integrations/fbr/config').then(r => {
       setNtn(r.ntn || '');
       setPosId(r.posId || '');
@@ -18,6 +18,12 @@ export default function FBRIntegration() {
       setLinked(Boolean(r.linked));
     });
   }, []);
+
+  useEffect(() => {
+    loadFbr();
+  }, [loadFbr]);
+
+  usePosRealtimeScopes(['fbr'], loadFbr);
 
   const sync = () => {
     api('/integrations/fbr/config', { method: 'PUT', body: JSON.stringify({ ntn, posId, sandbox, linked }) })

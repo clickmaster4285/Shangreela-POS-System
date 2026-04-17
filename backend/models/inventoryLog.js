@@ -6,6 +6,7 @@ const inventoryLogSchema = new mongoose.Schema(
     itemName: String,
     action: String,
     quantity: Number,
+    unit: String,
     price: {
       type: Number,
       default: 0,
