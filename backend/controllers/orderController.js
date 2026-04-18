@@ -7,42 +7,6 @@ const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliverie
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const resolveTableIdentifiers = async (rawTable) => {
-  if (rawTable === undefined || rawTable === null || rawTable === "") {
-    return { number: null, name: null };
-  }
-
-  const raw = String(rawTable).trim();
-  if (!raw) return { number: null, name: null };
-
-  // Support table ObjectId values passed by some clients.
-  if (/^[a-fA-F0-9]{24}$/.test(raw)) {
-    const tableById = await Table.findById(raw).select("name number").lean();
-    if (tableById) {
-      return { number: Number(tableById.number), name: tableById.name || null };
-    }
-  }
-
-  const asNumber = Number(rawTable);
-  if (Number.isInteger(asNumber) && asNumber > 0) {
-    const tableByNumber = await Table.findOne({ number: asNumber }).select("name number").lean();
-    return { number: asNumber, name: tableByNumber?.name || null };
-  }
-
-  const asName = raw;
-  const tableByName = await Table.findOne({ name: asName }).select("name number").lean();
-  if (!tableByName) {
-    const tableByNameInsensitive = await Table.findOne({
-      name: { $regex: `^${escapeRegex(asName)}$`, $options: "i" },
-    })
-      .select("name number")
-      .lean();
-    if (!tableByNameInsensitive) return { number: null, name: asName };
-    return { number: Number(tableByNameInsensitive.number), name: tableByNameInsensitive.name || asName };
-  }
-  return { number: Number(tableByName.number), name: tableByName.name || asName };
-};
-
 const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
@@ -106,7 +70,7 @@ exports.list = async (req, res) => {
 
     if (req.query.floorKey && req.query.floorKey !== "all") {
       const floorKey = String(req.query.floorKey);
-      const floorTables = await Table.find({ floorKey }).select("number name").lean();
+      const floorTables = await Table.find({ floorKey }).select("number").lean();
       const floorTableNumbers = floorTables.map((t) => Number(t.number)).filter((n) => Number.isFinite(n));
       if (!floorTableNumbers.length) {
         return res.json(
@@ -178,7 +142,7 @@ exports.patchStatus = async (req, res) => {
 
 exports.changeTable = async (req, res) => {
   try {
-    const { number: newTableNumber } = await resolveTableIdentifiers(req.body.table);
+    const newTableNumber = Number(req.body.table);
     if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
       return res.status(400).json({ message: "Provide a valid table number." });
     }
@@ -227,12 +191,9 @@ exports.changeTable = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const payload = req.body || {};
-    const { number: tableNumber } = await resolveTableIdentifiers(payload.table);
 
-    if (payload.type === "dine-in") {
-      if (!tableNumber) {
-        return res.status(400).json({ message: "Invalid dine-in table selected." });
-      }
+    if (payload.type === "dine-in" && payload.table) {
+      const tableNumber = Number(payload.table);
       const existingOrder = await Order.findOne({
         table: tableNumber,
         type: "dine-in",
@@ -253,7 +214,7 @@ exports.create = async (req, res) => {
       code,
       type: payload.type || "dine-in",
       status: payload.status || "pending",
-      table: payload.type === "dine-in" ? tableNumber : payload.table,
+      table: payload.table,
       customerName: payload.customerName || "",
       orderTaker: req.user.name || req.user.email || "Unknown",
       notes: payload.notes || "",
@@ -268,9 +229,9 @@ exports.create = async (req, res) => {
       items,
     });
     
-    if (payload.type === "dine-in" && tableNumber) {
+    if (payload.type === "dine-in" && payload.table) {
       const tableUpdateResult = await Table.findOneAndUpdate(
-        { number: tableNumber },
+        { number: Number(payload.table) },
         { status: "occupied", currentOrder: code },
         { new: true }
       );
@@ -309,8 +270,7 @@ exports.create = async (req, res) => {
 
 exports.openByTable = async (req, res) => {
   try {
-    const { number: tableNumber } = await resolveTableIdentifiers(req.params.tableNumber);
-    if (!tableNumber) return res.json({ item: null });
+    const tableNumber = Number(req.params.tableNumber);
     const includeCompleted = String(req.query.includeCompleted || "") === "true";
     const where = {
       table: tableNumber,

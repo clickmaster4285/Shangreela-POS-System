@@ -527,10 +527,7 @@ export default function POSScreen() {
             setDeliveryAddress('');
           }
         })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : 'Failed to save order';
-          toast.error(message);
-        });
+        .catch(() => toast.error('Failed to save order'));
     }
   };
 
