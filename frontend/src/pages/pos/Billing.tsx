@@ -1,85 +1,82 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Order, TableInfo } from '@/data/mockData';
-import { CreditCard, Banknote, Printer, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
-import { printReceipt } from '@/utils/printReceipt';
-import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Order, TableInfo } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, type PaginatedResponse } from '@/lib/api';
 import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
-import { useQueryClient } from '@tanstack/react-query';
 import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/formatOrderDateTime';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/use-submit-lock';
+import { POSFilterBar } from '@/components/pos/POSFilterBar';
+import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pakistanTax';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Utensils, ShoppingBag, Truck } from 'lucide-react';
+
+// New sub-components
+import { BillingStats } from './components/BillingStats';
+import { BillList } from './components/BillList';
+import { BillPaymentPanel } from './components/BillPaymentPanel';
 
 export default function Billing() {
   const { isLocked, runLocked } = useSubmitLock();
-  const { hasAction } = useAuth();
+  const { hasAction, user: currentUser } = useAuth();
   const queryClient = useQueryClient();
+
+  // Core State
   const [orders, setOrders] = useState<(Order & { dbId?: string; printed?: boolean })[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<(Order & { dbId?: string; printed?: boolean }) | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
-  const [discountValue, setDiscountValue] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
-  const [gstEnabled, setGstEnabled] = useState(true);
   const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
-  const [paidAmount, setPaidAmount] = useState<number | string>('');
   const [printedOrderIds, setPrintedOrderIds] = useState<Set<string>>(new Set());
-  const [billingStatusFilter, setBillingStatusFilter] = useState<'all' | 'paid' | 'pending' | 'ready'>('all');
-  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
-  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
 
-  // Load printed order IDs and billing filter from localStorage on mount
+  // Filter State
+  const [billingStatusFilter, setBillingStatusFilter] = useState<'all' | 'paid' | 'pending' | 'ready'>('all');
+  const [selectedFloor, setSelectedFloor] = useState<string>('all');
+  const [selectedCashier, setSelectedCashier] = useState<string>('all');
+  const [showMyBillsOnly, setShowMyBillsOnly] = useState<boolean>(false);
+  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState<string>(today);
+  const [endDate, setEndDate] = useState<string>(today);
+  const [selectedOrderType, setSelectedOrderType] = useState<string>('all');
+  
+  const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
+  const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
+
+  // Local Storage persistence
   useEffect(() => {
     const saved = localStorage.getItem('printed_order_ids');
     if (saved) {
       try {
         const ids = JSON.parse(saved);
-        if (Array.isArray(ids)) {
-          setPrintedOrderIds(new Set(ids));
-        }
-      } catch {
-        // ignore parse errors
-      }
+        if (Array.isArray(ids)) setPrintedOrderIds(new Set(ids));
+      } catch {}
     }
-    // Load billing status filter
     const savedFilter = localStorage.getItem('billing_status_filter');
     if (savedFilter && ['all', 'paid', 'pending', 'ready'].includes(savedFilter)) {
-      setBillingStatusFilter(savedFilter as 'all' | 'paid' | 'pending' | 'ready');
+      setBillingStatusFilter(savedFilter as any);
     }
-
-    // Load selected floor
-    const savedFloor = localStorage.getItem('selected_floor');
-    if (savedFloor) {
-      setSelectedFloor(savedFloor === 'null' ? null : savedFloor);
-    }
+    const savedFloor = localStorage.getItem('billing_selected_floor');
+    if (savedFloor) setSelectedFloor(savedFloor);
+    const savedType = localStorage.getItem('billing_selected_type');
+    if (savedType) setSelectedOrderType(savedType);
+    const savedCashier = localStorage.getItem('billing_selected_cashier');
+    if (savedCashier) setSelectedCashier(savedCashier);
+    if (localStorage.getItem('billing_my_bills_only') === 'true') setShowMyBillsOnly(true);
   }, []);
 
-  // Save billing status filter to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('billing_status_filter', billingStatusFilter);
-  }, [billingStatusFilter]);
+  useEffect(() => { localStorage.setItem('billing_status_filter', billingStatusFilter); }, [billingStatusFilter]);
+  useEffect(() => { localStorage.setItem('billing_selected_floor', selectedFloor); }, [selectedFloor]);
+  useEffect(() => { localStorage.setItem('billing_selected_type', selectedOrderType); }, [selectedOrderType]);
+  useEffect(() => { localStorage.setItem('billing_selected_cashier', selectedCashier); }, [selectedCashier]);
+  useEffect(() => { localStorage.setItem('billing_my_bills_only', String(showMyBillsOnly)); }, [showMyBillsOnly]);
+  useEffect(() => { localStorage.setItem('printed_order_ids', JSON.stringify(Array.from(printedOrderIds))); }, [printedOrderIds]);
 
-  // Save selected floor to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('selected_floor', selectedFloor === null ? 'null' : selectedFloor);
-  }, [selectedFloor]);
-
-  // Save printed order IDs to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('printed_order_ids', JSON.stringify(Array.from(printedOrderIds)));
-  }, [printedOrderIds]);
-
-  // Mark an order as printed
-  const markOrderAsPrinted = (orderId: string) => {
-    setPrintedOrderIds(prev => new Set([...prev, orderId]));
-  };
-
-  // Check if an order is printed
+  const markOrderAsPrinted = (orderId: string) => setPrintedOrderIds(prev => new Set([...prev, orderId]));
   const isOrderPrinted = (orderId: string) => printedOrderIds.has(orderId);
 
   const getBillStatusLabel = (order?: Order & { printed?: boolean }) => {
@@ -87,13 +84,6 @@ export default function Billing() {
     if (order.status === 'completed') return 'Paid';
     if (order.printed || isOrderPrinted(order.id)) return 'Ready';
     return 'Pending';
-  };
-
-  const getBillingStatusCategory = (order?: Order & { printed?: boolean }): 'paid' | 'pending' | 'ready' => {
-    if (!order) return 'pending';
-    if (order.status === 'completed') return 'paid';
-    if (order.printed || isOrderPrinted(order.id)) return 'ready';
-    return 'pending';
   };
 
   const getStatusBadgeClass = (order?: Order & { printed?: boolean }) => {
@@ -105,29 +95,38 @@ export default function Billing() {
 
   const loadOrders = (pageNum = 1, append = false) => {
     setLoading(true);
-    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?status=all&limit=50&page=${pageNum}`).then(r => {
-      const filteredOrders = r.items.filter(o => o.status !== 'cancelled');
-      
-      // Add printed status to orders first so we can use it for sorting
-      const ordersWithPrinted = filteredOrders.map(o => ({
-        ...o,
-        printed: isOrderPrinted(o.id)
-      }));
+    const params = new URLSearchParams({
+      status: 'all',
+      limit: '50',
+      page: String(pageNum),
+      today: 'false',
+      from: startDate,
+      to: endDate,
+      floorKey: selectedFloor,
+      search: tableSearchQuery,
+    });
+
+    if (selectedOrderType !== 'all') {
+      params.append('type', selectedOrderType);
+    }
+    
+    if (showMyBillsOnly && currentUser?.name) {
+      params.append('orderTaker', currentUser.name);
+    } else if (selectedCashier !== 'all') {
+      params.append('orderTaker', selectedCashier);
+    }
+
+    return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`).then(r => {
+      const filteredResult = r.items.filter(o => o.status !== 'cancelled');
+      const ordersWithPrinted = filteredResult.map(o => ({ ...o, printed: isOrderPrinted(o.id) }));
 
       setOrders(prev => {
         const next = append ? [...prev, ...ordersWithPrinted] : ordersWithPrinted;
-        
-        // Sort: Pending (top) -> Ready -> Paid (bottom)
         return next.sort((a, b) => {
-          const getSortPriority = (order: Order & { printed?: boolean }) => {
-            if (order.status === 'completed') return 3; // Paid (Bottom)
-            if (order.printed || isOrderPrinted(order.id)) return 2; // Ready
-            return 1; // Pending (Top)
-          };
-
-          const aPriority = getSortPriority(a);
-          const bPriority = getSortPriority(b);
-          if (aPriority !== bPriority) return aPriority - bPriority;
+          const getPrio = (o: any) => o.status === 'completed' ? 3 : (o.printed ? 2 : 1);
+          const pA = getPrio(a);
+          const pB = getPrio(b);
+          if (pA !== pB) return pA - pB;
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
       });
@@ -135,751 +134,186 @@ export default function Billing() {
       setHasMore(r.pagination.hasNext);
       setPage(pageNum);
       
-      setOrders(currentOrders => {
-         setSelectedOrder(prev => {
+      setOrders(current => {
+        setSelectedOrder(prev => {
           if (prev) {
-            const same = currentOrders.find(a => a.id === prev.id);
-            if (same) return same;
+            const match = current.find(a => a.id === prev.id);
+            if (match) return match;
           }
-          return currentOrders[0] ?? null;
+          return current[0] ?? null;
         });
-        return currentOrders;
+        return current;
       });
     }).finally(() => setLoading(false));
   };
 
   const loadTables = () =>
-    api<PaginatedResponse<{ number: number; name: string; seats: number; floorKey: string; status: TableInfo['status']; currentOrder?: string }>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`).then(r => {
-      setTables(r.items.map(table => ({
-        id: table.number,
-        name: table.name,
-        seats: table.seats,
-        floorId: table.floorKey,
-        status: table.status,
-        currentOrder: table.currentOrder,
+    api<PaginatedResponse<any>>(`/tables?page=1&limit=${MAX_LIST_LIMIT}`).then(r => {
+      const floorsList = Array.from(new Set(r.items.map((t: any) => t.floorKey).filter(Boolean)));
+      setFloors(floorsList.map((k: any) => ({ key: k, name: k })));
+      setTables(r.items.map((t: any) => ({
+        id: t.number,
+        name: t.name,
+        seats: t.seats,
+        floorId: t.floorKey,
+        status: t.status,
+        currentOrder: t.currentOrder,
       })));
+  });
+
+  const loadUsers = () => {
+    api<PaginatedResponse<any>>('/users?limit=100').then(r => {
+      const relevant = r.items.filter((u: any) => ['cashier', 'admin'].includes(u.role));
+      setCashiers(relevant.map((u: any) => ({ key: u.name, name: u.name })));
     });
-
-  const tableMap = useMemo(() => {
-    return new Map<number, TableInfo>(tables.map(table => [table.id, table]));
-  }, [tables]);
-
-  useEffect(() => {
-    loadOrders().catch(() => toast.error('Failed to load active bills'));
-  }, []);
-
-  useEffect(() => {
-    loadTables().catch(() => toast.error('Failed to load tables'));
-  }, []);
+  };
 
   const loadTaxRates = useCallback(() => {
-    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
-      .then((r) => {
-        const gstRate = Number(r.salesTaxRate ?? 16) / 100;
-        const serviceChargeRate = Number(r.serviceChargeRate ?? 5) / 100;
-        setTaxRates({
-          gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
-          serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
-        });
-      })
-      .catch(() => {
-        // keep defaults
+    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax').then(r => {
+      const gst = Number(r.salesTaxRate ?? 16) / 100;
+      const sc = Number(r.serviceChargeRate ?? 5) / 100;
+      setTaxRates({
+        gstRate: Number.isFinite(gst) ? gst : 0.16,
+        serviceChargeRate: Number.isFinite(sc) ? sc : 0.05,
       });
+    }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    loadTaxRates();
-  }, [loadTaxRates]);
+  useEffect(() => { loadOrders(); }, [startDate, endDate, selectedFloor, tableSearchQuery, selectedCashier, showMyBillsOnly, selectedOrderType]);
+  useEffect(() => { loadTables(); loadUsers(); loadTaxRates(); }, []);
 
   usePosRealtimeScopes(['orders', 'tables', 'settings'], () => {
-    loadOrders().catch(() => toast.error('Failed to refresh bills'));
-    loadTables().catch(() => toast.error('Failed to refresh tables'));
+    loadOrders();
+    loadTables();
     loadTaxRates();
   });
 
-  useEffect(() => {
-    if (!selectedOrder) return;
-    setGstEnabled(selectedOrder.gstEnabled !== false);
-  }, [selectedOrder?.id, selectedOrder?.gstEnabled]);
+  const tableMap = useMemo(() => new Map<number, TableInfo>(tables.map(t => [t.id, t])), [tables]);
 
-  useEffect(() => {
-    if (!selectedOrder) return;
-    const saved = Number(selectedOrder.discount ?? 0);
-    if (saved > 0) {
-      setDiscountMode('amount');
-      setDiscountValue(saved);
-    } else {
-      setDiscountMode('percent');
-      setDiscountValue(0);
-    }
-  }, [selectedOrder?.id]);
-
-  useEffect(() => {
-    setPaidAmount('');
-  }, [selectedOrder?.id]);
-
-  const orderItemsKey = useMemo(
-    () => (selectedOrder?.items ?? []).map(i => `${i.menuItem?.id ?? i.menuItem.name}:${i.quantity}`).join('|'),
-    [selectedOrder?.items],
-  );
-
-  // Fuzzy search helper - matches characters in sequence
-  const fuzzyMatch = (text: string, query: string): boolean => {
-    let textIndex = 0;
-    let queryIndex = 0;
-    
-    while (textIndex < text.length && queryIndex < query.length) {
-      if (text[textIndex].toLowerCase() === query[queryIndex].toLowerCase()) {
-        queryIndex++;
-      }
-      textIndex++;
-    }
-    
-    return queryIndex === query.length;
-  };
-
-  // Filter orders based on billing status
   const filteredOrders = useMemo(() => {
-    let result = orders;
-    
-    // Filter by billing status
-    if (billingStatusFilter !== 'all') {
-      result = result.filter(o => getBillingStatusCategory(o) === billingStatusFilter);
-    }
-    
-    // Filter by floor if selected
-    if (selectedFloor) {
-      result = result.filter(o => {
-        const tableInfo = tableMap.get(o.table);
-        return tableInfo?.floorId === selectedFloor;
-      });
-    }
-    
-    // Filter by table search query (using fuzzy search)
-    if (tableSearchQuery.trim()) {
-      const query = tableSearchQuery.toLowerCase().trim();
-      result = result.filter(o => {
-        const tableInfo = tableMap.get(o.table);
-        const tableName = tableInfo?.name || `Table ${o.table}`;
-        const tableNumber = String(o.table);
-        // Fuzzy search in table name and exact match in table number
-        return fuzzyMatch(tableName.toLowerCase(), query) || tableNumber.includes(query);
-      });
-    }
-    
-    return result;
-  }, [orders, billingStatusFilter, selectedFloor, tableSearchQuery, tableMap]);
+    if (billingStatusFilter === 'all') return orders;
+    return orders.filter(o => {
+      const status = o.status === 'completed' ? 'paid' : (o.printed ? 'ready' : 'pending');
+      return status === billingStatusFilter;
+    });
+  }, [orders, billingStatusFilter]);
 
   const billsByDay = useMemo(() => groupOrdersByCalendarDay(filteredOrders, true), [filteredOrders]);
 
-  const uniqueFloors = useMemo(() => {
-    // Default floors that are always available
-    const defaultFloors = [ ];
-    const floors = new Set<string>(defaultFloors);
-    
-    // Add any additional floors from tables
-    tables.forEach(table => {
-      if (table.floorId) floors.add(table.floorId);
-    });
-    
-    return Array.from(floors).sort();
-  }, [tables]);
-
-  useEffect(() => {
-    if (!selectedOrder?.dbId || selectedOrder.status === 'completed') return;
-    const sub = selectedOrder.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
-    const disc =
-      discountMode === 'percent' ? sub * (discountValue / 100) : Math.min(Math.max(discountValue, 0), sub);
-    const { gstAmount, totalTaxAmount, grandTotal, serviceCharge } = computePakistanTaxTotals(
-      sub,
-      disc,
-      gstEnabled,
-      taxRates,
-      { applyServiceCharge: selectedOrder.type === 'dine-in' },
-    );
-    const t = window.setTimeout(() => {
-      api(`/orders/${selectedOrder.dbId}/billing-totals`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          gstEnabled,
-          total: grandTotal,
-          subtotal: sub,
-          discount: disc,
-          tax: totalTaxAmount,
-          gstAmount,
-          serviceCharge,
-        }),
-      })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-          queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
-          queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
-        })
-        .catch(() => {});
-    }, 450);
-    return () => window.clearTimeout(t);
-  }, [
-    selectedOrder?.dbId,
-    selectedOrder?.status,
-    selectedOrder?.type,
-    orderItemsKey,
-    discountMode,
-    discountValue,
-    gstEnabled,
-    taxRates.gstRate,
-    taxRates.serviceChargeRate,
-  ]);
-
-  if (!selectedOrder) {
-    return (
-      <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col">
-        <div className="space-y-6">
-          <div>
-            <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
-            <p className="text-sm text-muted-foreground">No active table order to bill right now.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const subtotal = selectedOrder.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
-  const discountAmt = discountMode === 'percent'
-    ? subtotal * (discountValue / 100)
-    : Math.min(Math.max(discountValue, 0), subtotal);
-  const { gstAmount, furtherTaxAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = computePakistanTaxTotals(
-    subtotal,
-    discountAmt,
-    gstEnabled,
-    taxRates,
-    { applyServiceCharge: selectedOrder.type === 'dine-in' }
-  );
-
-  const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-
   const grandTotalForBillCard = (o: Order & { dbId?: string }) => {
     if (o.status === 'completed' && Number.isFinite(Number(o.total))) return Number(o.total);
-    if (o.id === selectedOrder.id) return grandTotal;
     return billBreakdownForOrder(o, taxRates).grandTotal;
   };
 
-  const pendingCount = orders.filter(o => o.status !== 'completed').length;
-  const paidCount = orders.filter(o => o.status === 'completed').length;
-  const readyCount = orders.filter(o => o.status !== 'completed' && (o.printed || isOrderPrinted(o.id))).length;
-  
-  const filteredPendingCount = filteredOrders.filter(o => o.status !== 'completed').length;
-  const filteredReadyCount = filteredOrders.filter(o => o.status !== 'completed' && (o.printed || isOrderPrinted(o.id))).length;
-  const filteredPaidCount = filteredOrders.filter(o => o.status === 'completed').length;
-
-  const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
-  const buildReceiptData = (
-    order: Order & { dbId?: string; printed?: boolean },
-    paidStamp: boolean,
-    overridePaymentMethod?: string
-  ) => {
-    const orderSubtotal = order.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
-    const orderDiscount =
-      order.id === selectedOrder.id
-        ? discountAmt
-        : Number(order.discount || 0);
-    const orderTaxBreakdown = computePakistanTaxTotals(
-      orderSubtotal,
-      orderDiscount,
-      order.gstEnabled !== false,
-      taxRates,
-      { applyServiceCharge: order.type === 'dine-in' }
-    );
-    const orderGrandTotal = order.status === 'completed' && Number.isFinite(Number(order.total))
-      ? Number(order.total)
-      : orderTaxBreakdown.grandTotal;
-    const tableInfo = order.table ? tableMap.get(order.table) : null;
-    return {
-      orderId: order.id,
-      orderType: order.type,
-      table: order.table,
-      tableName: tableInfo?.name,
-      items: order.items,
-      subtotal: orderSubtotal,
-      discount: orderDiscount,
-      discountPercent: 0,
-      gstEnabled: order.gstEnabled !== false,
-      gstRate: taxRates.gstRate,
-      serviceChargeRate: taxRates.serviceChargeRate,
-      paymentMethod: order.status === 'completed'
-        ? String(overridePaymentMethod || (order as any).paymentMethod || paymentLabel)
-        : paymentLabel,
-      customerName: order.customerName,
-      orderCreatedAt: order.createdAt,
-      amountPaid: order.status === 'completed'
-        ? orderGrandTotal
-        : paymentMethod === 'cash'
-          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) : orderGrandTotal)
-          : undefined,
-      changeDue: order.status === 'completed'
-        ? 0
-        : paymentMethod === 'cash'
-          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) - orderGrandTotal : 0)
-          : undefined,
-      isPaid: paidStamp || order.status === 'completed',
-    };
+  // Stats
+  const totalStats = {
+    pending: orders.filter(o => o.status !== 'completed').length,
+    paid: orders.filter(o => o.status === 'completed').length,
+  };
+  const filteredStats = {
+    pending: filteredOrders.filter(o => o.status !== 'completed').length,
+    paid: filteredOrders.filter(o => o.status === 'completed').length,
   };
 
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4 overflow-hidden lg:h-[calc(100vh-7rem)]">
-      <div className="flex shrink-0 flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Billing</h1>
-          <p className="text-sm text-muted-foreground">Professional billing desk with live bill status and payment control.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter */}
-          <div className="flex shrink-0 items-center gap-1 overflow-x-auto scrollbar-none bg-muted/40 p-1 rounded-full border border-border">
-             <button onClick={() => setBillingStatusFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All Bills</button>
-             <button onClick={() => setBillingStatusFilter('pending')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'pending' ? 'bg-warning text-warning-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Pending</button>
-             <button onClick={() => setBillingStatusFilter('ready')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'ready' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Ready</button>
-             <button onClick={() => setBillingStatusFilter('paid')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${billingStatusFilter === 'paid' ? 'bg-success text-success-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Paid</button>
+    <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4">
+      <POSFilterBar
+        searchQuery={tableSearchQuery}
+        onSearchChange={setTableSearchQuery}
+        searchPlaceholder="Search table number or ID..."
+        floors={floors}
+        selectedFloor={selectedFloor}
+        onFloorChange={setSelectedFloor}
+        cashiers={cashiers}
+        selectedCashier={selectedCashier}
+        onCashierChange={setSelectedCashier}
+        startDate={startDate}
+        endDate={endDate}
+        onDateRangeChange={(start, end) => { setStartDate(start); setEndDate(end); }}
+        showMyBillsOnly={showMyBillsOnly}
+        onMyBillsToggle={setShowMyBillsOnly}
+        extraFilters={
+          <div className="flex items-center gap-3">
+            {/* Order Type Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground whitespace-nowrap">Type</label>
+              <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
+                <SelectTrigger className="w-[130px] h-9 bg-background border-border rounded-xl text-xs font-semibold focus:ring-primary/20">
+                  <div className="flex items-center gap-2">
+                    {selectedOrderType === 'dine-in' && <Utensils className="w-3.5 h-3.5 text-primary" />}
+                    {selectedOrderType === 'takeaway' && <ShoppingBag className="w-3.5 h-3.5 text-primary" />}
+                    {selectedOrderType === 'delivery' && <Truck className="w-3.5 h-3.5 text-primary" />}
+                    <SelectValue placeholder="All types" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border shadow-xl">
+                  <SelectItem value="all" className="text-xs font-medium">All Types</SelectItem>
+                  <SelectItem value="dine-in" className="text-xs font-medium">Dine-in</SelectItem>
+                  <SelectItem value="takeaway" className="text-xs font-medium">Takeaway</SelectItem>
+                  <SelectItem value="delivery" className="text-xs font-medium">Delivery</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-px h-6 bg-border mx-1" />
+
+            {/* Status Filter */}
+            <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
+               {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
+                 <button key={f} onClick={() => setBillingStatusFilter(f)} 
+                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                 >
+                   {f}
+                 </button>
+               ))}
+            </div>
           </div>
+        }
+      />
 
-          {/* Floor Filter */}
-          <div className="flex shrink-0 items-center gap-1 overflow-x-auto scrollbar-none bg-muted/40 p-1 rounded-full border border-border">
-            <button
-              onClick={() => setSelectedFloor(null)}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                selectedFloor === null
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              All Floors
-            </button>
-            {uniqueFloors.map(floor => (
-              <button
-                key={floor}
-                onClick={() => setSelectedFloor(floor)}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  selectedFloor === floor
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {floor}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              Promise.all([loadOrders(), loadTables()])
-                .then(() => {
-                  toast.success('Bills refreshed');
-                  queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-                  queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
-                  queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
-                  queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
-                })
-                .catch(() => toast.error('Failed to refresh bills'));
-            }}
-            className="px-4 py-2.5 rounded-full border border-border bg-card text-xs font-bold hover:border-primary/40 hover:bg-primary/5 transition-colors"
-          >
-            Refresh Bills
-          </button>
-        </div>
-      </div>
-
-      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Total Bills</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{filteredOrders.length}{(selectedFloor || tableSearchQuery.trim()) && orders.length !== filteredOrders.length ? ` / ${orders.length}` : ''}</p>
-        </div>
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Pending</p>
-          <p className="text-2xl font-bold text-warning mt-1">{filteredPendingCount}{(selectedFloor || tableSearchQuery.trim()) && pendingCount !== filteredPendingCount ? ` / ${pendingCount}` : ''}</p>
-        </div>
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Paid</p>
-          <p className="text-2xl font-bold text-success mt-1">{filteredPaidCount}{(selectedFloor || tableSearchQuery.trim()) && paidCount !== filteredPaidCount ? ` / ${paidCount}` : ''}</p>
-        </div>
-      </div>
-
-
+      <BillingStats 
+        totalOrdersCount={orders.length}
+        filteredOrdersCount={filteredOrders.length}
+        totalPendingCount={totalStats.pending}
+        filteredPendingCount={filteredStats.pending}
+        totalPaidCount={totalStats.paid}
+        filteredPaidCount={filteredStats.paid}
+        isFilterActive={billingStatusFilter !== 'all' || tableSearchQuery.trim() !== '' || selectedFloor !== 'all'}
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
-        {/* Order selector & details */}
-        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-3.5 shadow-sm">
-          <h3 className="mb-3 shrink-0 px-1 font-semibold text-sm text-foreground">Bills by day</h3>
-          
-          {/* Table Search */}
-          <div className="mb-3 shrink-0">
-            <input
-              type="text"
-              placeholder="Search by table (e.g., m5 matches mt-5, mh-7)..."
-              value={tableSearchQuery}
-              onChange={(e) => setTableSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
+        <BillList 
+          billsByDay={billsByDay}
+          selectedOrderId={selectedOrder?.id}
+          onSelectOrder={setSelectedOrder}
+          hasMore={hasMore}
+          loading={loading}
+          onLoadMore={() => loadOrders(page + 1, true)}
+          tableMap={tableMap}
+          grandTotalForBillCard={grandTotalForBillCard}
+          getStatusBadgeClass={getStatusBadgeClass}
+          getBillStatusLabel={getBillStatusLabel}
+          formatOrderDateTime={formatOrderDateTime}
+        />
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 scrollbar-thin">
-            {billsByDay.map(group => (
-              <div key={group.dayKey} className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1 border-b border-border/60 pb-1">
-                  {group.dayLabel}
-                </p>
-                {group.orders.map(o => (
-                  <button key={o.id} onClick={() => setSelectedOrder(o)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                      selectedOrder.id === o.id
-                        ? 'bg-primary/10 border-primary/30 shadow-sm ring-1 ring-primary/15'
-                        : 'bg-muted/30 border-border hover:bg-muted/60 hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="flex justify-between gap-4">
-                      <span className="font-medium text-sm text-foreground">{o.id}</span>
-                      <div className="text-right">
-                        <p className="text-xs text-foreground font-bold uppercase tracking-[0.2em]">Bill</p>
-                        <p className="text-base font-bold text-foreground">Rs. {grandTotalForBillCard(o).toLocaleString()}</p>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">{formatOrderDateTime(o.createdAt)}</p>
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground capitalize">{o.type}</span>
-                      {o.table && (
-                        <>
-                          <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
-                            {tableMap.get(o.table)?.name || `Table ${o.table}`}
-                          </span>
-                          {tableMap.get(o.table)?.floorId && (
-                            <span className="bg-secondary/20 text-secondary px-2 py-0.5 rounded-full text-xs font-bold">
-                              {tableMap.get(o.table)?.floorId}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(o)}`}>
-                        {getBillStatusLabel(o)}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-                {hasMore && (
-                  <button
-                    onClick={() => loadOrders(page + 1, true)}
-                    disabled={loading}
-                    className="w-full py-3 mt-2 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-all disabled:opacity-50"
-                   >
-                    {loading ? 'Loading...' : 'Load More Bills'}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Receipt */}
-        <div className="pos-card flex min-h-0 flex-col overflow-hidden p-5 shadow-sm relative print:overflow-visible">
-          {/* Paid Watermark - Print only */}
-          {selectedOrder.status === 'completed' && (
-            <div className="hidden print:flex print:absolute print:inset-0 print:items-center print:justify-center print:pointer-events-none print:z-10 print:overflow-visible">
-              <div className="transform -rotate-45">
-                <p className="font-black tracking-wider" style={{ fontSize: '180px', lineHeight: '1', color: '#ef4444', opacity: 0.3, textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>PAID</p>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-5 shrink-0 border-b border-border border-dashed pb-4 text-center">
-            <h2 className="font-serif text-xl font-bold text-foreground">Shangreela Heights</h2>
-            <p className="text-xs text-muted-foreground">ling Mor Kahuta, Rawalpindi</p>
-            <p className="text-xs text-muted-foreground">Tel: +92 513314120 / +92 337-5454786</p>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
-          <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-            <div className="flex justify-between"><span className="font-bold text-foreground">Order</span><span className="text-foreground font-semibold">{selectedOrder.id}</span></div>
-            <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(selectedOrder.createdAt)}</span></div>
-            <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{selectedOrder.type}</span></div>
-            {selectedOrder.table && <div className="flex justify-between"><span className="font-bold text-foreground">Table</span><span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(selectedOrder.table)?.name || selectedOrder.table}</span></div>}
-            {selectedOrder.table && tableMap.get(selectedOrder.table)?.floorId && <div className="flex justify-between"><span className="font-bold text-foreground">Floor</span><span className="bg-secondary/20 text-secondary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(selectedOrder.table)?.floorId}</span></div>}
-            {selectedOrder.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{selectedOrder.orderTaker}</span></div>}
-            <div className="flex justify-between text-muted-foreground items-center">
-              <span>Status</span>
-              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(selectedOrder)}`}>
-                {getBillStatusLabel(selectedOrder)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-bold text-foreground text-base">Total Bill</span>
-              <span className="text-foreground font-bold text-base">{fmt(grandTotal)}</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border/70 bg-muted/35 p-3 space-y-2 mb-4">
-            <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">ORDER ITEMS</h3>
-            {selectedOrder.items.map((item: any, i) => (
-              <div key={i} className="flex justify-between text-sm py-1 border-b border-border/40 last:border-0">
-                <div className="flex-1">
-                  <p className="text-foreground">{item.quantity}× {item.menuItem.name}</p>
-                  {item.extraName && (
-                    <p className="text-[11px] text-primary font-bold">
-                      + {item.extraName} (Rs. {Number(item.extraPrice || 0).toLocaleString()})
-                    </p>
-                  )}
-                </div>
-                <span className="font-medium text-foreground">Rs. {((Number(item.menuItem.price) + Number(item.extraPrice || 0)) * item.quantity).toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-xl border border-border/70 p-3 space-y-2 text-sm mb-4 bg-card/60">
-            <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between text-success">
-                <span>Discount{discountMode === 'percent' ? ` (${discountValue}%)` : ''}</span>
-                <span>-{fmt(discountAmt)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
-            {selectedOrder.type === 'dine-in' && (
-              <div className="flex justify-between text-muted-foreground"><span>Service charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>{fmt(serviceCharge)}</span></div>
-            )}
-            <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
-            <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
-            <div className="flex justify-between font-serif text-xl font-bold text-foreground pt-2 border-t border-border">
-              <span>Total</span><span>{fmt(grandTotal)}</span>
-            </div>
-          </div>
-
-          {/* Discount */}
-          {hasAction('apply_discount') && (
-          <div className="mb-4 rounded-xl border border-border/70 p-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-              <div className="text-xs font-semibold text-muted-foreground">Discount</div>
-              <div className="inline-flex rounded-full bg-muted/50 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDiscountMode('percent');
-                    setDiscountValue(0);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${discountMode === 'percent' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Percent
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDiscountMode('amount');
-                    setDiscountValue(0);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${discountMode === 'amount' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Amount
-                </button>
-              </div>
-            </div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              {discountMode === 'percent' ? 'Discount %' : 'Discount amount'}
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="number"
-                min="0"
-                value={discountValue}
-                onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
-                className="w-full sm:w-32 bg-background border border-border rounded-xl px-3 py-2 text-sm"
-              />
-              {discountMode === 'percent' && (
-                <div className="flex gap-2 flex-wrap">
-                  {[0, 5, 10, 15, 20].map(d => (
-                    <button key={d} type="button" onClick={() => setDiscountValue(d)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${discountValue === d ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                      {d}%
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          )}
-
-          {/* GST Toggle */}
-          <div className="mb-4 rounded-xl border border-border/70 p-3">
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={gstEnabled}
-                onChange={(e) => {
-                  const val = e.target.checked;
-                  setGstEnabled(val);
-                  localStorage.setItem('pos_gst_enabled', val.toString());
-                }}
-                className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
-              />
-              Include GST ({Math.round(taxRates.gstRate * 100)}%)
-            </label>
-          </div>
-
-          {/* Payment */}
-          <div className="mb-4 rounded-xl border border-border/70 p-3">
-            <label className="text-xs text-muted-foreground mb-1 block">Payment Method</label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('cash')}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                  paymentMethod === 'cash'
-                    ? 'bg-primary text-primary-foreground border-primary/40'
-                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                }`}
-              >
-                <Banknote className="w-4 h-4" /> Cash
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('card')}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                  paymentMethod === 'card'
-                    ? 'bg-primary text-primary-foreground border-primary/40'
-                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                }`}
-              >
-                <CreditCard className="w-4 h-4" /> Card
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('easypesa')}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                  paymentMethod === 'easypesa'
-                    ? 'bg-primary text-primary-foreground border-primary/40'
-                    : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                }`}
-              >
-                <Wallet className="w-4 h-4" /> EasyPaisa
-              </button>
-            </div>
-          </div>
-
-          {/* Amount Received & Change Due (Cash Calculator) */}
-          {paymentMethod === 'cash' && (
-            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-primary mb-1 block">Amount Received (Rs.)</label>
-                  <input
-                    type="number"
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="e.g. 5000"
-                    className="w-full bg-background border border-primary/30 rounded-xl px-3 py-2.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Change Due (Return)</label>
-                  <div className={`w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm font-bold flex items-center ${Number(paidAmount) >= grandTotal ? 'text-success' : 'text-muted-foreground'}`}>
-                    {Number(paidAmount) >= grandTotal ? fmt(Number(paidAmount) - grandTotal) : 'Rs. 0'}
-                  </div>
-                </div>
-              </div>
-              {Number(paidAmount) > 0 && Number(paidAmount) < grandTotal && (
-                <p className="text-[11px] text-destructive mt-2 font-medium">
-                  Note: Received amount is less than total bill.
-                </p>
-              )}
-              <div className="flex gap-2 mt-3 flex-wrap">
-                {[500, 1000, 2000, 5000].map(amt => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setPaidAmount(amt)}
-                    className="px-3 py-1.5 rounded-lg bg-background border border-primary/20 text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
-                  >
-                    + {amt}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(Math.ceil(grandTotal / 500) * 500)}
-                  className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-[11px] font-bold text-primary hover:bg-primary hover:text-white transition-all shadow-sm"
-                >
-                  Round Up
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="grid sm:grid-cols-3 gap-2">
-            <button
-              onClick={() => {
-                if (!selectedOrder.dbId) {
-                  toast.error('Order cannot be deleted');
-                  return;
-                }
-                api(`/orders/${selectedOrder.dbId}`, { method: 'DELETE' })
-                  .then(() => {
-                    toast.success('Order deleted');
-                    loadOrders();
-                  })
-                  .catch(() => toast.error('Failed to delete order'));
-              }}
-              className="py-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-destructive/15 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" /> Delete
-            </button>
-            <button onClick={() => {
-              printReceipt(buildReceiptData(selectedOrder, false));
-              // Mark order as printed
-              markOrderAsPrinted(selectedOrder.id);
-              // Update the order in the list to show printed status
-              setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, printed: true } : o));
-              toast.success('Receipt sent to printer!');
-            }} className="py-2.5 rounded-xl bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-muted/80 transition-colors">
-              <Printer className="w-4 h-4" /> Print
-            </button>
-            <button onClick={() => {
-              void runLocked('complete-payment', async () => {
-              if (selectedOrder.status === 'completed') {
-                printReceipt(buildReceiptData(selectedOrder, true, (selectedOrder as any).paymentMethod));
-                markOrderAsPrinted(selectedOrder.id);
-                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, printed: true } : o));
-                toast.success('Paid bill reprinted');
-                return;
-              }
-              const orderSnapshot = { ...selectedOrder };
-              if (selectedOrder.dbId) {
-                await api(`/orders/${selectedOrder.dbId}/payment`, {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    paymentMethod,
-                    gstEnabled,
-                    total: grandTotal,
-                    subtotal,
-                    discount: discountAmt,
-                    tax: totalTaxAmount,
-                    gstAmount,
-                    serviceCharge,
-                  }),
-                });
-                printReceipt(buildReceiptData({ ...orderSnapshot, status: 'completed' }, true, paymentMethod));
-                markOrderAsPrinted(orderSnapshot.id);
-                setOrders(prev => prev.map(o => o.id === orderSnapshot.id ? { ...o, printed: true, status: 'completed', paymentMethod } : o));
-                toast.success('Payment completed and receipt printed');
-                await loadOrders();
-                queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
-                queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-                queryClient.invalidateQueries({ queryKey: ['reports-dashboard'] });
-                queryClient.invalidateQueries({ queryKey: ['analytics-dashboard'] });
-              } else {
-                toast.success('Payment processed!');
-              }
-              }).catch(() => toast.error('Payment failed'));
-            }} className="py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed" disabled={isLocked('complete-payment')}>
-              Complete Payment
-            </button>
-          </div>
-          </div>
-        </div>
+        <BillPaymentPanel 
+          order={selectedOrder}
+          tableMap={tableMap}
+          taxRates={taxRates}
+          currentUser={currentUser}
+          hasAction={hasAction}
+          onPaymentComplete={async () => {
+            await loadOrders();
+            queryClient.invalidateQueries({ queryKey: ['pos-tables', 'dashboard-overview', 'reports-dashboard', 'analytics-dashboard'] });
+          }}
+          markOrderAsPrinted={markOrderAsPrinted}
+          isOrderPrinted={isOrderPrinted}
+          runLocked={runLocked}
+          isLocked={isLocked}
+          getStatusBadgeClass={getStatusBadgeClass}
+          getBillStatusLabel={getBillStatusLabel}
+          formatOrderDateTime={formatOrderDateTime}
+        />
       </div>
     </div>
   );

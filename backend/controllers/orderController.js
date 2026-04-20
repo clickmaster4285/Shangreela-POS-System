@@ -41,13 +41,40 @@ exports.list = async (req, res) => {
     if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
     if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
 
-    // Filter for today's orders only (default: true)
-    const todayOnly = req.query.today !== "false";
-    if (todayOnly) {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      where.createdAt = { $gte: startOfDay, $lt: endOfDay };
+    // Filter for date range OR today's orders
+    if (req.query.from || req.query.to) {
+      const from = req.query.from;
+      const to = req.query.to;
+      const dateFilter = {};
+      
+      if (from) {
+        const start = new Date(from);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.$gte = start;
+      }
+      
+      if (to) {
+        const end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
+      }
+      
+      if (Object.keys(dateFilter).length > 0) {
+        where.createdAt = dateFilter;
+      }
+    } else {
+      const todayOnly = req.query.today !== "false";
+      if (todayOnly) {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        where.createdAt = { $gte: startOfDay, $lt: endOfDay };
+      }
+    }
+
+    // Filter by cashier (orderTaker)
+    if (req.query.orderTaker && req.query.orderTaker !== "all") {
+      where.orderTaker = String(req.query.orderTaker);
     }
 
     if (req.query.search) {
@@ -110,6 +137,7 @@ exports.list = async (req, res) => {
             createdAt: o.createdAt,
             customerName: o.customerName || "",
             orderTaker: o.orderTaker || "",
+            cashierName: o.cashierName || "",
             dbId: String(o._id),
           };
         }),

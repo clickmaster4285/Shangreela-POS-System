@@ -41,6 +41,7 @@ export interface ReceiptData {
   amountPaid?: number;
   changeDue?: number;
   isPaid?: boolean;
+  cashierName?: string;
 }
 
 const fmtPKR = (v: number) =>
@@ -107,14 +108,17 @@ export function printReceipt(data: ReceiptData) {
       z-index: 20;
     }
     .paid-stamp span {
-      font-size: 54px;
-      font-weight: 800;
-      letter-spacing: 0.15em;
-      color: rgba(220, 38, 38, 0.24);
-      border: 4px solid rgba(220, 38, 38, 0.24);
-      padding: 10px 18px;
-      border-radius: 10px;
-      transform: rotate(-28deg);
+      font-size: 64px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #b91c1c;
+      border: 6px double #b91c1c;
+      padding: 4px 24px;
+      border-radius: 4px;
+      transform: rotate(-25deg);
+      opacity: 0.8;
+      text-transform: uppercase;
+      font-family: sans-serif;
     }
     .doc-title {
       text-align: center;
@@ -207,15 +211,15 @@ export function printReceipt(data: ReceiptData) {
   <div class="meta">
     <div class="row"><span>Order / bill no.</span><span>${esc(data.orderId)}</span></div>
     <div class="row"><span>Transaction type</span><span style="text-transform:capitalize">${esc(data.orderType)}</span></div>
-    ${data.table !== undefined ? `<div class="row"><span>Table</span><span>${data.tableName ?? data.table}</span></div>` : ''}
+    ${data.table !== undefined ? `<div class="row" style=""><span style="font-weight:700; font-size:10px;">Table</span><span style="font-weight:900; font-size:12px;">${data.tableName ?? data.table}</span></div>` : ''}
     ${data.customerName ? `<div class="row"><span>Customer</span><span>${esc(data.customerName)}</span></div>` : ''}
-    <div class="row"><span>Order date</span><span>${esc(orderDateStr)}</span></div>
-    <div class="row"><span>Order time</span><span>${esc(orderTimeStr)}</span></div>
+    <div class="row"><span>Order placed</span><span>${esc(orderDateStr)} ${esc(orderTimeStr)}</span></div>
     ${
       orderValid
         ? `<div class="row"><span>Printed</span><span>${esc(printDateStr)} ${esc(printTimeStr)}</span></div>`
         : ''
     }
+    ${data.cashierName ? `<div class="row"><span>Cashier</span><span>${esc(data.cashierName)}</span></div>` : ''}
   </div>
 
   <div class="section-h">Line items</div>

@@ -29,20 +29,30 @@ async function loadPaidOrdersLeanForReq(req) {
   const from = req.query.from;
   const to = req.query.to;
   const floorKey = req.query.floorKey;
+  const orderTaker = req.query.orderTaker;
   const tableNumbers = await getTableNumbers(floorKey);
-  const paidQuery = buildPaidOrdersQuery(range, from, to, tableNumbers);
+  const paidQuery = buildPaidOrdersQuery(range, from, to, tableNumbers, orderTaker);
   const orders = await Order.find(paidQuery).select(PAID_ORDER_LIST_PROJECTION).lean();
-  return { orders, range, from, to, floorKey, tableNumbers };
+  return { orders, range, from, to, floorKey, tableNumbers, orderTaker };
 }
 
-async function fetchDashboardAuxiliaryCounts(auxCreatedAt) {
+async function fetchDashboardAuxiliaryCounts(auxCreatedAt, orderTaker = null) {
   const expenseQuery = { createdAt: auxCreatedAt };
+  const cancelledQuery = { status: "cancelled", createdAt: auxCreatedAt };
+  const openQuery = { status: { $nin: ["completed", "cancelled"] } };
+
+  if (orderTaker && orderTaker !== "all") {
+    cancelledQuery.orderTaker = orderTaker;
+    openQuery.orderTaker = orderTaker;
+    // Expenses don't typically have an orderTaker, but if they did we could add it here
+  }
+
   return Promise.all([
     MenuItem.countDocuments({}),
     InventoryItem.countDocuments({ $expr: { $lte: ["$quantity", "$minStock"] } }),
     Employee.countDocuments({ status: "active" }),
-    Order.countDocuments({ status: "cancelled", createdAt: auxCreatedAt }),
-    Order.countDocuments({ status: { $nin: ["completed", "cancelled"] } }),
+    Order.countDocuments(cancelledQuery),
+    Order.countDocuments(openQuery),
     Expense.aggregate([{ $match: expenseQuery }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
   ]);
 }
@@ -264,9 +274,12 @@ function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelle
 
 async function loadRecentOrdersFormatted(req) {
   const floorKey = req.query.floorKey;
+  const orderTaker = req.query.orderTaker;
   const tableNumbers = await getTableNumbers(floorKey);
   const query = { status: { $ne: "cancelled" } };
   if (tableNumbers) query.table = { $in: tableNumbers };
+  if (orderTaker && orderTaker !== "all") query.orderTaker = orderTaker;
+  
   const items = await Order.find(query)
     .sort({ createdAt: -1 })
     .limit(10)
@@ -286,10 +299,10 @@ async function loadRecentOrdersFormatted(req) {
 exports.summary = async (req, res) => {
   try {
     const auxCreatedAt = getAuxCreatedAtForReq(req);
-    const [{ orders }, rates, [menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats]] = await Promise.all([
+    const [{ orders, orderTaker }, rates, [menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats]] = await Promise.all([
       loadPaidOrdersLeanForReq(req),
       getEffectiveTaxRates(),
-      fetchDashboardAuxiliaryCounts(auxCreatedAt),
+      fetchDashboardAuxiliaryCounts(auxCreatedAt, req.query.orderTaker),
     ]);
     res.json(buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats));
   } catch (error) {
@@ -301,11 +314,11 @@ exports.summary = async (req, res) => {
 exports.bundle = async (req, res) => {
   try {
     const auxCreatedAt = getAuxCreatedAtForReq(req);
-    const [{ orders, range, from, to }, rates, [menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats], recentItems] =
+    const [{ orders, range, from, to, orderTaker }, rates, [menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats], recentItems] =
       await Promise.all([
         loadPaidOrdersLeanForReq(req),
         getEffectiveTaxRates(),
-        fetchDashboardAuxiliaryCounts(auxCreatedAt),
+        fetchDashboardAuxiliaryCounts(auxCreatedAt, req.query.orderTaker),
         loadRecentOrdersFormatted(req),
       ]);
 

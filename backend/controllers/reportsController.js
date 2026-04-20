@@ -119,14 +119,14 @@ const buildRevenueSeries = (range, orders, from, to) => {
 
 exports.weeklySales = async (req, res) => {
   const tableNumbers = await getTableNumbers(req.query.floorKey);
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean();
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers, req.query.orderTaker)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
   const tableNumbers = await getTableNumbers(req.query.floorKey);
   const [orders] = await Promise.all([
-    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers)).lean(),
+    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers, req.query.orderTaker)).lean(),
   ]);
 
   const map = new Map();

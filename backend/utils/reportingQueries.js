@@ -59,7 +59,7 @@ const parseCustomDateRange = (from, to) => {
  * If `range` is "all" (or unknown) and no `from`/`to`, applies a rolling lookback window
  * so the query is never unbounded.
  */
-const buildPaidOrdersQuery = (range, from, to, tableNumbers = null) => {
+const buildPaidOrdersQuery = (range, from, to, tableNumbers = null, orderTaker = null) => {
   const query = { status: "completed" };
 
   if (from || to) {
@@ -76,6 +76,10 @@ const buildPaidOrdersQuery = (range, from, to, tableNumbers = null) => {
 
   if (Array.isArray(tableNumbers)) {
     query.table = { $in: tableNumbers };
+  }
+
+  if (orderTaker && orderTaker !== "all") {
+    query.orderTaker = orderTaker;
   }
 
   return query;

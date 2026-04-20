@@ -10,6 +10,7 @@ export type ReportPdfPayload = {
   customDateFrom?: string;
   customDateTo?: string;
   floorName?: string;
+  cashierName?: string;
   summary: {
     revenue: number;
     profit: number;
@@ -69,7 +70,8 @@ export function exportReportPdf(payload: ReportPdfPayload) {
   const brand = payload.business?.name || 'Restaurant POS';
   const title = 'Sales & Payments Report';
   const floorLine = payload.floorName ? `   •   Floor: ${payload.floorName}` : '';
-  const sub = `Period: ${rangeLabel(payload)}${floorLine}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
+  const cashierLine = payload.cashierName ? `   •   Cashier: ${payload.cashierName}` : '';
+  const sub = `Period: ${rangeLabel(payload)}${floorLine}${cashierLine}   •   Generated: ${payload.generatedAt.toLocaleString()}`;
 
   // Header
   doc.setFillColor(primary[0], primary[1], primary[2]);

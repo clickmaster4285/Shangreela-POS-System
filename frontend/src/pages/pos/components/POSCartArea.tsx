@@ -82,14 +82,13 @@ export function POSCartArea({
   return (
     <div className="w-full lg:w-[min(100%,28rem)] xl:w-[30rem] lg:shrink-0 flex flex-col pos-card p-0 overflow-hidden relative">
       {/* Order type */}
-      <div className="p-3 border-b border-border flex gap-1">
+      <div className="p-1.5 border-b border-border flex gap-1">
         {(['dine-in', 'takeaway', 'delivery'] as const).map(t => (
           <button
             key={t}
             onClick={() => handleOrderTypeChange(t)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
-              orderType === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-            }`}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-medium capitalize transition-all ${orderType === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+              }`}
           >
             {t}
           </button>
@@ -103,9 +102,8 @@ export function POSCartArea({
             <p className="text-xs font-semibold text-foreground">Table</p>
             <p className="text-[11px] text-muted-foreground truncate">
               {selectedTable
-                ? `${selectedTable.name} · ${
-                    floors.find(f => f.id === selectedTable.floorId)?.name ?? 'Floor'
-                  } (${selectedTable.seats} seats)`
+                ? `${selectedTable.name} · ${floors.find(f => f.id === selectedTable.floorId)?.name ?? 'Floor'
+                } (${selectedTable.seats} seats)`
                 : 'No table selected'}
             </p>
           </div>
@@ -161,7 +159,7 @@ export function POSCartArea({
       )}
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-1 space-y-2.5 scrollbar-thin">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
@@ -170,7 +168,7 @@ export function POSCartArea({
         ) : cart.map((c, index) => (
           <div
             key={`${c.menuItem.id}-${c.notes}-${c.extraName}-${c.extraPrice}-${index}`}
-            className="rounded-2xl border border-border bg-muted/60 px-3 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+            className="rounded-xl border border-border bg-muted/60 px-3 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
           >
             <div className="flex justify-between items-start gap-3">
               <div className="flex-1 min-w-0">
@@ -180,71 +178,70 @@ export function POSCartArea({
                     + {c.extraName} (Rs. {Number(c.extraPrice).toLocaleString()})
                   </p>
                 )}
-                <p className="text-[11px] text-muted-foreground mt-0.5">Rs. {c.menuItem.price.toLocaleString()}</p>
+                <div className="flex space-x-4">
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Rs. {c.menuItem.price.toLocaleString()}</p>
+                  <p className='text-sm font-semibold text-foreground'>    Rs. {((Number(c.menuItem.price) + Number(c.extraPrice || 0)) * c.quantity).toLocaleString()}</p>
+                </div>
                 {c.notes && (
                   <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 italic">
                     &ldquo;{c.notes}&rdquo;
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => {
-                    setCustomizingItem(c.menuItem);
-                    setEditingCartItemIndex(index);
-                    setExtraName(c.extraName || '');
-                    setExtraPrice(c.extraPrice || '');
-                    setItemNotes(c.notes || '');
-                    setIsCustomAddon(!!c.extraName && !COMMON_ADDONS.includes(c.extraName));
-                  }}
-                  className="text-primary hover:text-primary/80 p-1 rounded-full hover:bg-primary/10 transition-colors"
-                  title="Add extras/notes"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => removeItem(c.menuItem.id, c.notes, c.extraName, c.extraPrice || 0)}
-                  className="text-muted-foreground hover:text-destructive/90 p-1 rounded-full hover:bg-destructive/10 transition-colors"
-                  aria-label="Remove item"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex flex-col items-end gap-3 shrink-0">
+                <div className="flex items-center gap-1 pt-1">
+                  <button
+                    onClick={() => {
+                      setCustomizingItem(c.menuItem);
+                      setEditingCartItemIndex(index);
+                      setExtraName(c.extraName || '');
+                      setExtraPrice(c.extraPrice || '');
+                      setItemNotes(c.notes || '');
+                      setIsCustomAddon(!!c.extraName && !COMMON_ADDONS.includes(c.extraName));
+                    }}
+                    className="text-primary hover:text-primary/80 p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                    title="Add extras/notes"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeItem(c.menuItem.id, c.notes, c.extraName, c.extraPrice || 0)}
+                    className="text-muted-foreground hover:text-destructive/90 p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
+                    aria-label="Remove item"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 bg-background/50 p-0.5 border border-border rounded-xl">
+                  <button
+                    onClick={() => updateQty(c.menuItem.id, -1, c.notes, c.extraName, c.extraPrice || 0)}
+                    className="w-7 h-7 rounded-lg bg-card flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-all duration-200"
+                  >
+                    {c.quantity === 1 ? <Trash2 className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                  </button>
+                  <input
+                    type="number"
+                    value={c.quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val)) {
+                        updateQty(c.menuItem.id, 0, c.notes, c.extraName, c.extraPrice || 0, val);
+                      } else if (e.target.value === '') {
+                        updateQty(c.menuItem.id, 0, c.notes, c.extraName, c.extraPrice || 0, 0);
+                      }
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    className="w-8 bg-transparent text-center text-xs font-bold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    aria-label="Item quantity"
+                  />
+                  <button
+                    onClick={() => updateQty(c.menuItem.id, 1, c.notes, c.extraName, c.extraPrice || 0)}
+                    className="w-7 h-7 rounded-lg bg-card flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all duration-200"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/60">
-              <div className="flex items-center gap-2.5">
-                <button
-                  onClick={() => updateQty(c.menuItem.id, -1, c.notes, c.extraName, c.extraPrice || 0)}
-                  className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
-                >
-                  {c.quantity === 1 ? <Trash2 className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                </button>
-                <input
-                  type="number"
-                  value={c.quantity}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (!isNaN(val)) {
-                      updateQty(c.menuItem.id, 0, c.notes, c.extraName, c.extraPrice || 0, val);
-                    } else if (e.target.value === '') {
-                      // Allow empty input while typing, but maybe fall back to 0 or handle it
-                      updateQty(c.menuItem.id, 0, c.notes, c.extraName, c.extraPrice || 0, 0);
-                    }
-                  }}
-                  onFocus={(e) => e.target.select()}
-                  className="w-10 h-8 rounded-lg bg-background border border-border text-center text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  aria-label="Item quantity"
-                />
-                <button
-                  onClick={() => updateQty(c.menuItem.id, 1, c.notes, c.extraName, c.extraPrice || 0)}
-                  className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-              </div>
-              <span className="text-sm font-semibold text-foreground">
-                Rs. {((Number(c.menuItem.price) + Number(c.extraPrice || 0)) * c.quantity).toLocaleString()}
-              </span>
             </div>
           </div>
         ))}

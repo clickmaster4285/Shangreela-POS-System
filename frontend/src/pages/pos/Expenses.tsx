@@ -78,6 +78,7 @@ export default function Expenses() {
     []
   );
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [summary, setSummary] = useState({ total: 0, count: 0 });
   const [showForm, setShowForm] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [form, setForm] = useState<Expense>(getDefaultForm);
@@ -87,6 +88,7 @@ export default function Expenses() {
   const [selectedReceiptIsImage, setSelectedReceiptIsImage] = useState(false);
   const uploadHost = getBackendOrigin();
   const today = new Date().toISOString().split('T')[0];
+  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | 'all'>('all');
@@ -96,11 +98,17 @@ export default function Expenses() {
 
   const fetchExpenses = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ page: String(page), limit: '12', from: startDate, to: endDate });
+      const params = new URLSearchParams({ page: String(page), limit: '24', from: startDate, to: endDate });
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
-      const response = await api<ExpensesResponse>(`/expenses?${params.toString()}`);
-      setExpenses(response.items || []);
-      setMeta({ hasNext: response.pagination?.hasNext || false, hasPrev: response.pagination?.hasPrev || false });
+      
+      const [listRes, summaryRes] = await Promise.all([
+        api<ExpensesResponse>(`/expenses?${params.toString()}`),
+        api<{ total: number; count: number }>(`/expenses/summary?${params.toString()}`)
+      ]);
+
+      setExpenses(listRes.items || []);
+      setMeta({ hasNext: listRes.pagination?.hasNext || false, hasPrev: listRes.pagination?.hasPrev || false });
+      setSummary({ total: summaryRes.total || 0, count: summaryRes.count || 0 });
     } catch (error) {
       toast.error('Failed to load expenses');
     }
@@ -205,8 +213,6 @@ export default function Expenses() {
     }
   };
 
-  const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -276,21 +282,21 @@ export default function Expenses() {
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Total Expenses</p>
-          <p className="text-2xl font-bold text-foreground mt-1">Rs. {totalExpense.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">Rs. {summary.total.toLocaleString()}</p>
         </div>
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Expense Count</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{expenses.length}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{summary.count}</p>
         </div>
         <div className="pos-card">
           <p className="text-xs text-muted-foreground">Average Expense</p>
-          <p className="text-2xl font-bold text-foreground mt-1">Rs. {expenses.length ? Math.round(totalExpense / expenses.length).toLocaleString() : 0}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">Rs. {summary.count ? Math.round(summary.total / summary.count).toLocaleString() : 0}</p>
         </div>
       </div>
 
       {/* Expenses */}
       {viewMode === 'grid' ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {expenses.map((expense, i) => (
             <div
               key={expense.id || i}
@@ -402,6 +408,29 @@ export default function Expenses() {
           </table>
         </div>
       )}
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between bg-card border border-border rounded-xl p-4">
+        <div className="text-xs text-muted-foreground">
+          Showing page {page}
+        </div>
+        <div className="flex gap-2">
+          <button
+            disabled={!meta.hasPrev}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="px-3 py-2 rounded-xl border border-border text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+          >
+            Previous
+          </button>
+          <button
+            disabled={!meta.hasNext}
+            onClick={() => setPage(p => p + 1)}
+            className="px-3 py-2 rounded-xl border border-border text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       {selectedReceiptUrl && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

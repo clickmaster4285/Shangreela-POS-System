@@ -6,6 +6,7 @@ import { api, type PaginatedResponse } from '@/lib/api';
 import { MAX_LIST_LIMIT } from '@/lib/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { exportReportPdf } from '@/utils/exportReportPdf';
+import { POSFilterBar } from '@/components/pos/POSFilterBar';
 
 const pieColors = ['hsl(340,70%,21%)', 'hsl(340,60%,30%)', 'hsl(15,45%,81%)', 'hsl(40,70%,55%)', 'hsl(15,25%,13%)'];
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
@@ -80,6 +81,20 @@ export default function Reports() {
   const [selectedFloor, setSelectedFloor] = useState(() => {
     return localStorage.getItem('reports_selected_floor') || 'all';
   });
+  const [selectedCashier, setSelectedCashier] = useState('all');
+  const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
+
+  const usersQuery = useQuery({
+    queryKey: ['users-list'],
+    queryFn: () => api<PaginatedResponse<{ name: string, role: string }>>('/users?limit=100'),
+  });
+
+  useEffect(() => {
+    if (usersQuery.data) {
+      const relevant = usersQuery.data.items.filter(u => ['cashier', 'admin'].includes(u.role));
+      setCashiers(relevant.map(u => ({ key: u.name, name: u.name })));
+    }
+  }, [usersQuery.data]);
 
   useEffect(() => {
     localStorage.setItem('reports_selected_floor', selectedFloor);
@@ -94,12 +109,13 @@ export default function Reports() {
   const floors = floorsData?.items ?? [];
 
   const reportsQuery = useQuery({
-    queryKey: ['reports-dashboard', startDate, endDate, selectedFloor],
+    queryKey: ['reports-dashboard', startDate, endDate, selectedFloor, selectedCashier],
     queryFn: async () => {
       const floorParam = selectedFloor !== 'all' ? `&floorKey=${selectedFloor}` : '';
+      const cashierParam = selectedCashier !== 'all' ? `&orderTaker=${selectedCashier}` : '';
       const [w, t, s] = await Promise.all([
-        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}${floorParam}`),
-        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}${floorParam}`),
+        api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
+        api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
         api<{
           revenue: number;
           profit: number;
@@ -108,7 +124,7 @@ export default function Reports() {
           totalDiscount: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
-        }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}`),
+        }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
       ]);
       return { weeklySalesData: w.items, topSellingItems: t.items, summary: s };
     },
@@ -144,6 +160,7 @@ export default function Reports() {
       customDateFrom: startDate,
       customDateTo: endDate,
       floorName: selectedFloor !== 'all' ? floors.find(f => f.key === selectedFloor)?.name : undefined,
+      cashierName: selectedCashier !== 'all' ? selectedCashier : undefined,
       generatedAt: new Date(),
       summary,
       revenueSeries: weeklySalesData,
@@ -267,50 +284,37 @@ export default function Reports() {
 
       <div className="space-y-6">
         {/* Header with Print Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print mb-4">
           <div>
             <h1 className="font-serif text-2xl font-bold text-foreground">Reporting</h1>
-            <p className="text-sm text-muted-foreground">Sales, profit, and payment breakdowns from paid (completed) bills in the selected period.</p>
+            <p className="text-sm text-muted-foreground">Sales, profit, and payment breakdowns from paid bills.</p>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex gap-2 items-center bg-card border border-border rounded-xl p-2">
-              <label className="text-xs font-medium text-muted-foreground">From:</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
-              />
-              <label className="text-xs font-medium text-muted-foreground">To:</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-background border border-border rounded-lg px-2 py-1 text-xs"
-              />
-              <div className="w-px h-4 bg-border mx-1" />
-              <label className="text-xs font-medium text-muted-foreground">Floor:</label>
-              <select
-                value={selectedFloor}
-                onChange={(e) => setSelectedFloor(e.target.value)}
-                className="bg-background border border-border rounded-lg px-2 py-1 text-xs outline-none"
-              >
-                <option value="all">All Floors</option>
-                {floors.map((f) => (
-                  <option key={f.key} value={f.key}>{f.name}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={handleExportPdf}
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-primary/5 transition"
-            >
-              <Download className="w-4 h-4" /> Export PDF (A4)
-            </button>
-            {/* <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-primary/5 transition">
-              <FileBarChart className="w-4 h-4" /> Print report
-            </button> */}
-          </div>
+          <button
+            onClick={handleExportPdf}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-primary/5 transition"
+          >
+            <Download className="w-4 h-4" /> Export PDF (A4)
+          </button>
+        </div>
+
+        <div className="no-print">
+          <POSFilterBar
+            searchQuery=""
+            onSearchChange={() => {}}
+            hideSearch={true}
+            floors={floors}
+            selectedFloor={selectedFloor}
+            onFloorChange={setSelectedFloor}
+            cashiers={cashiers}
+            selectedCashier={selectedCashier}
+            onCashierChange={setSelectedCashier}
+            startDate={startDate}
+            endDate={endDate}
+            onDateRangeChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
         </div>
 
         {/* Print Header */}

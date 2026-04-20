@@ -8,6 +8,7 @@ import { formatOrderDateTime } from '@/utils/formatOrderDateTime';
 import { billBreakdownForOrder } from '@/utils/pakistanTax';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
+import { POSFilterBar } from '@/components/pos/POSFilterBar';
 import Fuse from 'fuse.js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -34,6 +35,11 @@ export default function OrderManagement() {
   const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedCashier, setSelectedCashier] = useState<string>('all');
+  const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState<string>(today);
+  const [endDate, setEndDate] = useState<string>(today);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
   const [switchTableDialogOpen, setSwitchTableDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -73,15 +79,17 @@ export default function OrderManagement() {
       limit: '12',
       status: statusFilter,
       type: typeFilter,
-      today: String(todayFilter),
+      today: 'false',
+      from: startDate,
+      to: endDate,
       floorKey: selectedFloor,
+      orderTaker: selectedCashier === 'all' ? '' : selectedCashier,
     });
-    // Don't send search to API - we'll filter client-side with fuzzy matching
     return api<PaginatedResponse<Order & { dbId: string }>>(`/orders?${params.toString()}`);
   };
 
   const ordersQuery = useQuery({
-    queryKey: ['orders-list', page, statusFilter, typeFilter, todayFilter, selectedFloor],
+    queryKey: ['orders-list', page, statusFilter, typeFilter, startDate, endDate, selectedFloor, selectedCashier],
     queryFn: fetchOrders,
   });
 
@@ -139,7 +147,14 @@ export default function OrderManagement() {
 
   useEffect(() => {
     setOrdersRenderCount(24);
-  }, [search, statusFilter, typeFilter, todayFilter, selectedFloor, page]);
+  }, [search, statusFilter, typeFilter, startDate, endDate, selectedFloor, selectedCashier, page]);
+
+  useEffect(() => {
+    api<PaginatedResponse<{ name: string; role: string }>>('/users?limit=100').then(r => {
+      const relevant = r.items.filter(u => ['cashier', 'admin'].includes(u.role));
+      setCashiers(relevant.map(u => ({ key: u.name, name: u.name })));
+    });
+  }, []);
 
   const refreshOrderPage = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['orders-list'] });
@@ -427,101 +442,64 @@ export default function OrderManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header with search */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4 overflow-hidden lg:h-[calc(100vh-7rem)]">
+      <div className="shrink-0 space-y-4">
         <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
-          <p className="text-sm text-muted-foreground">Track and manage all dine-in and takeout orders.</p>
+           <h1 className="font-serif text-2xl font-bold text-foreground">Order Management</h1>
+           <p className="text-sm text-muted-foreground">Monitor and control active and historical orders.</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-          {/* Floor Selector */}
-          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border whitespace-nowrap overflow-x-auto scrollbar-none w-full sm:w-auto">
-            <button
-              onClick={() => setSelectedFloor('all')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${selectedFloor === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              All Floors
-            </button>
-            {floors.map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setSelectedFloor(f.key)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${selectedFloor === f.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="search"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search ID, table..."
-              className="w-full pl-10 pr-3 py-2 bg-card border border-border rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Order type summary */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        {[
-          { label: 'Dine-in', count: allDineInCount, color: 'text-primary' },
-          { label: 'Takeout', count: allTakeawayCount, color: 'text-success' },
-        ].map(t => (
-          <div key={t.label} className="pos-card flex items-center gap-4 cursor-pointer hover:border-primary/30" onClick={() => setTypeFilter(t.label.toLowerCase().replace('takeout', 'takeaway'))}>
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <ShoppingCart className={`w-5 h-5 ${t.color}`} />
+        <POSFilterBar
+          searchQuery={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search order code or table..."
+          floors={floors}
+          selectedFloor={selectedFloor}
+          onFloorChange={(f) => {
+             setSelectedFloor(f);
+             setPage(1);
+          }}
+          cashiers={cashiers}
+          selectedCashier={selectedCashier}
+          onCashierChange={(c) => {
+             setSelectedCashier(c);
+             setPage(1);
+          }}
+          startDate={startDate}
+          endDate={endDate}
+          onDateRangeChange={(start, end) => {
+            setStartDate(start);
+            setEndDate(end);
+            setPage(1);
+          }}
+          extraFilters={
+            <div className="flex flex-wrap items-center gap-2">
+               <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
+                  {['all', 'pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'].map(s => (
+                    <button 
+                      key={s}
+                      onClick={() => { setStatusFilter(s); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+               </div>
+               
+               <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
+                  {['all', 'dine-in', 'takeaway', 'delivery'].map(t => (
+                    <button 
+                      key={t}
+                      onClick={() => { setTypeFilter(t); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${typeFilter === t ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {t === 'all' ? 'All Types' : t}
+                    </button>
+                  ))}
+               </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{t.label}</p>
-              <p className="font-serif text-xl font-bold text-foreground">{t.count}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        <div className="flex gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground self-center mr-1">Status:</span>
-          {['all', 'pending', 'preparing', 'ready', 'served', 'taken away', 'completed', 'cancelled'].map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
-              {s} {s !== 'all' && `(${allActiveOrders.filter(o => o.status === s).length})`}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground self-center mr-1">Type:</span>
-          {[
-            { label: 'all', value: 'all' },
-            { label: 'dine-in', value: 'dine-in' },
-            { label: 'takeout', value: 'takeaway' },
-          ].map(t => (
-            <button key={t.value} onClick={() => setTypeFilter(t.value)} className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${typeFilter === t.value ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground self-center mr-1">Date:</span>
-          <button
-            onClick={() => setTodayFilter(true)}
-            className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${todayFilter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}
-          >
-            Today
-          </button>
-          <button
-            onClick={() => setTodayFilter(false)}
-            className={`px-4 py-2 rounded-xl text-xs font-medium capitalize transition-all ${!todayFilter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'}`}
-          >
-            All Time
-          </button>
-        </div>
+          }
+        />
       </div>
 
       <div
