@@ -4,35 +4,40 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { PosRealtimeProvider } from "@/contexts/RealtimeContext";
-import { CartProvider } from "@/contexts/CartContext";
+import { AuthProvider } from "@/contexts/auth/AuthContext";
+import { PosRealtimeProvider } from "@/contexts/pos/RealtimeContext";
+
 const Index = lazy(() => import("./pages/Index.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const POSLayout = lazy(() => import("./components/pos/POSLayout.tsx"));
-const POSDashboard = lazy(() => import("./pages/pos/POSDashboard.tsx"));
-const POSScreen = lazy(() => import("./pages/pos/POSScreen.tsx"));
-const OrderManagement = lazy(() => import("./pages/pos/OrderManagement.tsx"));
-const TableManagement = lazy(() => import("./pages/pos/TableManagement.tsx"));
-const KitchenDisplay = lazy(() => import("./pages/pos/KitchenDisplay.tsx"));
-const Billing = lazy(() => import("./pages/pos/Billing.tsx"));
-const MenuManagement = lazy(() => import("./pages/pos/MenuManagement.tsx"));
-const Reports = lazy(() => import("./pages/pos/Reports.tsx"));
-const PermissionManagement = lazy(() => import("./pages/pos/PermissionManagement.tsx"));
-const InventoryManagement = lazy(() => import("./pages/pos/InventoryManagement.tsx"));
-const HRManagement = lazy(() => import("./pages/pos/HRManagement.tsx"));
-const DeliveryTracking = lazy(() => import("./pages/pos/DeliveryTracking.tsx"));
-const SalesAnalytics = lazy(() => import("./pages/pos/SalesAnalytics.tsx"));
-const Login = lazy(() => import("./pages/pos/Login.tsx"));
+
+// Refactored Modular Imports
+const POSDashboard = lazy(() => import("./pages/dashboard/index.tsx"));
+const POSScreen = lazy(() => import("./pages/pos-terminal/index.tsx"));
+const OrderManagement = lazy(() => import("./pages/orders/index.tsx"));
+const TableManagement = lazy(() => import("./pages/settings/tables/index.tsx"));
+const KitchenDisplay = lazy(() => import("./pages/kitchen/index.tsx"));
+const Billing = lazy(() => import("./pages/billing/index.tsx"));
+const MenuManagement = lazy(() => import("./pages/menu/index.tsx"));
+const Reports = lazy(() => import("./pages/reports/index.tsx"));
+const PermissionManagement = lazy(() => import("./pages/hr/users/index.tsx"));
+const InventoryManagement = lazy(() => import("./pages/inventory/index.tsx"));
+const HRManagement = lazy(() => import("./pages/hr/index.tsx"));
+const DeliveryTracking = lazy(() => import("./pages/delivery/index.tsx"));
+const SalesAnalytics = lazy(() => import("./pages/analytics/index.tsx"));
+const Login = lazy(() => import("./pages/auth/login/index.tsx"));
+const Expenses = lazy(() => import("./pages/expenses/index.tsx"));
+
+// Settings/Infrastructure
+const PrinterIntegration = lazy(() => import("./pages/settings/printers/index.tsx"));
+const POSTabsIntegration = lazy(() => import("./pages/settings/pos-tabs/index.tsx"));
+const GiftLoyaltyCards = lazy(() => import("./pages/settings/gift-loyalty/index.tsx"));
+const FBRIntegration = lazy(() => import("./pages/settings/fbr/index.tsx"));
+const TaxDetails = lazy(() => import("./pages/settings/tax/index.tsx"));
+const MobileApp = lazy(() => import("./pages/settings/mobile-app/index.tsx"));
+const OutdoorDeliveryReport = lazy(() => import("./pages/delivery/outdoor-report.tsx"));
+
 const PageGuard = lazy(() => import("./components/pos/PageGuard.tsx"));
-const PrinterIntegration = lazy(() => import("./pages/pos/PrinterIntegration.tsx"));
-const POSTabsIntegration = lazy(() => import("./pages/pos/POSTabsIntegration.tsx"));
-const GiftLoyaltyCards = lazy(() => import("./pages/pos/GiftLoyaltyCards.tsx"));
-const FBRIntegration = lazy(() => import("./pages/pos/FBRIntegration.tsx"));
-const TaxDetails = lazy(() => import("./pages/pos/TaxDetails.tsx"));
-const MobileApp = lazy(() => import("./pages/pos/MobileApp.tsx"));
-const OutdoorDeliveryReport = lazy(() => import("./pages/pos/OutdoorDeliveryReport.tsx"));
-const Expenses = lazy(() => import("./pages/pos/Expenses.tsx"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,7 +61,6 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <PosRealtimeProvider>
-        <CartProvider>
           <BrowserRouter>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
@@ -89,7 +93,6 @@ const App = () => (
               </Routes>
             </Suspense>
           </BrowserRouter>
-        </CartProvider>
         </PosRealtimeProvider>
       </AuthProvider>
     </TooltipProvider>
@@ -97,3 +100,4 @@ const App = () => (
 );
 
 export default App;
+

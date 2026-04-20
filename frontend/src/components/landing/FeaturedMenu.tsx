@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { type MenuItem } from '@/data/mockData';
-import { api, type PaginatedResponse } from '@/lib/api';
+import { type MenuItem } from '@/data/pos/mockData';
+import { api, type PaginatedResponse } from '@/lib/api/api';
 
 export default function FeaturedMenu() {
   const [active, setActive] = useState('All');
@@ -84,3 +84,4 @@ export default function FeaturedMenu() {
     </section>
   );
 }
+

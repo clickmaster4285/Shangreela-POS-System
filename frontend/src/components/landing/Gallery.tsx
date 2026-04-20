@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { galleryImages } from '@/data/mockData';
+import { galleryImages } from '@/data/pos/mockData';
 import galleryInterior from '@/assets/gallery-interior.jpg';
 import galleryFood from '@/assets/gallery-food.jpg';
 
@@ -37,3 +37,4 @@ export default function Gallery() {
     </section>
   );
 }
+

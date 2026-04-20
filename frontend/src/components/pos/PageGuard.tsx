@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth, MANAGER_ROLES, type PageKey } from '@/contexts/AuthContext';
+import { useAuth, MANAGER_ROLES, type PageKey } from '@/contexts/auth/AuthContext';
 import { ShieldX } from 'lucide-react';
 
 interface Props {
@@ -94,3 +94,4 @@ export default function PageGuard({ page, children }: Props) {
 
   return <>{children}</>;
 }
+

@@ -27,8 +27,8 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useCart } from '@/contexts/CartContext';
-import { useAuth, ROLE_LABELS } from '@/contexts/AuthContext';
+import { usePOSStore } from '@/stores/pos/posStore';
+import { useAuth, ROLE_LABELS } from '@/contexts/auth/AuthContext';
 import { BrandHeader } from '@/components/branding/BrandHeader';
 import Logo from '@/components/branding/Logo';
 
@@ -66,7 +66,7 @@ const roleBadge: Record<string, string> = {
 export default function POSLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, loading, logout, hasPageAccess } = useAuth();
-  const { cart, setShowDiscardPopup, setPendingNavigation } = useCart();
+  const { cart, setShowDiscardPopup, setPendingNavigation } = usePOSStore();
 
   const handleNavigation = (to: string) => {
     // Check if we're currently on the terminal page and have items in cart
@@ -127,10 +127,9 @@ export default function POSLayout() {
                 }
               }}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
                 }`
               }
             >
