@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, getBackendOrigin } from '@/lib/api';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/use-submit-lock';
 
@@ -85,8 +85,7 @@ export default function Expenses() {
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedReceiptFileName, setSelectedReceiptFileName] = useState<string>('');
   const [selectedReceiptIsImage, setSelectedReceiptIsImage] = useState(false);
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-  const uploadHost = apiBase.replace(/\/api$/, '');
+  const uploadHost = getBackendOrigin();
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);

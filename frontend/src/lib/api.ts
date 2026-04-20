@@ -1,5 +1,17 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const TOKEN_KEY = "shirazre_token";
+
+const rawApiBase = String(import.meta.env.VITE_API_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+
+/** From `frontend/.env` — `VITE_API_BASE_URL`. */
+export const API_BASE =
+  rawApiBase || (import.meta.env.DEV ? "http://localhost:5000/api" : "");
+
+/** Backend origin without `/api` — uploads, Socket.IO. */
+export function getBackendOrigin(): string {
+  return API_BASE.replace(/\/api\/?$/i, "");
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);

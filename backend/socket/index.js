@@ -1,17 +1,19 @@
 const { Server } = require("socket.io");
 const EVENTS = require("./events");
 
-let ioInstance = null;
-
-/** CORS origins for Socket.IO (and should match Express CORS). */
-function resolveCorsOrigins() {
-  const raw = process.env.Frontend_URL || process.env.FRONTEND_ORIGIN || "http://localhost:8080";
-  if (Array.isArray(raw)) return raw.filter(Boolean);
-  return String(raw)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+const frontendPrimary =
+  process.env.Frontend_URL ||
+  process.env.FRONTEND_ORIGIN ||
+  "http://localhost:8080";
+let frontendOrigins = String(frontendPrimary)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (!frontendOrigins.length) {
+  frontendOrigins = ["http://localhost:8080"];
 }
+
+let ioInstance = null;
 
 const SCOPE_TO_EVENT = {
   orders: EVENTS.ORDERS_CHANGED,
@@ -40,7 +42,7 @@ function initSocket(server) {
   ioInstance = new Server(server, {
     path: "/socket.io",
     cors: {
-      origin: resolveCorsOrigins(),
+      origin: frontendOrigins,
       methods: ["GET", "POST"],
       credentials: true,
     },

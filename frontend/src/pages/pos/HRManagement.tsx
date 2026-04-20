@@ -9,7 +9,7 @@ import {
   type ShiftBlock,
 } from '@/data/hrData';
 import { toast } from 'sonner';
-import { api, type PaginatedResponse } from '@/lib/api';
+import { api, getBackendOrigin, type PaginatedResponse } from '@/lib/api';
 import { usePosRealtimeScopes } from '@/hooks/use-pos-realtime';
 
 type Tab = 'employees' | 'attendance' | 'shifts' | 'leaves' | 'salary';
@@ -66,7 +66,7 @@ export default function HRManagement() {
   const [newEmpAvatar, setNewEmpAvatar] = useState<File | null>(null);
   const [newEmpAvatarPreview, setNewEmpAvatarPreview] = useState('');
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000';
+  const BACKEND_BASE = getBackendOrigin();
   const getAvatarUrl = (avatar?: string) => {
     if (!avatar) return '';
     return avatar.startsWith('/uploads') ? `${BACKEND_BASE}${avatar}` : avatar;

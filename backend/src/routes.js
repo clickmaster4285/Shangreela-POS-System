@@ -1,8 +1,16 @@
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
+
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { jwtSecret } = require("./config");
 const { parsePagination, buildPaginatedResponse } = require("./utils/pagination");
+
+const isProd = process.env.NODE_ENV === "production";
+const jwtSecret =
+  process.env.JWT_SECRET || (isProd ? null : "development_secret");
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET must be set in the environment for production.");
+}
 const { authRequired, attachPermissions } = require("./middleware");
 const {
   User,
