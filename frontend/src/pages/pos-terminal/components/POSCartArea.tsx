@@ -2,6 +2,7 @@ import { Trash2, Minus, Plus, ShoppingBag, X } from 'lucide-react';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { COMMON_ADDONS } from '@/data/pos/posConstants';
 import { TableInfo } from '@/data/pos/mockData';
+import { motion } from "framer-motion"
 
 interface POSCartAreaProps {
   subtotal: number;
@@ -44,12 +45,11 @@ export function POSCartArea({
   } = store;
 
   const handleOrderTypeClick = (type: 'dine-in' | 'takeaway' | 'delivery') => {
-    if (cart.length > 0 && type !== orderType) {
-      setPendingOrderType(type);
-      setShowDiscardPopup(true);
-    } else {
-      setOrderType(type);
-      if (type !== 'dine-in') setSelectedTableId(null);
+    if (type === orderType) return;
+
+    setOrderType(type);
+    if (type !== 'dine-in') {
+      setSelectedTableId(null);
     }
   };
 
@@ -62,8 +62,8 @@ export function POSCartArea({
             key={t}
             onClick={() => handleOrderTypeClick(t)}
             className={`flex-1 py-2.5 rounded-lg text-xs font-bold capitalize transition-all ${orderType === t
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted font-medium'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-muted font-medium'
               }`}
           >
             {t}
@@ -223,10 +223,16 @@ export function POSCartArea({
         {/* GST Toggle */}
         <div className="flex items-center gap-2 pt-1">
           <button
+            type="button"
             onClick={() => setGstEnabled(!gstEnabled)}
-            className={`w-8 h-4 rounded-full relative transition-colors ${gstEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            className={`w-10 h-5 rounded-full relative transition-colors duration-200 ${gstEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
           >
-            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${gstEnabled ? 'left-4.5' : 'left-0.5'}`} />
+            <motion.div
+              initial={false}
+              animate={{ x: gstEnabled ? 20 : 2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+            />
           </button>
           <span className="text-[10px] font-bold text-muted-foreground uppercase">Include GST (16%)</span>
         </div>
