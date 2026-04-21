@@ -167,15 +167,15 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       customerName: targetOrder.customerName,
       orderCreatedAt: targetOrder.createdAt,
       amountPaid: targetOrder.status === 'completed'
-        ? orderGrandTotal
+        ? (targetOrder as any).amountPaid || orderGrandTotal
         : paymentMethod === 'cash'
           ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) : orderGrandTotal)
-          : undefined,
+          : orderGrandTotal,
       changeDue: targetOrder.status === 'completed'
-        ? 0
+        ? (targetOrder as any).changeDue || 0
         : paymentMethod === 'cash'
           ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) - orderGrandTotal : 0)
-          : undefined,
+          : 0,
       isPaid: paidStamp || targetOrder.status === 'completed',
       cashierName: (targetOrder as any).cashierName || currentUser?.name || currentUser?.email,
     };
@@ -212,6 +212,13 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       }
       
       if (order.dbId) {
+        const amountPaidNum = paymentMethod === 'cash' 
+          ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal)
+          : grandTotal;
+        const changeDueNum = paymentMethod === 'cash'
+          ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0)
+          : 0;
+
         await api(`/orders/${order.dbId}/payment`, {
           method: 'POST',
           body: JSON.stringify({
@@ -223,10 +230,18 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             tax: totalTaxAmount,
             gstAmount,
             serviceCharge,
+            amountPaid: amountPaidNum,
+            changeDue: changeDueNum,
           }),
         });
         
-        const data = buildReceiptData({ ...order, status: 'completed' }, true, paymentMethod);
+        const data = buildReceiptData({ 
+          ...order, 
+          status: 'completed', 
+          amountPaid: amountPaidNum, 
+          changeDue: changeDueNum 
+        } as any, true, paymentMethod);
+        
         printReceipt(data);
         markOrderAsPrinted(order.id);
         toast.success('Payment completed and receipt printed');
@@ -329,6 +344,30 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                 <span>Total</span><span>{fmt(grandTotal)}</span>
               </div>
             </div>
+
+            {/* Payment Details for Completed Bills */}
+            {order.status === 'completed' && (
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 animate-in fade-in slide-in-from-top-1 mb-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-emerald-600 mb-1.5 block tracking-wider">Amount Paid</label>
+                    <div className="text-lg font-black text-foreground">
+                      {fmt(order.amountPaid || order.total)}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1.5 block tracking-wider">Change Returned</label>
+                    <div className={`text-lg font-black ${Number(order.changeDue) > 0 ? 'text-emerald-600' : 'text-muted-foreground/40'}`}>
+                      {fmt(order.changeDue || 0)}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-emerald-500/10 flex justify-between items-center">
+                   <span className="text-[10px] uppercase font-bold text-muted-foreground">Payment Method</span>
+                   <span className="text-[10px] uppercase font-black text-foreground capitalize">{(order as any).paymentMethod || 'Cash'}</span>
+                </div>
+              </div>
+            )}
 
             {/* Discount / Tax toggles - only for pending bills */}
             {order.status !== 'completed' && (

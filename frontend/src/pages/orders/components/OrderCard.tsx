@@ -15,13 +15,15 @@ import {
   Truck
 } from 'lucide-react';
 import { useOrderStore } from '@/stores/pos/orderStore';
+import { TableInfo } from '@/data/pos/mockData';
 
 interface OrderCardProps {
   order: any;
   onUpdateStatus: (id: string, status: string) => void;
+  tables?: TableInfo[];
 }
 
-export const OrderCard = memo(({ order, onUpdateStatus }: OrderCardProps) => {
+export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCardProps) => {
   const { setEditingOrder, setCancellingOrderId, setSwitchingTableOrder } = useOrderStore();
 
   const getStatusColor = (status: string) => {
@@ -42,6 +44,11 @@ export const OrderCard = memo(({ order, onUpdateStatus }: OrderCardProps) => {
       case 'delivery': return <Truck className="w-3.5 h-3.5" />;
       default: return <ShoppingBag className="w-3.5 h-3.5" />;
     }
+  };
+
+  const getTableName = (tableNumber: number | string) => {
+    const table = tables.find(t => t.id === Number(tableNumber));
+    return table ? table.name : `Table ${tableNumber}`;
   };
 
   return (
@@ -127,11 +134,11 @@ export const OrderCard = memo(({ order, onUpdateStatus }: OrderCardProps) => {
 
       <div className="pt-4 border-t border-border/50 flex items-center justify-between">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5 text-[10px] font-black text-primary uppercase tracking-widest">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest w-fit">
             {getTypeIcon(order.type)}
-            {order.type === 'dine-in' ? `Table ${order.table}` : order.type}
+            {order.type === 'dine-in' ? getTableName(order.table) : order.type}
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold mt-0.5">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold mt-1.5 ml-1">
             <User className="w-2.5 h-2.5" />
             {order.orderTaker || 'Cashier'}
           </div>

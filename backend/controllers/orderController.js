@@ -11,7 +11,7 @@ const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
   }
-  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge"];
+  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge", "amountPaid", "changeDue"];
   for (const f of numericFields) {
     if (body[f] !== undefined && body[f] !== null && body[f] !== "") {
       const n = Number(body[f]);
@@ -138,6 +138,9 @@ exports.list = async (req, res) => {
             customerName: o.customerName || "",
             orderTaker: o.orderTaker || "",
             cashierName: o.cashierName || "",
+            amountPaid: o.amountPaid,
+            changeDue: o.changeDue,
+            paymentMethod: o.paymentMethod,
             dbId: String(o._id),
           };
         }),
@@ -329,6 +332,10 @@ exports.openByTable = async (req, res) => {
         notes: row.notes || "",
         customerName: row.customerName || "",
         orderTaker: row.orderTaker || "",
+        amountPaid: row.amountPaid,
+        changeDue: row.changeDue,
+        paymentMethod: row.paymentMethod,
+        cashierName: row.cashierName || "",
       },
     });
   } catch (error) {
@@ -360,6 +367,7 @@ exports.addItems = async (req, res) => {
     row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
     row.total = totals.grandTotal;
     row.notes = req.body.notes ?? row.notes;
+    row.table = req.body.table ?? row.table;
     row.status = "pending";
     if (!row.orderTaker || row.orderTaker === "Unknown") {
       row.orderTaker = req.user.name || req.user.email || "Unknown";
@@ -413,6 +421,7 @@ exports.editItems = async (req, res) => {
     row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
     row.total = totals.grandTotal;
     row.notes = req.body.notes ?? row.notes;
+    row.table = req.body.table ?? row.table;
     if (!row.orderTaker || row.orderTaker === "Unknown") {
       row.orderTaker = req.user.name || req.user.email || "Unknown";
     }
@@ -456,6 +465,12 @@ exports.payment = async (req, res) => {
   try {
     const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
     applyBillingFieldsFromBody(req.body, patch);
+    
+    // Explicitly set cashierName if provided
+    if (req.user) {
+      patch.cashierName = req.user.name || req.user.email;
+    }
+
     const row = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
     if (!row) return res.status(404).json({ message: "Order not found" });
 

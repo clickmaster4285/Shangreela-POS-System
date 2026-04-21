@@ -13,28 +13,36 @@ import { useOrderStore } from '@/stores/pos/orderStore';
 import { api } from '@/lib/api/api';
 import { toast } from 'sonner';
 import { TableInfo } from '@/data/pos/mockData';
+import { TablePicker } from '@/components/pos/TablePicker';
 
 interface SwitchTableDialogProps {
   tables: TableInfo[];
+  floors: { id: string; name: string }[];
   onSuccess: () => void;
 }
 
-export function SwitchTableDialog({ tables, onSuccess }: SwitchTableDialogProps) {
+export function SwitchTableDialog({ tables, floors, onSuccess }: SwitchTableDialogProps) {
   const { switchingTableOrder, setSwitchingTableOrder } = useOrderStore();
-  const [tableId, setTableId] = useState<string>('');
+  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [activeFloorId, setActiveFloorId] = useState<string>('');
 
   useEffect(() => {
     if (switchingTableOrder) {
-      setTableId('');
+      setSelectedTableId(null);
+      if (floors.length > 0) {
+        // Try to find the floor of the current table, otherwise default to first floor
+        const currentTable = tables.find(t => t.id === Number(switchingTableOrder.table));
+        setActiveFloorId(currentTable?.floorId || floors[0].id);
+      }
     }
-  }, [switchingTableOrder]);
+  }, [switchingTableOrder, floors, tables]);
 
   const handleConfirm = async () => {
-    if (!switchingTableOrder || !tableId) return;
+    if (!switchingTableOrder || !selectedTableId) return;
     try {
       await api(`/orders/${switchingTableOrder.dbId}/table`, {
         method: 'PATCH',
-        body: JSON.stringify({ table: Number(tableId) }),
+        body: JSON.stringify({ table: selectedTableId }),
       });
       toast.success('Table switched');
       setSwitchingTableOrder(null);
@@ -46,38 +54,33 @@ export function SwitchTableDialog({ tables, onSuccess }: SwitchTableDialogProps)
 
   return (
     <AlertDialog open={!!switchingTableOrder} onOpenChange={(open) => !open && setSwitchingTableOrder(null)}>
-      <AlertDialogContent className="rounded-3xl border-border/50">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">Switch Table</AlertDialogTitle>
-          <AlertDialogDescription className="text-sm font-medium text-muted-foreground">
-            Moving order #{switchingTableOrder?.id} to a different table.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+      <AlertDialogContent className="rounded-3xl border-border/50 max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <div className="p-6 pb-0">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">Switch Table</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-muted-foreground">
+              Moving order #{switchingTableOrder?.id} from {switchingTableOrder?.table} to a different table.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+        </div>
         
-        <div className="py-4 space-y-2">
-          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">Target Table</label>
-          <select
-            value={tableId}
-            onChange={(e) => setTableId(e.target.value)}
-            className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none appearance-none cursor-pointer"
-          >
-            <option value="">Select an available table...</option>
-            {tables
-              .filter(t => t.status === 'available')
-              .map(table => (
-                <option key={table.id} value={table.id}>
-                  {table.name} ({table.seats} Seats)
-                </option>
-              ))
-            }
-          </select>
+        <div className="flex-1 overflow-hidden min-h-[400px]">
+          <TablePicker
+            floors={floors}
+            tables={tables}
+            selectedTableId={selectedTableId}
+            onTableSelect={setSelectedTableId}
+            activeFloorId={activeFloorId}
+            setActiveFloorId={setActiveFloorId}
+            showOccupied={false} // Only show available tables for switching
+          />
         </div>
 
-        <AlertDialogFooter className="gap-3">
+        <AlertDialogFooter className="p-6 bg-muted/30 border-t border-border gap-3 shrink-0">
           <AlertDialogCancel className="rounded-xl border-border font-bold uppercase tracking-widest text-[10px]">Cancel</AlertDialogCancel>
           <AlertDialogAction 
             onClick={handleConfirm}
-            disabled={!tableId}
+            disabled={!selectedTableId}
             className="rounded-xl bg-primary text-primary-foreground font-black uppercase tracking-widest text-[10px] hover:bg-secondary"
           >
             Confirm Move

@@ -18,7 +18,7 @@ export default function OrderManagement() {
   const { filters, setFilters, page, setPage, pageSize } = store;
   
   // Static data for filters
-  const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
+  const [floors, setFloors] = useState<{ id: string; key: string; name: string }[]>([]);
   const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -58,7 +58,7 @@ export default function OrderManagement() {
 
   useEffect(() => {
     if (initDataQuery.data) {
-      setFloors(initDataQuery.data.floors.map(f => ({ key: f.key, name: f.name })));
+      setFloors(initDataQuery.data.floors.map(f => ({ id: f.key, key: f.key, name: f.name })));
       setCashiers(initDataQuery.data.users.map(u => ({ key: u.name, name: u.name })));
       setTables(initDataQuery.data.tables.map(t => ({
         id: t.number,
@@ -177,6 +177,7 @@ export default function OrderManagement() {
                 key={order.dbId} 
                 order={order} 
                 onUpdateStatus={handleUpdateStatus}
+                tables={tables}
               />
             ))}
           </div>
@@ -214,9 +215,9 @@ export default function OrderManagement() {
       />
       <SwitchTableDialog 
         tables={tables}
+        floors={floors}
         onSuccess={() => refetch()}
       />
     </div>
   );
 }
-
