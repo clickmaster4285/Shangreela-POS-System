@@ -1,103 +1,69 @@
-# Shanfreela POS System: Comprehensive Technical Analysis
+# Shangreela POS System: Comprehensive Technical Architecture
 
-This document provides an in-depth exploration of the Shanfreela POS architecture, data structures, and system logic.
+This document provides an exhaustive, up-to-date analysis of the Shangreela POS system's architecture, data structures, UI/UX logic, and system workflows.
 
 ---
 
 ## 1. System Architecture & Tech Stack
 
 ### Backend: Node.js / Express / MongoDB
-The backend is a robust, modular REST API designed for high availability and strict data consistency.
-- **Entry Point**: `server.js` initializes the Express application, sets up middleware (CORS, Morgan, Cache-Control), connects to MongoDB via Mongoose, and triggers auto-initialization.
-- **Data Persistence**: MongoDB with Mongoose ODM. Models are centralized in `backend/models/index.js` for clean imports across the application.
-- **Security**: Stateless JWT-based authentication. Passwords hashed with `bcryptjs` (10 rounds).
-- **Static Assets**: Dedicated `/uploads` directory served via `express.static`, organized into `menu`, `staff`, and `expenses` subfolders.
+The backend is a high-availability, modular REST API designed for extreme data consistency and high-velocity POS loads.
+- **Entry Point**: `server.js` initializes the application, sets up global middleware (CORS, caching), connects via Mongoose, and triggers data auto-initialization.
+- **Data Persistence**: MongoDB with Mongoose ODM.
+- **Controllers & Modules**: The backend is extremely feature-rich, maintaining modular controllers for: `analytics`, `auth`, `dashboard`, `delivery`, `expense`, `fbr`, `floor`, `giftCard`, `hr`, `inventory`, `loyalty`, `menu`, `mobile`, `order`, `posTab`, `printer`, `reports`, `table`, `tax`, and `user`.
+- **Security**: Stateless JWT-based authentication. Role Based Access Control (RBAC) middleware forces explicit endpoint security.
+- **Anti-Caching Mechanism**: Server explicitly sets `Cache-Control: no-store` on all `/api` routes ensuring the POS never fetches stale 304 payloads during high-speed caching.
 
 ### Frontend: React / Vite / TypeScript / Tailwind
-A modern, type-safe SPA (Single Page Application) built for speed and a professional user experience.
-- **Build Tool**: Vite provides near-instant HMR (Hot Module Replacement).
-- **State Management**: 
-    - **Global**: React Context API (`AuthContext`, `CartContext`).
-    - **Server State**: TanStack Query (React Query) for efficient caching and background synchronization.
-- **UI Framework**: Tailwind CSS with Shadcn UI (Radix UI primitives). Focus on accessibility and a consistent "Bento Grid" inspired aesthetic.
-- **Forms & Validation**: `react-hook-form` coupled with `zod` for schema-based client-side validation.
+A highly optimized, type-safe Single Page Application specifically designed to minimize cashier friction.
+- **Build Infrastructure**: Vite providing lightning-fast HMR and optimized production bundles.
+- **Global State Management**: Shifted heavily to **Zustand** (`usePOSStore`, `useOrderStore`) replacing old Context APIs for maximum re-render efficiency across POS views.
+- **Server State & Caching**: **TanStack Query (React Query)** handles data polling, mutation states, and background synchronization via custom hooks like `usePosRealtimeScopes`.
+- **UI Architecture**: Tailwind CSS mapped via Radix UI primitives (Shadcn UI). Features a sophisticated "Bento Grid" dark-mode/glassmorphism design language.
 
 ---
 
-## 2. Deep Dive: Data Models (Schemas)
+## 2. Core Business Logic & State Flow
 
-### Core: Orders (`Order.js`)
-The most complex schema in the system, tracking every transaction.
-- **Key Fields**:
-    - `code`: Unique human-readable ID (e.g., `ORD-123456`).
-    - `type`: `dine-in`, `takeaway`, `delivery`.
-    - `status`: Lifecycle tracking from `pending` to `completed` or `cancelled`.
-    - `items`: Array of sub-documents containing `menuItem` snapshots, `quantity`, `notes`, and `requestId` (for KOT tracking).
-    - `billing`: Stores snapshots of `subtotal`, `tax`, `discount`, `gstAmount`, and `serviceCharge`.
+### The POS Terminal (`usePOSStore`)
+The heart of cashier interaction.
+- **Instant Workflow**: Optimized for extreme speed. Menu items clicked in the `MenuGrid` are **instantly added to the cart** without modal interruption. Customization modals only appear locally when explicitly selecting variations or addons.
+- **Zustand Engine**: Tracks `menuItems`, `taxRates`, `orderType` (Dine-in, Takeaway, Delivery), multiple search queries natively, and deep cart modifications (qty deltas, custom addons, discount states).
 
-### Menu Management (`MenuItem.js`)
-- **Fields**: `name`, `price`, `category`, `description`, `image`, `available` (Boolean), `kitchenRequired` (Boolean - determines if it goes to the Kitchen Display).
+### The Order & Billing Lifecycle (`useOrderStore`)
+- **Pagination & Limits**: The backend restricts payload loads with a precise robust query filter (`page`, `limit=50`, `size`). Backend structures return a `pagination` object (`{ pages, total, limit }`). **Crucial Frontend Rule**: The frontend must access `pagination.pages` to limit UI loops. `totalPages` does not exist on the response.
+- **Time/Data Guarding**: Filters are heavily opinionated to default `DateRange` to `today` (the current operating day) rather than `null`. This prevents the POS from accidentally requesting years of historical data simultaneously.
+- **Empty States ("Verbose UX")**: When `Order` or `Billing` filters yield zero results, the UI renders a **Verbose Empty State**. Instead of a generic "No Orders Found," the UI prints exactly which variables are constrained: `Date Range`, `Status`, `Type`, `Floor`, `Cashier`, allowing immediate operator correction.
+- **Taxation & Pakistani Logic**: The system dynamically handles Pakistan's specific taxation breakdown. GST and Service Charges conditionally apply based on Order Types (e.g., Service charge strictly on Dine-in). 
 
-### Inventory & Logistics
-- **`InventoryItem.js`**: Tracks `quantity`, `unit`, `minStock` (for low-stock alerts), `costPerUnit`, and `supplier`.
-- **`InventoryLog.js`**: Audit trail for every stock change, recording the `action` (`restocked`, `wasted`, `used`), `quantity`, and `userId`.
-
-### Human Resources
-- **`Employee.js`**: Stores profile data, `salary`, `role`, and `status`.
-- **`Attendance.js`**: Daily logs of `checkIn`, `checkOut`, `lateMinutes`, and `hoursWorked`.
+### Kitchen Flow & Table Locking
+- Items added to dine-in orders automatically shift physical `Tables` into `occupied` statuses via `tableMap` linking. 
+- The Kitchen Display (`Kitchen` view) automatically filters unprinted or `preparing` queued status items, grouped by sub-requests so line cooks don't remake existing items.
 
 ---
 
-## 3. Business Logic & Data Flow
+## 3. Frontend Views & Modules
 
-### The Order Lifecycle
-1.  **Creation**: When an order is placed, the backend calls `calculateGrandTotal` (in `utils/orderTotals.js`). 
-    - **GST**: Applied based on `TaxConfig` (default ~16%).
-    - **Service Charge**: Automatically applied **only to dine-in** orders.
-    - **KOT Generation**: Items are grouped by `requestId` to ensure the kitchen only sees "new" additions to an existing table order.
-2.  **Table Locking**: For dine-in, the `Table` status is flipped to `occupied` and linked via `currentOrder` code.
-3.  **Kitchen Flow**: The `KitchenDisplay` component polls (via React Query) for orders with `status: pending/preparing`.
-4.  **Completion**: Payment updates the status to `completed`. For dine-in, this **releases the table** back to `available`.
-
-### Authentication & Permissions (RBAC)
-The system uses a sophisticated Permission-based access control:
-- **Roles**: `superadmin`, `hassaan`, `fahad`, `cashier`.
-- **`AuthContext.tsx`**: Centralizes the `hasPageAccess`, `hasAction`, and `hasDataAccess` logic.
-- **`PageGuard.tsx`**: A HOC (Higher Order Component) that wraps routes. If a user tries to access a page they aren't permitted for, it either redirects them to their "home" page or shows an "Access Denied" state.
-- **Middleware**: Backend routes use `authRequired` to verify the JWT and `attachPermissions` to inject the user's role-based rules into the `req` object for controller-level checks.
+- **`pos-terminal`**: The primary operational screen. High-density cart grid.
+- **`orders/index.tsx`**: A dashboard grid view of all existing active lifecycle orders allowing rapid mutation (Cancel, Edit, Switch Table).
+- **`billing/index.tsx`**: A split-panel interface. Filter buttons dynamically reflect total item counts (e.g., `ALL (14)`, `PENDING (5)`). Order metadata is aggregated strictly at the top of the `BillPaymentPanel` so the operational item grid mounts higher.
+- **`inventory` / `kitchen` / `delivery` / `hr` / `analytics`**: Peripheral high-functioning tracking screens integrating closely into the overarching reporting matrices.
 
 ---
 
-## 4. Frontend Component Architecture
+## 4. Key Security & Operational Safeguards
 
-- **Layout System**: `POSLayout.tsx` provides the persistent sidebar and header. It handles navigation and "Discard Changes" protection (if items are in the cart when navigating away from the terminal).
-- **API Wrapper (`lib/api.ts`)**:
-    - Centralizes `fetch` logic.
-    - Automatically injects the `Authorization` header.
-    - Handles global error reporting.
-    - Manages token persistence in `localStorage`.
-- **Contexts**:
-    - **`CartContext`**: Manages the transient state of an active order before it's saved to the DB.
-    - **`AuthContext`**: Manages user session, login/logout, and RBAC rules.
+- **Submit Locks**: Actions like `Complete Payment` or `Void Order` utilize a native system `useSubmitLock()` preventing double-clicks or multiple identical API requests from destroying the DB structure.
+- **Print Guards**: Bills track explicit `printed` Booleans via `localStorage` maps overlaid with backend persistence so kitchen routing isn't duplicated on refresh.
+- **Role Permissions Context**: Extensive `hasAction` and `hasDataAccess` mapping ensures Cashiers cannot execute Refunds or voids without higher managerial authentication via the backend.
 
 ---
 
-## 5. Security & Optimizations
+## 5. Summary of API Controller Pipelines
 
-- **Cache Control**: The backend explicitly disables ETag and sets `Cache-Control: no-store` for all `/api` routes in `server.js` to prevent 304 (Not Modified) responses, ensuring the POS always shows live data.
-- **Input Sanitization**: Controllers use regex escaping (`escapeRegex`) for search queries and strict numeric conversion for billing fields.
-- **Auto-Initialization**: On the first run, `utils/autoInitialization.js` creates:
-    - Default `superadmin` and other management accounts.
-    - Seed menu items (if the DB is empty).
-    - Initial role-based permission configurations.
-
----
-
-## 6. Summary of Key Workflows
-
-| Feature | Data Flow | Backend Utility |
+| Feature Area | Controller | Responsibilities |
 | :--- | :--- | :--- |
-| **Placing Order** | Frontend POST -> Order Controller -> Table Update -> Delivery Creation (if applicable) | `calculateGrandTotal` |
-| **Stock Adjustment** | Frontend PATCH -> Inventory Controller -> Item Update -> Log Creation | `InventoryLog.create` |
-| **Attendance** | Frontend POST -> HR Controller -> Attendance Record Creation | Date-fns (frontend) |
-| **Login** | Frontend POST -> Auth Controller -> JWT Generation -> Permission Injection | `bcrypt.compare` |
+| **Orders & Checkout** | `orderController.js` | Status shifting, KOT generation, Receipt logic, Table lifecycle locks. |
+| **Tax & Govt. Logs** | `fbrController.json` & `taxController` | Integrates required FBR tracking logic alongside local taxation math. |
+| **Printers & Tracking** | `printerController.js` | Directs POS and KOT printing tasks locally to hardware. |
+| **Inventory & Staffing** | `inventoryController.js` / `hrController.js` | Logs deductions per-item sold and maps attendance records per shift. |
