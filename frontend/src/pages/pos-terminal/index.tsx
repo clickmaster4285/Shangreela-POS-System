@@ -97,6 +97,46 @@ export default function POSScreen() {
     }
   }, [searchParams, tables, setSelectedTableId, setOrderType]);
 
+  // Load existing order when an occupied table is selected
+  useEffect(() => {
+    if (selectedTableId && orderType === 'dine-in') {
+      const table = tables.find(t => t.id === selectedTableId);
+      if (table?.status === 'occupied') {
+        // Only load if we're not already editing this specific order
+        if (!currentOrderForEdit || currentOrderForEdit.id !== table.currentOrder) {
+          api<{ item: any }>(`/orders/open-by-table/${selectedTableId}`)
+            .then(res => {
+              if (res.item) {
+                // If we were editing another order, we should probably clear those items
+                // But if we just had some new items in cart, we might want to merge.
+                // For a clean experience, if currentOrderForEdit was set to something else, we clear.
+                setCart(prev => {
+                  const existingItems = res.item.items || [];
+                  if (currentOrderForEdit && currentOrderForEdit.id !== res.item.id) {
+                    // Switched from one occupied table to another
+                    return existingItems;
+                  }
+                  // Otherwise merge (could be new items added before selecting table)
+                  // Simple merge: existing items first, then new items
+                  return [...existingItems, ...prev];
+                });
+                setCurrentOrderForEdit({ dbId: res.item.dbId, id: res.item.id });
+              }
+            })
+            .catch(err => {
+              console.error('Failed to load table order', err);
+            });
+        }
+      } else {
+        // If switching to an available table, clear the edit mode
+        if (currentOrderForEdit) {
+          setCurrentOrderForEdit(null);
+          setCart([]); // Clear cart when moving from an occupied to an available table to avoid confusion
+        }
+      }
+    }
+  }, [selectedTableId, orderType, tables, setCart, setCurrentOrderForEdit, currentOrderForEdit]);
+
   // Derived state for pricing
   const subtotal = useMemo(() => 
     cart.reduce((s, c) => s + (c.menuItem.price + (c.extraPrice || 0)) * c.quantity, 0)

@@ -55,10 +55,9 @@ export function TablePickerModal() {
                   selectedTableId === table.id
                     ? 'border-primary bg-primary/5'
                     : table.status === 'occupied'
-                    ? 'border-secondary/20 bg-secondary/5 cursor-default'
+                    ? 'border-secondary/20 bg-secondary/5'
                     : 'border-border hover:border-primary/50'
                 }`}
-                disabled={table.status === 'occupied' && selectedTableId !== table.id}
               >
                 <span className={`text-base font-black mb-1 ${
                   selectedTableId === table.id ? 'text-primary' : 'text-foreground'
