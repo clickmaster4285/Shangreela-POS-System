@@ -38,13 +38,15 @@ interface OrderManagementState {
   resetFilters: () => void;
 }
 
+const todayDate = new Date().toISOString().split('T')[0];
+
 export const useOrderStore = create<OrderManagementState>((set) => ({
   filters: {
     status: 'all',
     type: 'all',
     floor: 'all',
     cashier: 'all',
-    dateRange: null,
+    dateRange: { from: todayDate, to: todayDate },
     search: '',
   },
   debouncedSearch: '',
@@ -76,7 +78,7 @@ export const useOrderStore = create<OrderManagementState>((set) => ({
       type: 'all',
       floor: 'all',
       cashier: 'all',
-      dateRange: null,
+      dateRange: { from: todayDate, to: todayDate },
       search: '',
     },
     page: 1

@@ -32,9 +32,9 @@ export function SwitchTableDialog({ tables, onSuccess }: SwitchTableDialogProps)
   const handleConfirm = async () => {
     if (!switchingTableOrder || !tableId) return;
     try {
-      await api(`/orders/${switchingTableOrder.dbId}/switch-table`, {
+      await api(`/orders/${switchingTableOrder.dbId}/table`, {
         method: 'PATCH',
-        body: JSON.stringify({ newTableId: Number(tableId) }),
+        body: JSON.stringify({ table: Number(tableId) }),
       });
       toast.success('Table switched');
       setSwitchingTableOrder(null);

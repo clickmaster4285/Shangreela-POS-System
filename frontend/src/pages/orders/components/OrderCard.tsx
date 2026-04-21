@@ -56,7 +56,7 @@ export const OrderCard = memo(({ order, onUpdateStatus }: OrderCardProps) => {
           </div>
           <div className="flex items-center gap-1.5 text-muted-foreground text-[11px] font-medium">
             <Clock className="w-3 h-3" />
-            {formatDistanceToNow(new Date(order.timestamp), { addSuffix: true })}
+            {order.createdAt ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true }) : '—'}
           </div>
         </div>
         
@@ -133,7 +133,7 @@ export const OrderCard = memo(({ order, onUpdateStatus }: OrderCardProps) => {
           </div>
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold mt-0.5">
             <User className="w-2.5 h-2.5" />
-            {order.cashierName || 'Cashier'}
+            {order.orderTaker || 'Cashier'}
           </div>
         </div>
         <div className="text-right">

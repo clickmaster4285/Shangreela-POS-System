@@ -1,7 +1,6 @@
 import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
@@ -105,20 +104,6 @@ export function POSDateRangeFilter({
                 </button>
              </div>
           </div>
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={start}
-            selected={{ from: start, to: end }}
-            onSelect={(range) => {
-              if (range?.from) {
-                const s = range.from.toISOString().split('T')[0];
-                const e = range.to ? range.to.toISOString().split('T')[0] : s;
-                onRangeChange(s, e);
-              }
-            }}
-            numberOfMonths={2}
-          />
         </PopoverContent>
       </Popover>
     </div>

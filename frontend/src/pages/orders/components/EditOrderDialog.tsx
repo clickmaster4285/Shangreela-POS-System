@@ -201,7 +201,7 @@ export function EditOrderDialog({ menuItems, onSuccess }: EditOrderDialogProps) 
             {/* Addition / Replacement Section */}
             <div className="pt-6 border-t border-border/50 bg-muted/5 -mx-6 px-6 pb-2">
               <h4 className="text-[10px] font-black text-primary uppercase tracking-[0.2em] pl-1 mb-4">
-                {replaceItemIndex !== null ? \`Replace Slot #\${replaceItemIndex + 1}\` : 'Search for More Items'}
+                {replaceItemIndex !== null ? `Replace Slot #${replaceItemIndex + 1}` : 'Search for More Items'}
               </h4>
               
               <div className="space-y-4">
@@ -227,7 +227,7 @@ export function EditOrderDialog({ menuItems, onSuccess }: EditOrderDialogProps) 
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {filteredMenuItems.map(item => (
                             <button
-                              key={item.id}
+                              key={String(item.id)}
                               type="button"
                               onClick={() => handleAddItem(item)}
                               className="flex flex-col text-left p-4 rounded-2xl transition-all border border-border hover:border-primary/50 hover:bg-primary/5 group"

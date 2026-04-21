@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Utensils, ShoppingBag, Truck } from 'lucide-react';
 
 // New sub-components
-import { BillingStats } from './components/BillingStats';
 import { BillList } from './components/BillList';
 import { BillPaymentPanel } from './components/BillPaymentPanel';
 
@@ -140,7 +139,7 @@ export default function Billing() {
             const match = current.find(a => a.id === prev.id);
             if (match) return match;
           }
-          return current[0] ?? null;
+          return null;
         });
         return current;
       });
@@ -205,15 +204,14 @@ export default function Billing() {
     return billBreakdownForOrder(o, taxRates).grandTotal;
   };
 
-  // Stats
-  const totalStats = {
-    pending: orders.filter(o => o.status !== 'completed').length,
-    paid: orders.filter(o => o.status === 'completed').length,
-  };
-  const filteredStats = {
-    pending: filteredOrders.filter(o => o.status !== 'completed').length,
-    paid: filteredOrders.filter(o => o.status === 'completed').length,
-  };
+  const stats = useMemo(() => {
+    return {
+      all: orders.length,
+      pending: orders.filter(o => o.status !== 'completed' && !o.printed).length,
+      ready: orders.filter(o => o.status !== 'completed' && o.printed).length,
+      paid: orders.filter(o => o.status === 'completed').length,
+    };
+  }, [orders]);
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4">
@@ -257,33 +255,32 @@ export default function Billing() {
 
             <div className="w-px h-6 bg-border mx-1" />
 
-            {/* Status Filter */}
-            <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
-               {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
-                 <button key={f} onClick={() => setBillingStatusFilter(f)} 
-                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                 >
-                   {f}
-                 </button>
-               ))}
-            </div>
+             {/* Status Filter */}
+             <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
+                {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
+                  <button key={f} onClick={() => setBillingStatusFilter(f)} 
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {f} ({stats[f]})
+                  </button>
+                ))}
+             </div>
           </div>
         }
       />
 
-      <BillingStats 
-        totalOrdersCount={orders.length}
-        filteredOrdersCount={filteredOrders.length}
-        totalPendingCount={totalStats.pending}
-        filteredPendingCount={filteredStats.pending}
-        totalPaidCount={totalStats.paid}
-        filteredPaidCount={filteredStats.paid}
-        isFilterActive={billingStatusFilter !== 'all' || tableSearchQuery.trim() !== '' || selectedFloor !== 'all'}
-      />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
         <BillList 
           billsByDay={billsByDay}
+          activeFilters={{
+            status: billingStatusFilter,
+            floor: selectedFloor,
+            cashier: selectedCashier,
+            startDate,
+            endDate,
+            type: selectedOrderType
+          }}
           selectedOrderId={selectedOrder?.id}
           onSelectOrder={setSelectedOrder}
           hasMore={hasMore}

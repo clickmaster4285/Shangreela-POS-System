@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -10,15 +10,16 @@ import { CancelOrderDialog } from './components/CancelOrderDialog';
 import { SwitchTableDialog } from './components/SwitchTableDialog';
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
 import { MenuItem, TableInfo } from '@/data/pos/mockData';
+import { RefreshCcw } from 'lucide-react';
 
-export function OrderManagement() {
+export default function OrderManagement() {
   const queryClient = useQueryClient();
   const store = useOrderStore();
   const { filters, setFilters, page, setPage, pageSize } = store;
   
   // Static data for filters
-  const [floors, setFloors] = useState<{ id: string; name: string }[]>([]);
-  const [cashiers, setCashiers] = useState<string[]>([]);
+  const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
+  const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
@@ -31,15 +32,15 @@ export function OrderManagement() {
         limit: pageSize.toString(),
         status: filters.status,
         type: filters.type,
-        floor: filters.floor,
-        cashier: filters.cashier,
+        floorKey: filters.floor,
+        orderTaker: filters.cashier,
         search: filters.search,
       });
       if (filters.dateRange) {
-        params.append('startDate', filters.dateRange.from);
-        params.append('endDate', filters.dateRange.to);
+        params.append('from', filters.dateRange.from);
+        params.append('to', filters.dateRange.to);
       }
-      return api<{ items: any[]; meta: any }>(`/orders?${params.toString()}`);
+      return api<{ items: any[]; pagination: any }>(`/orders?${params.toString()}`);
     },
   });
 
@@ -57,8 +58,8 @@ export function OrderManagement() {
 
   useEffect(() => {
     if (initDataQuery.data) {
-      setFloors(initDataQuery.data.floors.map(f => ({ id: f.key, name: f.name })));
-      setCashiers(initDataQuery.data.users.map(u => u.name));
+      setFloors(initDataQuery.data.floors.map(f => ({ key: f.key, name: f.name })));
+      setCashiers(initDataQuery.data.users.map(u => ({ key: u.name, name: u.name })));
       setTables(initDataQuery.data.tables.map(t => ({
         id: t.number,
         name: t.name,
@@ -181,10 +182,10 @@ export function OrderManagement() {
              Prev
            </button>
            <span className="text-[10px] font-black text-foreground uppercase tracking-widest px-4 border-x border-border">
-             Page {page} of {ordersData?.meta.totalPages || 1}
+             Page {page} of {ordersData?.pagination?.pages || 1}
            </span>
            <button 
-            disabled={page >= (ordersData?.meta.totalPages || 1)}
+            disabled={page >= (ordersData?.pagination?.pages || 1)}
             onClick={() => setPage(page + 1)}
             className="px-6 py-3 rounded-2xl border border-border bg-card font-black text-[10px] uppercase tracking-widest hover:bg-muted disabled:opacity-30 transition-all"
            >

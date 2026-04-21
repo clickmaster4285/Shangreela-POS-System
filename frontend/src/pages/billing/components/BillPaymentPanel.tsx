@@ -232,8 +232,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           <Wallet className="w-8 h-8 text-muted-foreground/30" />
         </div>
         <h3 className="text-lg font-serif font-bold text-foreground">No Bill Selected</h3>
-        <p className="text-sm text-muted-foreground max-w-[260px] text-center mt-1">
-          Select an active or past bill from the list to view details and process payment.
+        <p className="text-sm text-muted-foreground max-w-[260px] text-center mt-1 leading-relaxed">
+          Click on a bill from the orders list on the left to view detailed information and process payment here.
         </p>
       </div>
     );
@@ -250,31 +250,28 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
         </div>
       )}
 
-      <div className="mb-5 shrink-0 border-b border-border border-dashed pb-4 text-center">
-        <h2 className="font-serif text-xl font-bold text-foreground">Shangreela Heights</h2>
-        <p className="text-xs text-muted-foreground">ling Mor Kahuta, Rawalpindi</p>
-        <p className="text-xs text-muted-foreground">Tel: +92 513314120 / +92 337-5454786</p>
+      <div className="mb-5 shrink-0 border-b border-border pb-4 flex justify-between items-start">
+        <div>
+          <h2 className="font-black text-xl text-foreground">{order.id}</h2>
+          <p className="text-xs text-muted-foreground mb-2 mt-0.5 font-medium">{formatOrderDateTime(order.createdAt)} • <span className="capitalize">{order.type}</span></p>
+          <span className={`inline-block text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(order)}`}>
+            {getBillStatusLabel(order)}
+          </span>
+        </div>
+        <div className="text-right flex flex-col items-end gap-1.5">
+          {order.table && (
+            <div className="flex gap-1.5 items-center">
+              <span className="text-[10px] font-black text-muted-foreground uppercase">{tableMap.get(order.table)?.floorId || "Floor"}</span>
+              <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-md font-black text-sm">{tableMap.get(order.table)?.name || order.table}</span>
+            </div>
+          )}
+          {order.orderTaker && (
+            <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Taken by <span className="text-foreground">{order.orderTaker}</span></p>
+          )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
-        <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-          <div className="flex justify-between"><span className="font-bold text-foreground">Order</span><span className="text-foreground font-semibold">{order.id}</span></div>
-          <div className="flex justify-between text-muted-foreground"><span>Placed</span><span className="text-right text-foreground">{formatOrderDateTime(order.createdAt)}</span></div>
-          <div className="flex justify-between text-muted-foreground capitalize"><span>Type</span><span>{order.type}</span></div>
-          {order.table && <div className="flex justify-between"><span className="font-bold text-foreground">Table</span><span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(order.table)?.name || order.table}</span></div>}
-          {order.table && tableMap.get(order.table)?.floorId && <div className="flex justify-between"><span className="font-bold text-foreground">Floor</span><span className="bg-secondary/20 text-secondary px-2.5 py-1 rounded-full font-bold inline-block">{tableMap.get(order.table)?.floorId}</span></div>}
-          {order.orderTaker && <div className="flex justify-between text-muted-foreground"><span>Order taker</span><span>{order.orderTaker}</span></div>}
-          <div className="flex justify-between text-muted-foreground items-center">
-            <span>Status</span>
-            <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${getStatusBadgeClass(order)}`}>
-              {getBillStatusLabel(order)}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="font-bold text-foreground text-base">Total Bill</span>
-            <span className="text-foreground font-bold text-base">{fmt(grandTotal)}</span>
-          </div>
-        </div>
 
         <div className="rounded-xl border border-border/70 bg-muted/35 p-3 space-y-2 mb-4">
           <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">ORDER ITEMS</h3>

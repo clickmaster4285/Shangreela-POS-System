@@ -53,6 +53,8 @@ const allPages: PageKey[] = [
   'outdoordelivery',
 ];
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+
 export default function PageGuard({ page, children }: Props) {
   const { user, loading, hasPageAccess, permissions } = useAuth();
   const location = useLocation();
@@ -92,6 +94,10 @@ export default function PageGuard({ page, children }: Props) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <ErrorBoundary>
+      {children}
+    </ErrorBoundary>
+  );
 }
 

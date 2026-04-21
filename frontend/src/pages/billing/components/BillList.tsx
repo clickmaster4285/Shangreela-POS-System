@@ -4,6 +4,14 @@ import type { Order, TableInfo } from '@/data/pos/mockData';
 
 interface BillListProps {
   billsByDay: { dayKey: string; dayLabel: string; orders: (Order & { dbId?: string })[] }[];
+  activeFilters: {
+    status: string;
+    floor: string;
+    cashier: string;
+    startDate: string;
+    endDate: string;
+    type: string;
+  };
   selectedOrderId?: string;
   onSelectOrder: (order: Order & { dbId?: string }) => void;
   hasMore: boolean;
@@ -18,6 +26,7 @@ interface BillListProps {
 
 export const BillList: React.FC<BillListProps> = ({
   billsByDay,
+  activeFilters,
   selectedOrderId,
   onSelectOrder,
   hasMore,
@@ -89,9 +98,18 @@ export const BillList: React.FC<BillListProps> = ({
           </button>
         )}
         {billsByDay.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Printer className="w-10 h-10 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">No orders found for the selected filters.</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+            <Printer className="w-12 h-12 text-muted-foreground/20 mb-4" />
+            <h3 className="text-base font-bold text-foreground mb-2">No Bills found for applied filters</h3>
+            <p className="text-[13px] text-muted-foreground leading-relaxed max-w-[320px]">
+               Date Range: <span className="font-bold text-foreground">{activeFilters.startDate}</span> to <span className="font-bold text-foreground">{activeFilters.endDate}</span>.
+               <br />Status: <span className="font-bold text-foreground capitalize">{activeFilters.status}</span>
+               <br />Type: <span className="font-bold text-foreground capitalize">{activeFilters.type}</span>
+               <br />Floor: <span className="font-bold text-foreground capitalize">{activeFilters.floor}</span> 
+               <br />Cashier: <span className="font-bold text-foreground capitalize">{activeFilters.cashier}</span>
+               <br /><br />
+               Please adjust your date filter or the criteria above to see more bills.
+            </p>
           </div>
         )}
       </div>
