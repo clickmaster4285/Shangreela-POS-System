@@ -43,6 +43,14 @@ export const BillList: React.FC<BillListProps> = ({
       <h3 className="mb-3 shrink-0 px-1 font-semibold text-sm text-foreground">Bills by day</h3>
       
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 scrollbar-thin">
+        {loading && billsByDay.length === 0 && (
+          <div className="space-y-3 mt-2 px-1">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-28 bg-card border border-border/50 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        )}
+        
         {billsByDay.map(group => (
           <div key={group.dayKey} className="space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1 border-b border-border/60 pb-1">

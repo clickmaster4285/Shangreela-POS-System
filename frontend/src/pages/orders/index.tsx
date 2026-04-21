@@ -153,13 +153,23 @@ export default function OrderManagement() {
             ))}
           </div>
         ) : ordersData?.items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center opacity-40">
-            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">
-              <RefreshCcw className="w-10 h-10 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mb-6 ring-8 ring-muted/20">
+              <RefreshCcw className="w-10 h-10 text-muted-foreground/40" />
             </div>
-            <h3 className="text-sm font-black uppercase tracking-[0.2em]">No Orders Found</h3>
-            <p className="text-xs font-medium mt-2">Try adjusting your filters or search criteria.</p>
+            <h3 className="text-base font-black uppercase tracking-[0.2em] text-foreground mb-3">No Orders Found for applied filters</h3>
+            <p className="text-[13px] text-muted-foreground leading-relaxed max-w-[400px]">
+               Date Range: <span className="font-bold text-foreground">{filters.dateRange?.from || 'Any'}</span> to <span className="font-bold text-foreground">{filters.dateRange?.to || 'Any'}</span>.
+               <br />Status: <span className="font-bold text-foreground capitalize">{filters.status}</span>
+               <br />Type: <span className="font-bold text-foreground capitalize">{filters.type}</span>
+               <br />Floor: <span className="font-bold text-foreground capitalize">{filters.floor}</span> 
+               <br />Cashier: <span className="font-bold text-foreground capitalize">{filters.cashier}</span>
+               {filters.search && <><br />Search: <span className="font-bold text-foreground">{filters.search}</span></>}
+               <br /><br />
+               Please adjust your date filter or the criteria above to see more orders.
+            </p>
           </div>
+
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {ordersData?.items.map(order => (
