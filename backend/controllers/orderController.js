@@ -2,6 +2,7 @@ const { parsePagination, buildPaginatedResponse } = require("../utils/pagination
 const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { emitPosChange } = require("../utils/realtime");
 const { Order, Table, Delivery } = require("../models");
+const Fuse = require("fuse.js");
 
 const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliveries", "dashboard"]);
 
@@ -38,117 +39,103 @@ exports.list = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const where = {};
+
+    // Status & type filters
     if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
     if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+    if (req.query.orderTaker && req.query.orderTaker !== "all") where.orderTaker = String(req.query.orderTaker);
 
-    // Filter for date range OR today's orders
-    if (req.query.from || req.query.to) {
-      const from = req.query.from;
-      const to = req.query.to;
+    // Date range filter
+    const { from, to, today } = req.query;
+    if (from || to) {
       const dateFilter = {};
-      
-      if (from) {
-        const start = new Date(from);
-        start.setHours(0, 0, 0, 0);
-        dateFilter.$gte = start;
-      }
-      
-      if (to) {
-        const end = new Date(to);
-        end.setHours(23, 59, 59, 999);
-        dateFilter.$lte = end;
-      }
-      
-      if (Object.keys(dateFilter).length > 0) {
-        where.createdAt = dateFilter;
-      }
-    } else {
-      const todayOnly = req.query.today !== "false";
-      if (todayOnly) {
-        const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        where.createdAt = { $gte: startOfDay, $lt: endOfDay };
-      }
+      if (from) dateFilter.$gte = new Date(new Date(from).setHours(0, 0, 0, 0));
+      if (to) dateFilter.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+      if (Object.keys(dateFilter).length) where.createdAt = dateFilter;
+    } else if (today !== "false") {
+      const now = new Date();
+      where.createdAt = {
+        $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+        $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      };
     }
 
-    // Filter by cashier (orderTaker)
-    if (req.query.orderTaker && req.query.orderTaker !== "all") {
-      where.orderTaker = String(req.query.orderTaker);
-    }
+    // Search logic with Fuse.js
+    if (req.query.search?.trim()) {
+      const search = req.query.search.trim();
+      const searchNum = Number(search);
+      const conditions = [];
 
-    if (req.query.search) {
-      const search = String(req.query.search).trim();
-      if (search) {
-        // Check if search is a number (for table search)
-        const searchNum = Number(search);
-        if (!Number.isNaN(searchNum) && searchNum > 0) {
-          // Search by both order code and table number
-          where.$or = [
-            { code: { $regex: escapeRegex(search), $options: "i" } },
-            { table: searchNum }
-          ];
-        } else {
-          // Search by order code only
-          where.code = { $regex: escapeRegex(search), $options: "i" };
-        }
+      // Order code match
+      conditions.push({ code: { $regex: escapeRegex(search), $options: "i" } });
+
+      // Exact table number match
+      if (!isNaN(searchNum) && searchNum > 0) conditions.push({ table: searchNum });
+
+      // Fuzzy table name match - fetch all tables once and cache if needed
+      const allTables = await Table.find({}, { number: 1, name: 1 }).lean();
+      if (allTables.length) {
+        const fuse = new Fuse(allTables, {
+          keys: ['name'],
+          threshold: 0.4,
+          ignoreLocation: true,
+          minMatchCharLength: 1
+        });
+
+        const matchedTables = fuse.search(search).map(r => r.item.number);
+        if (matchedTables.length) conditions.push({ table: { $in: matchedTables } });
       }
+
+      if (conditions.length) where.$or = conditions;
     }
 
+    // Floor filter
     if (req.query.floorKey && req.query.floorKey !== "all") {
-      const floorKey = String(req.query.floorKey);
-      const floorTables = await Table.find({ floorKey }).select("number").lean();
-      const floorTableNumbers = floorTables.map((t) => Number(t.number)).filter((n) => Number.isFinite(n));
-      if (!floorTableNumbers.length) {
-        return res.json(
-          buildPaginatedResponse({
-            items: [],
-            total: 0,
-            page,
-            limit,
-          })
-        );
-      }
-      where.table = { $in: floorTableNumbers };
+      const tables = await Table.find({ floorKey: String(req.query.floorKey) }, { number: 1 }).lean();
+      const tableNumbers = tables.map(t => t.number).filter(n => Number.isFinite(n));
+      if (!tableNumbers.length) return res.json(buildPaginatedResponse({ items: [], total: 0, page, limit }));
+      where.table = { $in: tableNumbers };
     }
 
-    const rates = await getEffectiveTaxRates();
-    const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
-    res.json(
-      buildPaginatedResponse({
-        items: items.map((o) => {
-          const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
-          const paid = o.status === "completed";
-          const storedTotal = Number(o.total);
-          const storedDiscount = Number(o.discount);
-          return {
-            id: o.code,
-            type: o.type,
-            status: o.status,
-            table: o.table,
-            items: o.items || [],
-            total: paid && Number.isFinite(storedTotal) ? storedTotal : totals.grandTotal,
-            tax: totals.tax,
-            subtotal: totals.subtotal,
-            discount: paid && Number.isFinite(storedDiscount) ? storedDiscount : totals.discount,
-            gstAmount: totals.gstAmount,
-            serviceCharge: totals.serviceCharge,
-            gstEnabled: o.gstEnabled !== false,
-            createdAt: o.createdAt,
-            customerName: o.customerName || "",
-            orderTaker: o.orderTaker || "",
-            cashierName: o.cashierName || "",
-            amountPaid: o.amountPaid,
-            changeDue: o.changeDue,
-            paymentMethod: o.paymentMethod,
-            dbId: String(o._id),
-          };
-        }),
-        total,
-        page,
-        limit,
-      })
-    );
+    // Execute query
+    const [items, total, rates] = await Promise.all([
+      Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Order.countDocuments(where),
+      getEffectiveTaxRates()
+    ]);
+
+    // Format response
+    res.json(buildPaginatedResponse({
+      items: items.map(o => {
+        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
+        const isPaid = o.status === "completed";
+        return {
+          id: o.code,
+          dbId: String(o._id),
+          type: o.type,
+          status: o.status,
+          table: o.table,
+          items: o.items || [],
+          total: isPaid && Number.isFinite(o.total) ? Number(o.total) : totals.grandTotal,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          discount: isPaid && Number.isFinite(o.discount) ? Number(o.discount) : totals.discount,
+          gstAmount: totals.gstAmount,
+          serviceCharge: totals.serviceCharge,
+          gstEnabled: o.gstEnabled !== false,
+          createdAt: o.createdAt,
+          customerName: o.customerName || "",
+          orderTaker: o.orderTaker || "",
+          cashierName: o.cashierName || "",
+          amountPaid: o.amountPaid,
+          changeDue: o.changeDue,
+          paymentMethod: o.paymentMethod
+        };
+      }),
+      total,
+      page,
+      limit
+    }));
   } catch (error) {
     console.error("List orders error:", error);
     res.status(500).json({ message: error.message || "Failed to fetch orders" });

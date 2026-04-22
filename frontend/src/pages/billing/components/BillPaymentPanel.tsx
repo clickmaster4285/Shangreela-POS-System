@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// In BillPaymentPanel.tsx - FIXED VERSION
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Printer, Wallet, Banknote, CreditCard, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,6 +46,10 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const [gstEnabled, setGstEnabled] = useState(true);
   const [paidAmount, setPaidAmount] = useState<number | string>('');
 
+  // Add a ref to track if we've already synced
+  const lastSyncedValues = useRef<string>('');
+  const syncTimeoutRef = useRef<NodeJS.Timeout>();
+
   // Reset/Update state when order changes
   useEffect(() => {
     if (!order) return;
@@ -57,6 +63,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       setDiscountValue(0);
     }
     setPaidAmount('');
+    // Reset sync tracking when order changes
+    lastSyncedValues.current = '';
   }, [order?.id, order?.gstEnabled, order?.discount]);
 
   const subtotal = useMemo(() => {
@@ -83,11 +91,36 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
 
   const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = taxTotals;
 
-  // Sync billing totals with backend (debounced)
+  // Create a stable string of current values to compare
+  const currentSyncValues = useMemo(() => {
+    return JSON.stringify({
+      subtotal,
+      discountAmt,
+      gstEnabled,
+      grandTotal,
+      totalTaxAmount,
+      gstAmount,
+      serviceCharge,
+    });
+  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge]);
+
+  // Sync billing totals with backend - ONLY when values actually change
   useEffect(() => {
     if (!order?.dbId || order.status === 'completed') return;
-    
-    const t = window.setTimeout(() => {
+
+    // Skip if values haven't changed
+    if (lastSyncedValues.current === currentSyncValues) return;
+
+    // Clear previous timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    // Debounce the sync
+    syncTimeoutRef.current = setTimeout(() => {
+      // Update last synced values before making the call
+      lastSyncedValues.current = currentSyncValues;
+
       api(`/orders/${order.dbId}/billing-totals`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -99,19 +132,19 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           gstAmount,
           serviceCharge,
         }),
-      }).catch(() => {});
-    }, 450);
+      }).catch((err) => {
+        console.error('Failed to sync billing totals:', err);
+        // On error, reset so we can retry
+        lastSyncedValues.current = '';
+      });
+    }, 500);
 
-    return () => window.clearTimeout(t);
-  }, [
-    order?.dbId,
-    order?.status,
-    subtotal,
-    discountAmt,
-    gstEnabled,
-    taxRates,
-    grandTotal
-  ]);
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [order?.dbId, order?.status, currentSyncValues]); // Only depend on the stable string
 
   const fmt = (v: number) => `Rs. ${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -122,11 +155,11 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   ) => {
     const isCurrentOrder = targetOrder.id === order?.id;
     const orderSubtotal = targetOrder.items.reduce((s, i: any) => s + (Number(i.menuItem.price) + Number(i.extraPrice || 0)) * i.quantity, 0);
-    
+
     // For the current order we use the UI's discount/gst state
     const orderDiscount = isCurrentOrder ? discountAmt : Number(targetOrder.discount || 0);
     const orderGst = isCurrentOrder ? gstEnabled : targetOrder.gstEnabled !== false;
-    
+
     const breakdown = computePakistanTaxTotals(
       orderSubtotal,
       orderDiscount,
@@ -210,9 +243,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
         toast.success('Paid bill reprinted');
         return;
       }
-      
+
       if (order.dbId) {
-        const amountPaidNum = paymentMethod === 'cash' 
+        const amountPaidNum = paymentMethod === 'cash'
           ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal)
           : grandTotal;
         const changeDueNum = paymentMethod === 'cash'
@@ -234,14 +267,14 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             changeDue: changeDueNum,
           }),
         });
-        
-        const data = buildReceiptData({ 
-          ...order, 
-          status: 'completed', 
-          amountPaid: amountPaidNum, 
-          changeDue: changeDueNum 
+
+        const data = buildReceiptData({
+          ...order,
+          status: 'completed',
+          amountPaid: amountPaidNum,
+          changeDue: changeDueNum
         } as any, true, paymentMethod);
-        
+
         printReceipt(data);
         markOrderAsPrinted(order.id);
         toast.success('Payment completed and receipt printed');
@@ -363,8 +396,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-emerald-500/10 flex justify-between items-center">
-                   <span className="text-[10px] uppercase font-bold text-muted-foreground">Payment Method</span>
-                   <span className="text-[10px] uppercase font-black text-foreground capitalize">{(order as any).paymentMethod || 'Cash'}</span>
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Payment Method</span>
+                  <span className="text-[10px] uppercase font-black text-foreground capitalize">{(order as any).paymentMethod || 'Cash'}</span>
                 </div>
               </div>
             )}
@@ -443,33 +476,30 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('cash')}
-                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${
-                        paymentMethod === 'cash'
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${paymentMethod === 'cash'
                           ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
                           : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                      }`}
+                        }`}
                     >
                       <Banknote className="w-4 h-4" /> Cash
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('card')}
-                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${
-                        paymentMethod === 'card'
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${paymentMethod === 'card'
                           ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
                           : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                      }`}
+                        }`}
                     >
                       <CreditCard className="w-4 h-4" /> Card
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('easypesa')}
-                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${
-                        paymentMethod === 'easypesa'
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition-all ${paymentMethod === 'easypesa'
                           ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
                           : 'bg-card text-muted-foreground border-border hover:border-primary/30 hover:bg-primary/5'
-                      }`}
+                        }`}
                     >
                       <Wallet className="w-4 h-4" /> e-Wallet
                     </button>
@@ -524,7 +554,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           <div className="mt-6 flex flex-col gap-2 shrink-0 border-t border-border pt-5">
             <div className="flex gap-2">
               {hasAction('delete_order') && order.status !== 'completed' && (
-                <button 
+                <button
                   onClick={handleVoidOrder}
                   disabled={isLocked('void-order')}
                   className="flex-1 py-3.5 rounded-2xl bg-destructive/10 text-destructive text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-destructive hover:text-white transition-all active:scale-[0.98]"
@@ -539,7 +569,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
               >
                 <Printer className="w-4 h-4" /> Print Bill
               </button>
-              <button 
+              <button
                 onClick={handleCompletePayment}
                 disabled={isLocked('complete-payment')}
                 className="flex-[2] py-3.5 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"

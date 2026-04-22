@@ -12,6 +12,7 @@ import { POSFilterBar } from '@/components/pos/POSFilterBar';
 import { billBreakdownForOrder, computePakistanTaxTotals } from '@/utils/pos/pakistanTax';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Utensils, ShoppingBag, Truck } from 'lucide-react';
+import { useDebounce } from '@/hooks/common/use-debounce';
 
 // New sub-components
 import { BillList } from './components/BillList';
@@ -38,11 +39,13 @@ export default function Billing() {
   const [selectedCashier, setSelectedCashier] = useState<string>('all');
   const [showMyBillsOnly, setShowMyBillsOnly] = useState<boolean>(false);
   const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
+  const debouncedTableSearch = useDebounce(tableSearchQuery, 500); // Debounce search input
+
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState<string>(today);
   const [endDate, setEndDate] = useState<string>(today);
   const [selectedOrderType, setSelectedOrderType] = useState<string>('all');
-  
+
   const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
   const [floors, setFloors] = useState<{ key: string; name: string }[]>([]);
 
@@ -53,7 +56,7 @@ export default function Billing() {
       try {
         const ids = JSON.parse(saved);
         if (Array.isArray(ids)) setPrintedOrderIds(new Set(ids));
-      } catch {}
+      } catch { }
     }
     const savedFilter = localStorage.getItem('billing_status_filter');
     if (savedFilter && ['all', 'paid', 'pending', 'ready'].includes(savedFilter)) {
@@ -81,14 +84,14 @@ export default function Billing() {
   const getBillStatusLabel = (order?: Order & { printed?: boolean }) => {
     if (!order) return 'Pending';
     if (order.status === 'completed') return 'Paid';
-    if (order.printed || isOrderPrinted(order.id)) return 'Ready';
+    if (order.status === 'ready' || order.printed || isOrderPrinted(order.id)) return 'Ready';
     return 'Pending';
   };
 
   const getStatusBadgeClass = (order?: Order & { printed?: boolean }) => {
     if (!order) return 'bg-warning/15 text-warning border-warning/30';
     if (order.status === 'completed') return 'bg-success/15 text-success border-success/30';
-    if (order.printed || isOrderPrinted(order.id)) return 'bg-primary/15 text-primary border-primary/30';
+    if (order.status === 'ready' || order.printed || isOrderPrinted(order.id)) return 'bg-primary/15 text-primary border-primary/30';
     return 'bg-warning/15 text-warning border-warning/30';
   };
 
@@ -102,13 +105,13 @@ export default function Billing() {
       from: startDate,
       to: endDate,
       floorKey: selectedFloor,
-      search: tableSearchQuery,
+      search: debouncedTableSearch, // Use debounced value for API call
     });
 
     if (selectedOrderType !== 'all') {
       params.append('type', selectedOrderType);
     }
-    
+
     if (showMyBillsOnly && currentUser?.name) {
       params.append('orderTaker', currentUser.name);
     } else if (selectedCashier !== 'all') {
@@ -122,7 +125,7 @@ export default function Billing() {
       setOrders(prev => {
         const next = append ? [...prev, ...ordersWithPrinted] : ordersWithPrinted;
         return next.sort((a, b) => {
-          const getPrio = (o: any) => o.status === 'completed' ? 3 : (o.printed ? 2 : 1);
+          const getPrio = (o: any) => o.status === 'completed' ? 3 : (o.status === 'ready' || o.printed ? 2 : 1);
           const pA = getPrio(a);
           const pB = getPrio(b);
           if (pA !== pB) return pA - pB;
@@ -132,7 +135,7 @@ export default function Billing() {
 
       setHasMore(r.pagination.hasNext);
       setPage(pageNum);
-      
+
       setOrders(current => {
         setSelectedOrder(prev => {
           if (prev) {
@@ -158,7 +161,7 @@ export default function Billing() {
         status: t.status,
         currentOrder: t.currentOrder,
       })));
-  });
+    });
 
   const loadUsers = () => {
     api<PaginatedResponse<any>>('/users?limit=100').then(r => {
@@ -175,10 +178,15 @@ export default function Billing() {
         gstRate: Number.isFinite(gst) ? gst : 0.16,
         serviceChargeRate: Number.isFinite(sc) ? sc : 0.05,
       });
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
-  useEffect(() => { loadOrders(); }, [startDate, endDate, selectedFloor, tableSearchQuery, selectedCashier, showMyBillsOnly, selectedOrderType]);
+  // Use debounced search value as dependency
+  useEffect(() => {
+    loadOrders();
+  }, [startDate, endDate, selectedFloor, debouncedTableSearch, selectedCashier, showMyBillsOnly, selectedOrderType]);
+  //    ^^^^^^^^^^^^^^^^^^^^ This now updates only when debounced value changes
+
   useEffect(() => { loadTables(); loadUsers(); loadTaxRates(); }, []);
 
   usePosRealtimeScopes(['orders', 'tables', 'settings'], () => {
@@ -192,7 +200,7 @@ export default function Billing() {
   const filteredOrders = useMemo(() => {
     if (billingStatusFilter === 'all') return orders;
     return orders.filter(o => {
-      const status = o.status === 'completed' ? 'paid' : (o.printed ? 'ready' : 'pending');
+      const status = o.status === 'completed' ? 'paid' : (o.status === 'ready' || o.printed ? 'ready' : 'pending');
       return status === billingStatusFilter;
     });
   }, [orders, billingStatusFilter]);
@@ -207,8 +215,8 @@ export default function Billing() {
   const stats = useMemo(() => {
     return {
       all: orders.length,
-      pending: orders.filter(o => o.status !== 'completed' && !o.printed).length,
-      ready: orders.filter(o => o.status !== 'completed' && o.printed).length,
+      pending: orders.filter(o => o.status !== 'completed' && o.status !== 'ready' && !o.printed).length,
+      ready: orders.filter(o => o.status !== 'completed' && (o.status === 'ready' || o.printed)).length,
       paid: orders.filter(o => o.status === 'completed').length,
     };
   }, [orders]);
@@ -255,23 +263,22 @@ export default function Billing() {
 
             <div className="w-px h-6 bg-border mx-1" />
 
-             {/* Status Filter */}
-             <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
-                {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
-                  <button key={f} onClick={() => setBillingStatusFilter(f)} 
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    {f} ({stats[f]})
-                  </button>
-                ))}
-             </div>
+            {/* Status Filter */}
+            <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
+              {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
+                <button key={f} onClick={() => setBillingStatusFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {f} ({stats[f]})
+                </button>
+              ))}
+            </div>
           </div>
         }
       />
 
-
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
-        <BillList 
+        <BillList
           billsByDay={billsByDay}
           activeFilters={{
             status: billingStatusFilter,
@@ -293,7 +300,7 @@ export default function Billing() {
           formatOrderDateTime={formatOrderDateTime}
         />
 
-        <BillPaymentPanel 
+        <BillPaymentPanel
           order={selectedOrder}
           tableMap={tableMap}
           taxRates={taxRates}
@@ -315,4 +322,3 @@ export default function Billing() {
     </div>
   );
 }
-
