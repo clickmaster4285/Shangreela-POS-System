@@ -157,11 +157,11 @@ router.get("/orders", authRequired, async (req, res) => {
   if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
 
   if (req.query.floorKey && req.query.floorKey !== "all") {
-    const tables = await Table.find({ floorKey: String(req.query.floorKey) }).select("number").lean();
-    const numbers = tables.map((t) => t.number);
-    where.table = { $in: numbers };
+    const tables = await Table.find({ floorKey: String(req.query.floorKey) }).select("name").lean();
+    const names = tables.map((t) => t.name).filter(Boolean);
+    where.table = { $in: names };
   }
-  
+
   if (req.query.today === "true") {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -172,16 +172,12 @@ router.get("/orders", authRequired, async (req, res) => {
 
   if (req.query.search) {
     const term = String(req.query.search).trim();
-    const num = Number(term);
-    if (!isNaN(num) && term !== "") {
-      where.$or = [
-        { code: { $regex: term, $options: "i" } },
-        { table: num }
-      ];
-    } else {
-      where.code = { $regex: term, $options: "i" };
-    }
+    where.$or = [
+      { code: { $regex: term, $options: "i" } },
+      { table: { $regex: term, $options: "i" } }
+    ];
   }
+
   const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
   res.json(
     buildPaginatedResponse({
@@ -225,16 +221,28 @@ router.patch("/orders/:id/table", authRequired, async (req, res) => {
 
   if (oldTable) {
     await Table.findOneAndUpdate(
-      { number: Number(oldTable) },
+      { name: oldTable },
       { status: "available", currentOrder: "" }
     );
+    if (!isNaN(Number(oldTable))) {
+      await Table.findOneAndUpdate(
+        { number: Number(oldTable) },
+        { status: "available", currentOrder: "" }
+      );
+    }
   }
 
   if (newTable) {
     await Table.findOneAndUpdate(
-      { number: Number(newTable) },
+      { name: newTable },
       { status: "occupied", currentOrder: row.code }
     );
+    if (!isNaN(Number(newTable))) {
+      await Table.findOneAndUpdate(
+        { number: Number(newTable) },
+        { status: "occupied", currentOrder: row.code }
+      );
+    }
   }
 
   res.json({ ok: true, id: row.code, dbId: String(row._id) });
@@ -450,9 +458,15 @@ router.post("/orders", authRequired, async (req, res) => {
   });
   if (payload.type === "dine-in" && payload.table) {
     await Table.findOneAndUpdate(
-      { number: Number(payload.table) },
+      { name: payload.table },
       { status: "occupied", currentOrder: code }
     );
+    if (!isNaN(Number(payload.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(payload.table) },
+        { status: "occupied", currentOrder: code }
+      );
+    }
   }
   if (payload.type === "delivery") {
     await Delivery.create({
@@ -471,16 +485,20 @@ router.post("/orders", authRequired, async (req, res) => {
 });
 
 router.get("/orders/open-by-table/:tableNumber", authRequired, async (req, res) => {
-  const tableNumber = Number(req.params.tableNumber);
+  const tableIdentifier = req.params.tableNumber;
   const includeCompleted = String(req.query.includeCompleted || "") === "true";
   const where = {
-    table: tableNumber,
+    table: tableIdentifier,
     type: "dine-in",
   };
   if (!includeCompleted) where.status = { $ne: "completed" };
-  const row = await Order.findOne(where)
-    .sort({ createdAt: -1 })
-    .lean();
+  let row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+
+  if (!row && !isNaN(Number(tableIdentifier))) {
+    where.table = Number(tableIdentifier);
+    row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+  }
+
   if (!row) return res.json({ item: null });
   return res.json({
     item: {
@@ -522,9 +540,15 @@ router.patch("/orders/:id/add-items", authRequired, async (req, res) => {
   await row.save();
   if (wasCompleted && row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "occupied", currentOrder: row.code }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "occupied", currentOrder: row.code }
+      );
+    }
   }
   res.json({ ok: true, id: row.code, dbId: String(row._id) });
 });
@@ -538,9 +562,15 @@ router.post("/orders/:id/payment", authRequired, async (req, res) => {
   if (!row) return res.status(404).json({ message: "Order not found" });
   if (row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "available", currentOrder: "" }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "available", currentOrder: "" }
+      );
+    }
   }
   res.json({ ok: true });
 });
@@ -551,9 +581,15 @@ router.delete("/orders/:id", authRequired, async (req, res) => {
 
   if (row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "available", currentOrder: "" }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "available", currentOrder: "" }
+      );
+    }
   }
 
   await Order.findByIdAndDelete(req.params.id);

@@ -9,10 +9,10 @@ const startOfDay = (d) => {
   return x;
 };
 
-const getTableNumbers = async (floorKey) => {
+const getTableNames = async (floorKey) => {
   if (!floorKey || floorKey === "all") return null;
-  const tables = await Table.find({ floorKey }).select("number").lean();
-  return tables.map((t) => t.number);
+  const tables = await Table.find({ floorKey }).select("name").lean();
+  return tables.map((t) => t.name).filter(Boolean);
 };
 
 const buildRevenueSeries = (range, orders, from, to) => {
@@ -118,15 +118,15 @@ const buildRevenueSeries = (range, orders, from, to) => {
 };
 
 exports.weeklySales = async (req, res) => {
-  const tableNumbers = await getTableNumbers(req.query.floorKey);
-  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers, req.query.orderTaker)).lean();
+  const tableNames = await getTableNames(req.query.floorKey);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNames, req.query.orderTaker)).lean();
   res.json({ items: buildRevenueSeries(req.query.range, orders, req.query.from, req.query.to) });
 };
 
 exports.topItems = async (req, res) => {
-  const tableNumbers = await getTableNumbers(req.query.floorKey);
+  const tableNames = await getTableNames(req.query.floorKey);
   const [orders] = await Promise.all([
-    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNumbers, req.query.orderTaker)).lean(),
+    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNames, req.query.orderTaker)).lean(),
   ]);
 
   const map = new Map();

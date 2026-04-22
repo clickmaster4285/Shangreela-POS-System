@@ -10,7 +10,14 @@ export default function KitchenDisplay() {
   const [orders, setOrders] = useState<(Order & { dbId?: string })[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
 
-  const tableMap = useMemo(() => new Map<number, TableInfo>(tables.map(table => [table.id, table])), [tables]);
+  const tableMap = useMemo(() => {
+    const map = new Map<string | number, TableInfo>();
+    tables.forEach(t => {
+      map.set(t.id, t);
+      map.set(t.name, t);
+    });
+    return map;
+  }, [tables]);
 
   const getLatestRequestItems = (order: Order) => {
     const items = (order.items || []) as Array<Order['items'][number] & { requestId?: string; requestAt?: string | Date }>;

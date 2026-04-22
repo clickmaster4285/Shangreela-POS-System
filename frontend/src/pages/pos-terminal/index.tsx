@@ -104,20 +104,15 @@ export default function POSScreen() {
       if (table?.status === 'occupied') {
         // Only load if we're not already editing this specific order
         if (!currentOrderForEdit || currentOrderForEdit.id !== table.currentOrder) {
-          api<{ item: any }>(`/orders/open-by-table/${selectedTableId}`)
+          api<{ item: any }>(`/orders/open-by-table/${table.name}`)
             .then(res => {
               if (res.item) {
                 // If we were editing another order, we should probably clear those items
-                // But if we just had some new items in cart, we might want to merge.
-                // For a clean experience, if currentOrderForEdit was set to something else, we clear.
                 setCart(prev => {
                   const existingItems = res.item.items || [];
                   if (currentOrderForEdit && currentOrderForEdit.id !== res.item.id) {
-                    // Switched from one occupied table to another
                     return existingItems;
                   }
-                  // Otherwise merge (could be new items added before selecting table)
-                  // Simple merge: existing items first, then new items
                   return [...existingItems, ...prev];
                 });
                 setCurrentOrderForEdit({ dbId: res.item.dbId, id: res.item.id });
@@ -168,7 +163,7 @@ export default function POSScreen() {
       // Logic for appending to existing or creating new order
       const orderPayload = {
         type: orderType,
-        table: orderType === 'dine-in' && selectedTable ? selectedTable.id : undefined,
+        table: orderType === 'dine-in' && selectedTable ? selectedTable.name : undefined,
         status: 'pending',
         customerName: orderType === 'delivery' ? deliveryCustomerName.trim() : undefined,
         phone: orderType === 'delivery' ? deliveryPhone.trim() : undefined,
@@ -186,7 +181,7 @@ export default function POSScreen() {
           await api(`/orders/${currentOrderForEdit.dbId}/edit-items`, { method: 'PATCH', body: JSON.stringify(orderPayload) });
           return 'updated';
         }
-        const existing = await api<{ item: { dbId: string } | null }>(`/orders/open-by-table/${selectedTable.id}`);
+        const existing = await api<{ item: { dbId: string } | null }>(`/orders/open-by-table/${selectedTable.name}`);
         if (existing.item?.dbId) {
           await api(`/orders/${existing.item.dbId}/add-items`, { method: 'PATCH', body: JSON.stringify(orderPayload) });
           return 'updated';

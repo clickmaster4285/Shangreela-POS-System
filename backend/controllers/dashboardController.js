@@ -10,10 +10,10 @@ const { getEffectiveTaxRates } = require("../utils/orderTotals");
 const PAID_ORDER_LIST_PROJECTION =
   "total subtotal discount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name createdAt";
 
-const getTableNumbers = async (floorKey) => {
+const getTableNames = async (floorKey) => {
   if (!floorKey || floorKey === "all") return null;
-  const tables = await Table.find({ floorKey }).select("number").lean();
-  return tables.map((t) => t.number);
+  const tables = await Table.find({ floorKey }).select("name").lean();
+  return tables.map((t) => t.name).filter(Boolean);
 };
 
 const getAuxCreatedAtForReq = (req) => {
@@ -30,10 +30,10 @@ async function loadPaidOrdersLeanForReq(req) {
   const to = req.query.to;
   const floorKey = req.query.floorKey;
   const orderTaker = req.query.orderTaker;
-  const tableNumbers = await getTableNumbers(floorKey);
-  const paidQuery = buildPaidOrdersQuery(range, from, to, tableNumbers, orderTaker);
+  const tableNames = await getTableNames(floorKey);
+  const paidQuery = buildPaidOrdersQuery(range, from, to, tableNames, orderTaker);
   const orders = await Order.find(paidQuery).select(PAID_ORDER_LIST_PROJECTION).lean();
-  return { orders, range, from, to, floorKey, tableNumbers, orderTaker };
+  return { orders, range, from, to, floorKey, tableNames, orderTaker };
 }
 
 async function fetchDashboardAuxiliaryCounts(auxCreatedAt, orderTaker = null) {
@@ -275,9 +275,9 @@ function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelle
 async function loadRecentOrdersFormatted(req) {
   const floorKey = req.query.floorKey;
   const orderTaker = req.query.orderTaker;
-  const tableNumbers = await getTableNumbers(floorKey);
+  const tableNames = await getTableNames(floorKey);
   const query = { status: { $ne: "cancelled" } };
-  if (tableNumbers) query.table = { $in: tableNumbers };
+  if (tableNames) query.table = { $in: tableNames };
   if (orderTaker && orderTaker !== "all") query.orderTaker = orderTaker;
   
   const items = await Order.find(query)

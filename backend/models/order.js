@@ -5,7 +5,7 @@ const orderSchema = new mongoose.Schema(
     code: { type: String, required: true, unique: true },
     type: { type: String, enum: ["dine-in", "takeaway", "delivery"], required: true },
     status: { type: String, enum: ["pending", "preparing", "ready", "served", "taken away", "completed", "cancelled"], required: true },
-    table: Number,
+    table: String,
     customerName: String,
     orderTaker: String,
     notes: String,

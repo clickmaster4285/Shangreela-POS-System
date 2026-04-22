@@ -195,7 +195,14 @@ export default function Billing() {
     loadTaxRates();
   });
 
-  const tableMap = useMemo(() => new Map<number, TableInfo>(tables.map(t => [t.id, t])), [tables]);
+  const tableMap = useMemo(() => {
+    const map = new Map<string | number, TableInfo>();
+    tables.forEach(t => {
+      map.set(t.id, t);
+      map.set(t.name, t);
+    });
+    return map;
+  }, [tables]);
 
   const filteredOrders = useMemo(() => {
     if (billingStatusFilter === 'all') return orders;

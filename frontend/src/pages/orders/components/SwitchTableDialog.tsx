@@ -31,7 +31,8 @@ export function SwitchTableDialog({ tables, floors, onSuccess }: SwitchTableDial
       setSelectedTableId(null);
       if (floors.length > 0) {
         // Try to find the floor of the current table, otherwise default to first floor
-        const currentTable = tables.find(t => t.id === Number(switchingTableOrder.table));
+        // Check both ID (number) and name (string)
+        const currentTable = tables.find(t => t.id === Number(switchingTableOrder.table) || t.name === switchingTableOrder.table);
         setActiveFloorId(currentTable?.floorId || floors[0].id);
       }
     }
@@ -39,10 +40,14 @@ export function SwitchTableDialog({ tables, floors, onSuccess }: SwitchTableDial
 
   const handleConfirm = async () => {
     if (!switchingTableOrder || !selectedTableId) return;
+    
+    const targetTable = tables.find(t => t.id === selectedTableId);
+    if (!targetTable) return;
+
     try {
       await api(`/orders/${switchingTableOrder.dbId}/table`, {
         method: 'PATCH',
-        body: JSON.stringify({ table: selectedTableId }),
+        body: JSON.stringify({ table: targetTable.name }),
       });
       toast.success('Table switched');
       setSwitchingTableOrder(null);

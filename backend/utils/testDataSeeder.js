@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { connectDb } = require("../config/db");
 const Order = require("../models/order");
 const Expense = require("../models/expense");
-const { MenuItem } = require("../models");
+const { MenuItem, Table } = require("../models");
 
 async function seedTestData(count = 10) {
   try {
@@ -17,15 +17,21 @@ async function seedTestData(count = 10) {
 
     console.log(`Generating ${count} orders and ${count} expenses...`);
 
+    // 1. Fetch available tables to use their names
+    const tables = await Table.find().lean();
+    const tableNames = tables.length > 0 ? tables.map(t => t.name) : [];
+
     // 1. Generate Batch of Orders
     const sampleOrders = Array.from({ length: count }).map((_, i) => {
       const randomItem = menuItems[Math.floor(Math.random() * menuItems.length)];
       const subtotal = randomItem.price * (Math.floor(Math.random() * 3) + 1);
+      const randomTableName = tableNames[Math.floor(Math.random() * tableNames.length)];
+      
       return {
         code: "ORD-" + Math.random().toString(36).substr(2, 5).toUpperCase() + i,
         type: ["dine-in", "takeaway", "delivery"][Math.floor(Math.random() * 3)],
         status: "completed",
-        table: Math.floor(Math.random() * 20) + 1,
+        table: randomTableName,
         customerName: `Batch Customer ${i + 1}`,
         subtotal: subtotal,
         total: subtotal,

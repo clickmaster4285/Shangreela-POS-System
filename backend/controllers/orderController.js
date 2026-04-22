@@ -60,41 +60,26 @@ exports.list = async (req, res) => {
       };
     }
 
-    // Search logic with Fuse.js
+    // Search logic
     if (req.query.search?.trim()) {
       const search = req.query.search.trim();
-      const searchNum = Number(search);
       const conditions = [];
 
       // Order code match
       conditions.push({ code: { $regex: escapeRegex(search), $options: "i" } });
 
-      // Exact table number match
-      if (!isNaN(searchNum) && searchNum > 0) conditions.push({ table: searchNum });
-
-      // Fuzzy table name match - fetch all tables once and cache if needed
-      const allTables = await Table.find({}, { number: 1, name: 1 }).lean();
-      if (allTables.length) {
-        const fuse = new Fuse(allTables, {
-          keys: ['name'],
-          threshold: 0.4,
-          ignoreLocation: true,
-          minMatchCharLength: 1
-        });
-
-        const matchedTables = fuse.search(search).map(r => r.item.number);
-        if (matchedTables.length) conditions.push({ table: { $in: matchedTables } });
-      }
+      // Table name match
+      conditions.push({ table: { $regex: escapeRegex(search), $options: "i" } });
 
       if (conditions.length) where.$or = conditions;
     }
 
     // Floor filter
     if (req.query.floorKey && req.query.floorKey !== "all") {
-      const tables = await Table.find({ floorKey: String(req.query.floorKey) }, { number: 1 }).lean();
-      const tableNumbers = tables.map(t => t.number).filter(n => Number.isFinite(n));
-      if (!tableNumbers.length) return res.json(buildPaginatedResponse({ items: [], total: 0, page, limit }));
-      where.table = { $in: tableNumbers };
+      const tables = await Table.find({ floorKey: String(req.query.floorKey) }, { name: 1 }).lean();
+      const tableNames = tables.map(t => t.name).filter(Boolean);
+      if (!tableNames.length) return res.json(buildPaginatedResponse({ items: [], total: 0, page, limit }));
+      where.table = { $in: tableNames };
     }
 
     // Execute query
@@ -160,9 +145,9 @@ exports.patchStatus = async (req, res) => {
 
 exports.changeTable = async (req, res) => {
   try {
-    const newTableNumber = Number(req.body.table);
-    if (!Number.isInteger(newTableNumber) || newTableNumber <= 0) {
-      return res.status(400).json({ message: "Provide a valid table number." });
+    const newTableName = req.body.table;
+    if (!newTableName) {
+      return res.status(400).json({ message: "Provide a valid table name." });
     }
 
     const order = await Order.findById(req.params.id);
@@ -174,12 +159,12 @@ exports.changeTable = async (req, res) => {
       return res.status(400).json({ message: "Cannot switch table for a completed or cancelled order." });
     }
 
-    const currentTableNumber = Number(order.table || 0);
-    if (currentTableNumber === newTableNumber) {
-      return res.json({ ok: true, table: newTableNumber });
+    const currentTableName = order.table;
+    if (currentTableName === newTableName) {
+      return res.json({ ok: true, table: newTableName });
     }
 
-    const targetTable = await Table.findOne({ number: newTableNumber });
+    const targetTable = await Table.findOne({ name: newTableName });
     if (!targetTable) {
       return res.status(404).json({ message: "Target table not found." });
     }
@@ -187,19 +172,19 @@ exports.changeTable = async (req, res) => {
       return res.status(400).json({ message: "Target table is currently occupied." });
     }
 
-    if (currentTableNumber) {
+    if (currentTableName) {
       await Table.findOneAndUpdate(
-        { number: currentTableNumber, currentOrder: order.code },
+        { name: currentTableName, currentOrder: order.code },
         { status: "available", currentOrder: "" }
       );
     }
 
-    await Table.findOneAndUpdate({ number: newTableNumber }, { status: "occupied", currentOrder: order.code });
-    order.table = newTableNumber;
+    await Table.findOneAndUpdate({ name: newTableName }, { status: "occupied", currentOrder: order.code });
+    order.table = newTableName;
     await order.save();
 
     broadcastOrderDomain();
-    res.json({ ok: true, table: newTableNumber });
+    res.json({ ok: true, table: newTableName });
   } catch (error) {
     console.error("Change table error:", error);
     res.status(500).json({ message: error.message || "Failed to change table" });
@@ -211,9 +196,8 @@ exports.create = async (req, res) => {
     const payload = req.body || {};
 
     if (payload.type === "dine-in" && payload.table) {
-      const tableNumber = Number(payload.table);
       const existingOrder = await Order.findOne({
-        table: tableNumber,
+        table: payload.table,
         type: "dine-in",
         status: { $nin: ["completed", "cancelled"] },
       });
@@ -249,7 +233,7 @@ exports.create = async (req, res) => {
     
     if (payload.type === "dine-in" && payload.table) {
       const tableUpdateResult = await Table.findOneAndUpdate(
-        { number: Number(payload.table) },
+        { name: payload.table },
         { status: "occupied", currentOrder: code },
         { new: true }
       );
@@ -278,6 +262,7 @@ exports.create = async (req, res) => {
       }
     }
 
+    console.log("Order created successfully", row);
     broadcastOrderDomain();
     res.status(201).json({ id: row.code, dbId: String(row._id) });
   } catch (error) {
@@ -288,16 +273,25 @@ exports.create = async (req, res) => {
 
 exports.openByTable = async (req, res) => {
   try {
-    const tableNumber = Number(req.params.tableNumber);
+    const tableIdentifier = req.params.tableNumber; // Now can be name or number
     const includeCompleted = String(req.query.includeCompleted || "") === "true";
+    
+    // We try to find by table field which now stores name
     const where = {
-      table: tableNumber,
+      table: tableIdentifier,
       type: "dine-in",
     };
     if (!includeCompleted) {
       where.status = { $nin: ["completed", "cancelled"] };
     }
-    const row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+    let row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+    
+    // Fallback: if not found by name, maybe it's an old order stored by number
+    if (!row && !isNaN(Number(tableIdentifier))) {
+      where.table = Number(tableIdentifier);
+      row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+    }
+
     if (!row) return res.json({ item: null });
     const rates = await getEffectiveTaxRates();
     const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);
@@ -364,7 +358,7 @@ exports.addItems = async (req, res) => {
       await Delivery.findOneAndUpdate({ orderId: row.code }, { total: totals.grandTotal });
     }
     if (wasCompleted && row.type === "dine-in" && row.table) {
-      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "occupied", currentOrder: row.code });
+      await Table.findOneAndUpdate({ name: row.table }, { status: "occupied", currentOrder: row.code });
     }
     broadcastOrderDomain();
     res.json({ ok: true, id: row.code, dbId: String(row._id) });
@@ -467,7 +461,7 @@ exports.payment = async (req, res) => {
 
     // For dine-in orders, make table available after payment (no auto-creation of new order)
     if (row.type === "dine-in" && row.table) {
-      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+      await Table.findOneAndUpdate({ name: row.table }, { status: "available", currentOrder: "" });
     }
 
     broadcastOrderDomain();
@@ -491,7 +485,7 @@ exports.cancel = async (req, res) => {
     row.status = "cancelled";
     await row.save();
     if (row.type === "dine-in" && row.table) {
-      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+      await Table.findOneAndUpdate({ name: row.table }, { status: "available", currentOrder: "" });
     }
     broadcastOrderDomain();
     res.json({ ok: true });
@@ -507,7 +501,7 @@ exports.remove = async (req, res) => {
     if (!row) return res.status(404).json({ message: "Order not found" });
 
     if (row.type === "dine-in" && row.table) {
-      await Table.findOneAndUpdate({ number: Number(row.table) }, { status: "available", currentOrder: "" });
+      await Table.findOneAndUpdate({ name: row.table }, { status: "available", currentOrder: "" });
     }
 
     await Order.findByIdAndDelete(req.params.id);

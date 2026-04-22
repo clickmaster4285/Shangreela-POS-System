@@ -46,9 +46,13 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
     }
   };
 
-  const getTableName = (tableNumber: number | string) => {
-    const table = tables.find(t => t.id === Number(tableNumber));
-    return table ? table.name : `Table ${tableNumber}`;
+  const getTableName = (tableIdentifier: number | string) => {
+    // If it's a string and not a number, it's already a name
+    if (typeof tableIdentifier === 'string' && isNaN(Number(tableIdentifier))) {
+      return tableIdentifier;
+    }
+    const table = tables.find(t => t.id === Number(tableIdentifier));
+    return table ? table.name : `Table ${tableIdentifier}`;
   };
 
   return (
