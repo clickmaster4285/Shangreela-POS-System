@@ -1,5 +1,5 @@
 import { Search, ChevronDown, Plus, PencilLine } from 'lucide-react';
-import { useMemo, useEffect, useCallback } from 'react';
+import { useMemo, useEffect } from 'react';
 import {
   PAKISTANI_SUBFOLDERS,
   categoryLabelToDataCategory,
@@ -7,7 +7,86 @@ import {
 } from '@/components/pos/Form';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { useDebounce } from '@/hooks/common/use-debounce';
-import Fuse from 'fuse.js';
+
+// Check if text contains all search characters in order (ignoring spaces)
+const matchesInOrder = (text: string, search: string): boolean => {
+  if (!search) return true;
+
+  const textLower = text.toLowerCase();
+  const searchLower = search.toLowerCase().replace(/\s/g, ''); // Remove spaces from search
+  let searchIndex = 0;
+
+  for (let i = 0; i < textLower.length && searchIndex < searchLower.length; i++) {
+    if (textLower[i] === searchLower[searchIndex]) {
+      searchIndex++;
+    }
+  }
+  return searchIndex === searchLower.length;
+};
+
+// Check if text contains all search words (word boundary matching)
+const matchesAllWords = (text: string, search: string): boolean => {
+  if (!search) return true;
+
+  const textLower = text.toLowerCase();
+  const searchWords = search.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+
+  // Each search word must be found in the text (as substring)
+  return searchWords.every(word => textLower.includes(word));
+};
+
+// Enhanced matching: tries both approaches
+const matchesSearch = (text: string, search: string): boolean => {
+  if (!search) return true;
+
+  // First try: all words must exist (for "karahi half" -> both "karahi" and "half" must be in name)
+  if (matchesAllWords(text, search)) return true;
+
+  // Second try: characters in order (for typos like "karhi" instead of "karahi")
+  if (matchesInOrder(text, search)) return true;
+
+  return false;
+};
+
+// Highlight matching characters (from the search query)
+const highlightMatches = (text: string, search: string): React.ReactNode => {
+  if (!search) return text;
+
+  const textLower = text.toLowerCase();
+  const searchLower = search.toLowerCase().replace(/\s/g, '');
+  const positions: number[] = [];
+  let searchIndex = 0;
+
+  for (let i = 0; i < textLower.length && searchIndex < searchLower.length; i++) {
+    if (textLower[i] === searchLower[searchIndex]) {
+      positions.push(i);
+      searchIndex++;
+    }
+  }
+
+  if (positions.length === 0) return text;
+
+  const result: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const pos of positions) {
+    if (pos > lastIndex) {
+      result.push(text.substring(lastIndex, pos));
+    }
+    result.push(
+      <mark key={pos} className="bg-yellow-200 dark:bg-yellow-800 px-0.5 rounded">
+        {text[pos]}
+      </mark>
+    );
+    lastIndex = pos + 1;
+  }
+
+  if (lastIndex < text.length) {
+    result.push(text.substring(lastIndex));
+  }
+
+  return result;
+};
 
 export function POSMenuArea() {
   const store = usePOSStore();
@@ -23,14 +102,13 @@ export function POSMenuArea() {
     resetCustomizeForm
   } = store;
 
-  // Debounced search values
   const debouncedCategorySearch = useDebounce(categorySearch, 300);
   const debouncedFolderItemSearch = useDebounce(folderItemSearch, 300);
   const debouncedPakistaniSubSearch = useDebounce(pakistaniSubSearch, 300);
 
-  // Derived Category Labels
+  // Categories
   const categoryLabels = useMemo(() => {
-    const uniqueCategories = Array.from(new Set(menuItems.map(i => i.category))).sort((a, b) => a.localeCompare(b));
+    const uniqueCategories = Array.from(new Set(menuItems.map(i => i.category))).sort();
     const hasPakistani = uniqueCategories.includes('Karahi') || uniqueCategories.includes('Handi');
     const remaining = uniqueCategories.filter(c => c !== 'Karahi' && c !== 'Handi');
     return hasPakistani ? ['All', 'Pakistani', ...remaining] : ['All', ...remaining];
@@ -39,19 +117,20 @@ export function POSMenuArea() {
   const filteredCategoryLabels = useMemo(() => {
     const q = debouncedCategorySearch.trim();
     if (!q) return categoryLabels;
-    const fuse = new Fuse(categoryLabels, { threshold: 0.3 });
-    return fuse.search(q).map(r => r.item);
+    return categoryLabels.filter(cat => cat.toLowerCase().includes(q.toLowerCase()));
   }, [categoryLabels, debouncedCategorySearch]);
 
   const filteredPakistaniSubfolders = useMemo((): PakistaniSubfolder[] => {
     const q = debouncedPakistaniSubSearch.trim();
     if (!q) return [...PAKISTANI_SUBFOLDERS];
-    const fuse = new Fuse(PAKISTANI_SUBFOLDERS as string[], { threshold: 0.3 });
-    return fuse.search(q).map(r => r.item as PakistaniSubfolder);
+    return PAKISTANI_SUBFOLDERS.filter(sub =>
+      sub.toLowerCase().includes(q.toLowerCase())
+    );
   }, [debouncedPakistaniSubSearch]);
 
   const activeCategory = openFolder || 'All';
 
+  // Get folder items
   const folderItems = useMemo(() => {
     if (!openFolder) return [];
     if (openFolder === 'All') return menuItems;
@@ -62,28 +141,27 @@ export function POSMenuArea() {
     return menuItems.filter(i => i.category === categoryLabelToDataCategory(openFolder));
   }, [openFolder, pakistaniSub, menuItems]);
 
-  const displayFolderItems = useMemo(() => {
+  // Filter items based on search
+  const displayItems = useMemo(() => {
     const q = debouncedFolderItemSearch.trim();
     if (!q) return folderItems;
-    const fuse = new Fuse(folderItems, {
-      keys: ['name', 'description', 'category'],
-      threshold: 0.3,
-    });
-    return fuse.search(q).map(r => r.item);
+
+    return folderItems.filter(item => matchesSearch(item.name, q));
   }, [folderItems, debouncedFolderItemSearch]);
 
-  // Sync searches
+  const currentSearchTerm = debouncedFolderItemSearch.trim();
+
   useEffect(() => { setFolderItemSearch(''); }, [openFolder, pakistaniSub, setFolderItemSearch]);
   useEffect(() => { setPakistaniSubSearch(''); }, [openFolder, setPakistaniSubSearch]);
 
-  const openTopFolder = useCallback((label: string) => {
+  const openTopFolder = (label: string) => {
     setOpenFolder(label);
     setPakistaniSub(null);
-  }, [setOpenFolder, setPakistaniSub]);
+  };
 
   const handleFastAdd = (item: any) => {
     if (item.available !== false) {
-      resetCustomizeForm(); // Close any open modals
+      resetCustomizeForm();
       addToCart(item);
     }
   };
@@ -97,92 +175,93 @@ export function POSMenuArea() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 pos-card p-0 overflow-hidden">
-
       {/* Search Header */}
-      <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+      <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="search"
             value={folderItemSearch}
             onChange={e => setFolderItemSearch(e.target.value)}
-            placeholder={`Search in ${activeCategory}...`}
-            className="w-full bg-muted/50 border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            placeholder="Search by name (e.g., 'karahi half' finds 'Chicken Karahi Half')..."
+            className="w-full bg-background border border-border rounded-lg pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
-        {/* Category Filter Dropdown */}
-        <div className="relative w-full sm:w-48 shrink-0">
+        <div className="relative w-full sm:w-44">
           <select
             value={activeCategory}
-            onChange={(e) => {
-              openTopFolder(e.target.value);
-              setFolderItemSearch('');
-            }}
-            className="w-full bg-muted/50 border border-border rounded-xl pl-4 pr-10 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer capitalize"
+            onChange={(e) => openTopFolder(e.target.value)}
+            className="w-full bg-background border border-border rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer capitalize"
           >
             {filteredCategoryLabels.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
 
       {/* Items Grid */}
-      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-        {displayFolderItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center h-full text-muted-foreground">
-            <Search className="w-10 h-10 mb-2 opacity-20" />
-            <p className="text-sm">No items found</p>
+      <div className="flex-1 overflow-y-auto p-4">
+        {displayItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Search className="w-8 h-8 text-muted-foreground/30 mb-3" />
+            <p className="text-sm text-muted-foreground">
+              No items match "{currentSearchTerm}"
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Try: "karahi half" or "half karahi" or "chicken karahi"
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-            {displayFolderItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => handleFastAdd(item)}
-                className={`flex flex-col text-left bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 transition-all duration-200 group relative ${item.available === false ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-                disabled={item.available === false}
-              >
-                {/* Customize Trigger - Small Icon Top Right */}
-                {item.available !== false && (
-                   <div 
-                    onClick={(e) => handleExplicitCustomize(e, item)}
-                    className="absolute top-2 right-2 z-10 w-7 h-7 bg-white/80 dark:bg-black/80 rounded-lg flex items-center justify-center border border-border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-white"
-                   >
-                     <PencilLine className="w-3.5 h-3.5" />
-                   </div>
-                )}
+          <>
+            {currentSearchTerm && (
+              <div className="mb-3 text-xs text-muted-foreground">
+                Found {displayItems.length} item(s) matching "{currentSearchTerm}"
+              </div>
+            )}
 
-                {item.image ? (
-                  <div className="relative aspect-square overflow-hidden bg-muted/50">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                    />
-                  </div>
-                ) : (
-                  <div className="aspect-square flex items-center justify-center bg-muted/30 p-4">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase text-center line-clamp-2">{item.name}</span>
-                  </div>
-                )}
-                
-                <div className="p-3 flex flex-col flex-1">
-                  <h3 className="text-xs font-bold text-foreground line-clamp-2 leading-tight flex-1">{item.name}</h3>
-                  <div className="mt-2 flex items-center justify-between gap-1">
-                    <span className="text-xs font-bold text-primary">Rs. {Math.round(item.price).toLocaleString()}</span>
-                    <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                      <Plus className="w-3 h-3 stroke-[3]" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {displayItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => handleFastAdd(item)}
+                  className={`flex flex-col text-left bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors group relative ${item.available === false ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={item.available === false}
+                >
+                  {item.available !== false && (
+                    <div ></div>
+                  )}
+
+                  {item.image ? (
+                    <div className="aspect-square overflow-hidden bg-muted/30">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="aspect-square flex items-center justify-center bg-muted/30 p-3">
+                      <span className="text-base font-medium text-muted-foreground text-center line-clamp-2">
+                        {currentSearchTerm ? highlightMatches(item.name, currentSearchTerm) : item.name}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="p-2">
+                    <h3 className="text-base font-medium text-foreground line-clamp-2 leading-tight">
+                      {currentSearchTerm ? highlightMatches(item.name, currentSearchTerm) : item.name}
+                    </h3>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-sm font-bold text-primary">Rs. {Math.round(item.price).toLocaleString()}</span>
                     </div>
                   </div>
-                </div>
-              </button>
-            ))}
-          </div>
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

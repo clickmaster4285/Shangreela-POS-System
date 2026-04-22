@@ -144,7 +144,7 @@ export function POSCartArea({
                   </p>
                 )}
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  <span className="text-sm font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                     Rs. {((Number(c.menuItem.price) + Number(c.extraPrice || 0)) * c.quantity).toLocaleString()}
                   </span>
                   {c.notes && (
@@ -168,7 +168,7 @@ export function POSCartArea({
                     }}
                     className="p-1 rounded bg-primary/5 text-primary hover:bg-primary hover:text-white"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => removeItem(c.menuItem.id, c.notes, c.extraName, c.extraPrice || 0)}
@@ -183,14 +183,14 @@ export function POSCartArea({
                     onClick={() => updateQty(c.menuItem.id, -1, c.notes, c.extraName, c.extraPrice || 0)}
                     className="w-6 h-6 rounded bg-card text-muted-foreground hover:bg-destructive hover:text-white flex items-center justify-center transition-colors"
                   >
-                    {c.quantity === 1 ? <Trash2 className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                    {c.quantity === 1 ? <Trash2 className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                   </button>
-                  <span className="w-4 text-center text-[11px] font-bold">{c.quantity}</span>
+                  <span className="w-4 text-center text-sm font-bold">{c.quantity}</span>
                   <button
                     onClick={() => updateQty(c.menuItem.id, 1, c.notes, c.extraName, c.extraPrice || 0)}
                     className="w-6 h-6 rounded bg-card text-muted-foreground hover:bg-primary hover:text-white flex items-center justify-center transition-colors"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               </div>
