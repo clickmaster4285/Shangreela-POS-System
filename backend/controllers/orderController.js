@@ -262,7 +262,6 @@ exports.create = async (req, res) => {
       }
     }
 
-    console.log("Order created successfully", row);
     broadcastOrderDomain();
     res.status(201).json({ id: row.code, dbId: String(row._id) });
   } catch (error) {
