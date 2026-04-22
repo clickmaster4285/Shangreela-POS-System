@@ -14,6 +14,8 @@ const TRANSFER_CATEGORIES = [
   "Chinese Section",
   "Continental Section",
   "Beverage Section",
+  "Chai Bar",
+  "Tandoor",
   "General",
 ];
 

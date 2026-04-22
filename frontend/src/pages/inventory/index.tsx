@@ -1,81 +1,72 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Package, AlertTriangle, Plus, Minus, Trash2, Search, Clock, TrendingDown, Archive, Truck, ArrowRightLeft, Edit2, X, Phone, Mail, MapPin, RotateCcw, Save } from 'lucide-react';
-import { type InventoryItem, type InventoryLog, type Supplier, type StockTransfer, inventoryCategories, transferCategories } from '@/data/inventory/inventoryData';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Plus, ArrowRightLeft, Truck, Package, Clock, AlertTriangle } from 'lucide-react';
+import { type InventoryItem, type Supplier, type StockTransfer, type InventoryLog, inventoryCategories, transferCategories } from '@/data/inventory/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/pos/use-submit-lock';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SummaryCards } from './components/SummaryCards';
+import { TabsNavigation } from './components/TabsNavigation';
+import { StockTab } from './components/StockTab';
+import { AlertsTab } from './components/AlertsTab';
+import { SuppliersTab } from './components/SuppliersTab';
+import { TransfersTab } from './components/TransfersTab';
+import { LogsTab } from './components/LogsTab';
+import { AddItemModal } from './modals/AddItemModal';
+import { RestockModal } from './modals/RestockModal';
+import { AdjustmentModal } from './modals/AdjustmentModal';
+import { TransferModal } from './modals/TransferModal';
+import { SupplierFormModal } from './modals/SupplierFormModal';
 
 type Tab = 'stock' | 'transfers' | 'alerts' | 'logs' | 'suppliers';
-
-const BASE_UNITS = [
-  'kg',
-  'g',
-  'liter',
-  'ml',
-  'dozen',
-  'tray',
-  'piece',
-  'pack',
-  'box',
-  'bottle',
-  'can',
-  'jar',
-  'bag',
-  'sack',
-  'cup',
-  'tbsp',
-  'tsp',
-  'slice',
-  'portion',
-  'plate',
-] as const;
 
 export default function InventoryManagement() {
   const queryClient = useQueryClient();
   const { isLocked, runLocked } = useSubmitLock();
+
+  // Tab state
   const [tab, setTab] = useState<Tab>('stock');
+
+  // Filter state
   const [search, setSearch] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('All');
   const [perishableOnly, setPerishableOnly] = useState(false);
-  
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showTransferForm, setShowTransferForm] = useState(false);
-  const [showSupplierForm, setShowSupplierForm] = useState(false);
-  
-  // Adjustment Modal (Use/Waste)
-  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
-  const [adjustQty, setAdjustQty] = useState('');
-  const [adjustAction, setAdjustAction] = useState<'use' | 'waste'>('use');
-  const [adjustNote, setAdjustNote] = useState('');
 
-  // Restock Modal
-  const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
-  const [restockData, setRestockData] = useState({
-    quantity: '',
-    costPerUnit: '',
-    supplier: '',
-    note: ''
-  });
-  
+  // Pagination state
   const [stockPage, setStockPage] = useState(1);
   const [logsPage, setLogsPage] = useState(1);
   const [transferPage, setTransferPage] = useState(1);
   const [supplierPage, setSupplierPage] = useState(1);
-  const [stockScrollTop, setStockScrollTop] = useState(0);
-  
-  // Supplier Form State
+
+  // Modal visibility
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showTransferForm, setShowTransferForm] = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+
+  // Edit states
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [supplierData, setSupplierData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: '',
-    items: [] as string[]
+  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
+  const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
+
+  // Form data states
+  const [newItem, setNewItem] = useState({
+    name: '', category: 'Meat', quantity: '', unit: 'kg',
+    minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '',
+  });
+  const [restockData, setRestockData] = useState({ quantity: '', costPerUnit: '', supplier: '', note: '' });
+  const [adjustQty, setAdjustQty] = useState('');
+  const [adjustAction, setAdjustAction] = useState<'use' | 'waste'>('use');
+  const [adjustNote, setAdjustNote] = useState('');
+  const [supplierData, setSupplierData] = useState({ name: '', phone: '', email: '', address: '', items: [] as string[] });
+  const [newTransfer, setNewTransfer] = useState({
+    fromLocation: '', toLocation: '', transferCategory: 'General', note: '',
+    items: [{ itemId: '', quantity: '', name: '', unit: '' }],
   });
 
+  // Queries
   const stockQuery = useQuery({
     queryKey: ['inventory-stock', stockPage, search, catFilter, perishableOnly],
     queryFn: async () => {
@@ -91,14 +82,21 @@ export default function InventoryManagement() {
     enabled: tab === 'stock' || tab === 'alerts',
   });
 
+  const statsQuery = useQuery({
+    queryKey: ['inventory-stats'],
+    queryFn: async () => {
+      const [lowStock, all] = await Promise.all([
+        api<PaginatedResponse<InventoryItem>>('/inventory/items/low-stock?page=1&limit=1'),
+        api<PaginatedResponse<InventoryItem>>('/inventory/items?page=1&limit=1'),
+      ]);
+      return { totalItems: all.pagination.total, lowStockCount: lowStock.pagination.total };
+    },
+  });
+
   const suppliersQuery = useQuery({
     queryKey: ['inventory-suppliers', supplierPage, supplierSearch],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: String(supplierPage),
-        limit: '30',
-        search: supplierSearch,
-      });
+      const params = new URLSearchParams({ page: String(supplierPage), limit: '30', search: supplierSearch });
       return api<PaginatedResponse<Supplier>>(`/inventory/suppliers?${params.toString()}`);
     },
     enabled: tab === 'suppliers' || showAddForm || !!restockItem,
@@ -121,18 +119,37 @@ export default function InventoryManagement() {
     queryFn: async () => api<{ locations: string[] }>('/inventory/locations'),
   });
 
+  const allInventoryQuery = useQuery({
+    queryKey: ['inventory-all'],
+    queryFn: async () => api<PaginatedResponse<InventoryItem>>('/inventory/items?page=1&limit=500'),
+    enabled: showTransferForm,
+    staleTime: 30_000,
+  });
+
   const inventory = stockQuery.data?.items ?? [];
-  const logs = logsQuery.data?.items ?? [];
+  const allInventory = allInventoryQuery.data?.items ?? inventory;
   const suppliers = suppliersQuery.data?.items ?? [];
   const transfers = transfersQuery.data?.items ?? [];
+  const logs = logsQuery.data?.items ?? [];
   const locations = locationsQuery.data?.locations ?? [];
-  const stockMeta = stockQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
-  const logsMeta = logsQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
-  const transferMeta = transfersQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
-  const supplierMeta = suppliersQuery.data?.pagination ?? { hasNext: false, hasPrev: false };
+
+  // Computed values for alerts
+  const lowStockItems = inventory.filter(i => i.quantity <= i.minStock);
+  const expiringItems = inventory.filter(i => {
+    if (!i.expiryDate) return false;
+    const diff = (new Date(i.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    return diff <= 2 && diff >= 0;
+  });
+  const expiredItems = inventory.filter(i => i.expiryDate && new Date(i.expiryDate) < new Date());
+  const perishableCount = inventory.filter(i => i.perishable).length;
+
+  const totalItems = statsQuery.data?.totalItems ?? stockQuery.data?.pagination.total ?? inventory.length;
+  const lowStockCount = statsQuery.data?.lowStockCount ?? 0;
 
   const refreshInventoryViews = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-all'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-logs'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-transfers'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-suppliers'] });
@@ -141,96 +158,7 @@ export default function InventoryManagement() {
 
   usePosRealtimeScopes(['inventory', 'dashboard'], refreshInventoryViews);
 
-  const lowStockItems = inventory.filter(i => i.quantity <= i.minStock);
-  const expiringItems = inventory.filter(i => {
-    if (!i.expiryDate) return false;
-    const diff = (new Date(i.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-    return diff <= 2 && diff >= 0;
-  });
-  const expiredItems = inventory.filter(i => {
-    if (!i.expiryDate) return false;
-    return new Date(i.expiryDate) < new Date();
-  });
-
-  const perishableCount = inventory.filter(i => i.perishable).length;
-  const supplierId = (s: Supplier) => s.id || (s as any)._id || '';
-  const transferId = (t: StockTransfer) => t.id || (t as any)._id || '';
-  const logId = (l: InventoryLog) => l.id || (l as any)._id || '';
-  const STOCK_ROW_HEIGHT = 66;
-  const STOCK_VIEWPORT_HEIGHT = 520;
-  const STOCK_OVERSCAN = 6;
-  const stockStartIndex = Math.max(0, Math.floor(stockScrollTop / STOCK_ROW_HEIGHT) - STOCK_OVERSCAN);
-  const stockEndIndex = Math.min(
-    inventory.length,
-    stockStartIndex + Math.ceil(STOCK_VIEWPORT_HEIGHT / STOCK_ROW_HEIGHT) + STOCK_OVERSCAN * 2
-  );
-  const virtualStockRows = useMemo(
-    () => inventory.slice(stockStartIndex, stockEndIndex),
-    [inventory, stockStartIndex, stockEndIndex]
-  );
-
-  const handleAdjust = async () => {
-    if (!adjustItem || !adjustQty) return;
-    const qty = parseFloat(adjustQty);
-    if (isNaN(qty) || qty <= 0) return;
-
-    try {
-      await api(`/inventory/items/${adjustItem.id}/adjust`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: adjustAction,
-          quantity: qty,
-          note: adjustNote || `${adjustAction === 'use' ? 'Used' : 'Wasted'} ${qty} ${adjustItem.unit}`,
-        }),
-      });
-      toast.success(`${adjustAction === 'use' ? 'Used' : 'Wasted'} ${qty} ${adjustItem.unit} of ${adjustItem.name}`);
-      setAdjustItem(null);
-      setAdjustQty('');
-      setAdjustNote('');
-      refreshInventoryViews();
-    } catch (error) {
-      toast.error('Failed to adjust stock');
-    }
-  };
-
-  const handleRestockSubmit = async () => {
-    if (!restockItem || !restockData.quantity) return;
-    const qty = parseFloat(restockData.quantity);
-    const cost = parseFloat(restockData.costPerUnit) || 0;
-    if (isNaN(qty) || qty <= 0) return;
-
-    try {
-      await api(`/inventory/items/${restockItem.id}/restock`, {
-        method: 'POST',
-        body: JSON.stringify({
-          quantity: qty,
-          costPerUnit: cost,
-          supplier: restockData.supplier || null,
-          note: restockData.note,
-        }),
-      });
-      toast.success(`Restocked ${qty} ${restockItem.unit} of ${restockItem.name}`);
-      setRestockItem(null);
-      setRestockData({ quantity: '', costPerUnit: '', supplier: '', note: '' });
-      refreshInventoryViews();
-    } catch (error) {
-      toast.error('Failed to restock');
-    }
-  };
-
-  const [newItem, setNewItem] = useState({ 
-    name: '', 
-    category: 'Meat', 
-    quantity: '', 
-    unit: 'kg', 
-    minStock: '', 
-    costPerUnit: '', 
-    perishable: false, 
-    expiryDate: '', 
-    supplier: '' 
-  });
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-
+  // Handlers for CRUD operations
   const handleAddItem = async () => {
     if (!newItem.name || !newItem.quantity) return;
     try {
@@ -242,90 +170,75 @@ export default function InventoryManagement() {
         supplier: newItem.supplier || null,
       };
       if (editingItem?.id || editingItem?._id) {
-        await api(`/inventory/items/${editingItem.id || editingItem._id}`, {
-          method: 'PUT',
-          body: JSON.stringify(itemData),
-        });
+        await api(`/inventory/items/${editingItem.id || editingItem._id}`, { method: 'PUT', body: JSON.stringify(itemData) });
         toast.success('Item updated');
       } else {
         await api('/inventory/items', { method: 'POST', body: JSON.stringify(itemData) });
         toast.success('Item added to inventory');
       }
-      setShowAddForm(false);
-      setEditingItem(null);
-      setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
+      setShowAddForm(false); setEditingItem(null);
+      resetNewItemForm();
       refreshInventoryViews();
-    } catch (error) {
-      toast.error('Failed to add item');
-    }
+    } catch { toast.error('Failed to add item'); }
   };
 
   const handleDeleteItem = async (item: InventoryItem) => {
     const itemId = item.id || item._id;
-    if (!itemId) {
-      toast.error('Item id missing');
-      return;
-    }
+    if (!itemId) { toast.error('Item id missing'); return; }
     if (!window.confirm(`Delete "${item.name}" from inventory?`)) return;
     try {
       await api(`/inventory/items/${itemId}`, { method: 'DELETE' });
       toast.success('Item deleted');
       refreshInventoryViews();
-    } catch {
-      toast.error('Failed to delete item');
-    }
+    } catch { toast.error('Failed to delete item'); }
   };
 
-  const openAddItemForm = () => {
-    setEditingItem(null);
-    setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
-    setShowAddForm(true);
+  const handleRestockSubmit = async () => {
+    if (!restockItem || !restockData.quantity) return;
+    const qty = parseFloat(restockData.quantity);
+    const cost = parseFloat(restockData.costPerUnit) || 0;
+    if (isNaN(qty) || qty <= 0) return;
+    try {
+      await api(`/inventory/items/${restockItem.id}/restock`, {
+        method: 'POST',
+        body: JSON.stringify({ quantity: qty, costPerUnit: cost, supplier: restockData.supplier || null, note: restockData.note }),
+      });
+      toast.success(`Restocked ${qty} ${restockItem.unit} of ${restockItem.name}`);
+      setRestockItem(null);
+      setRestockData({ quantity: '', costPerUnit: '', supplier: '', note: '' });
+      refreshInventoryViews();
+    } catch { toast.error('Failed to restock'); }
   };
 
-  const openEditItemForm = (item: InventoryItem) => {
-    setEditingItem(item);
-    setNewItem({
-      name: item.name || '',
-      category: item.category || 'Meat',
-      quantity: String(item.quantity ?? ''),
-      unit: item.unit || 'kg',
-      minStock: String(item.minStock ?? ''),
-      costPerUnit: String(item.costPerUnit ?? ''),
-      perishable: Boolean(item.perishable),
-      expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : '',
-      supplier: typeof item.supplier === 'object' ? ((item.supplier as any)?._id || '') : (item.supplier || ''),
-    });
-    setShowAddForm(true);
+  const handleAdjust = async () => {
+    if (!adjustItem || !adjustQty) return;
+    const qty = parseFloat(adjustQty);
+    if (isNaN(qty) || qty <= 0) return;
+    try {
+      await api(`/inventory/items/${adjustItem.id}/adjust`, {
+        method: 'POST',
+        body: JSON.stringify({ action: adjustAction, quantity: qty, note: adjustNote || `${adjustAction === 'use' ? 'Used' : 'Wasted'} ${qty} ${adjustItem.unit}` }),
+      });
+      toast.success(`${adjustAction === 'use' ? 'Used' : 'Wasted'} ${qty} ${adjustItem.unit} of ${adjustItem.name}`);
+      setAdjustItem(null); setAdjustQty(''); setAdjustNote('');
+      refreshInventoryViews();
+    } catch { toast.error('Failed to adjust stock'); }
   };
 
-  // Supplier Management Handlers
   const handleSupplierSubmit = async () => {
-    if (!supplierData.name || !supplierData.phone) {
-      toast.error('Name and phone are required');
-      return;
-    }
-
+    if (!supplierData.name || !supplierData.phone) { toast.error('Name and phone are required'); return; }
     try {
       if (editingSupplier) {
-        await api(`/inventory/suppliers/${editingSupplier.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(supplierData)
-        });
+        await api(`/inventory/suppliers/${editingSupplier.id}`, { method: 'PUT', body: JSON.stringify(supplierData) });
         toast.success('Supplier updated');
       } else {
-        await api('/inventory/suppliers', {
-          method: 'POST',
-          body: JSON.stringify(supplierData)
-        });
+        await api('/inventory/suppliers', { method: 'POST', body: JSON.stringify(supplierData) });
         toast.success('Supplier added');
       }
-      setShowSupplierForm(false);
-      setEditingSupplier(null);
+      setShowSupplierForm(false); setEditingSupplier(null);
       setSupplierData({ name: '', phone: '', email: '', address: '', items: [] });
       refreshInventoryViews();
-    } catch (error) {
-      toast.error('Operation failed');
-    }
+    } catch { toast.error('Operation failed'); }
   };
 
   const handleDeleteSupplier = async (id: string) => {
@@ -334,45 +247,15 @@ export default function InventoryManagement() {
       await api(`/inventory/suppliers/${id}`, { method: 'DELETE' });
       toast.success('Supplier removed');
       refreshInventoryViews();
-    } catch (error) {
-      toast.error('Failed to delete supplier');
-    }
+    } catch { toast.error('Failed to delete supplier'); }
   };
-
-  const openEditSupplier = (s: Supplier) => {
-    setEditingSupplier(s);
-    setSupplierData({
-      name: s.name,
-      phone: s.phone,
-      email: s.email,
-      address: s.address,
-      items: s.items || []
-    });
-    setShowSupplierForm(true);
-  };
-
-  // Stock Transfer logic
-  const [newTransfer, setNewTransfer] = useState({
-    fromLocation: '',
-    toLocation: '',
-    transferCategory: 'General',
-    note: '',
-    items: [{ itemId: '', quantity: '', name: '', unit: '' }]
-  });
-
-  useEffect(() => {
-    if (locations.length > 0 && !newTransfer.fromLocation) {
-      setNewTransfer(prev => ({ 
-        ...prev, 
-        fromLocation: locations[0], 
-        toLocation: locations[1] || locations[0] 
-      }));
-    }
-  }, [locations]);
 
   const handleCreateTransfer = async () => {
-    if (!newTransfer.fromLocation || !newTransfer.toLocation || newTransfer.items.some(i => !i.itemId || !i.quantity)) {
-      toast.error('Please fill all required fields');
+    // Filter out empty items
+    const validItems = newTransfer.items.filter(i => i.itemId && i.quantity && parseFloat(i.quantity) > 0);
+
+    if (!newTransfer.fromLocation || !newTransfer.toLocation || validItems.length === 0) {
+      toast.error('Please add at least one valid item with quantity');
       return;
     }
 
@@ -384,78 +267,110 @@ export default function InventoryManagement() {
           toLocation: newTransfer.toLocation,
           transferCategory: newTransfer.transferCategory,
           note: newTransfer.note,
-          items: newTransfer.items.map(i => ({ itemId: i.itemId, quantity: parseFloat(i.quantity) }))
-        })
+          items: validItems.map(i => ({ itemId: i.itemId, quantity: parseFloat(i.quantity) })),
+        }),
       });
       toast.success('Transfer complete');
       setShowTransferForm(false);
-      setNewTransfer({
-        fromLocation: locations[0],
-        toLocation: locations[1] || locations[0],
-        transferCategory: 'General',
-        note: '',
-        items: [{ itemId: '', quantity: '', name: '', unit: '' }]
-      });
+      resetTransferForm();
       refreshInventoryViews();
     } catch (error: any) {
       toast.error(error.message || 'Transfer failed');
     }
   };
 
+  // Helper functions
+  const resetNewItemForm = () => {
+    setNewItem({ name: '', category: 'Meat', quantity: '', unit: 'kg', minStock: '', costPerUnit: '', perishable: false, expiryDate: '', supplier: '' });
+  };
+
+  const resetTransferForm = () => {
+    setNewTransfer({ fromLocation: locations[0], toLocation: locations[1] || locations[0], transferCategory: 'General', note: '', items: [{ itemId: '', quantity: '', name: '', unit: '' }] });
+  };
+
+  const openAddItemForm = () => {
+    setEditingItem(null);
+    resetNewItemForm();
+    setShowAddForm(true);
+  };
+
+  const openEditItemForm = (item: InventoryItem) => {
+    setEditingItem(item);
+    setNewItem({
+      name: item.name || '', category: item.category || 'Meat',
+      quantity: String(item.quantity ?? ''), unit: item.unit || 'kg',
+      minStock: String(item.minStock ?? ''), costPerUnit: String(item.costPerUnit ?? ''),
+      perishable: Boolean(item.perishable),
+      expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : '',
+      supplier: typeof item.supplier === 'object' ? ((item.supplier as any)?._id || '') : (item.supplier || ''),
+    });
+    setShowAddForm(true);
+  };
+
+  const openEditSupplier = (s: Supplier) => {
+    setEditingSupplier(s);
+    setSupplierData({ name: s.name, phone: s.phone, email: s.email, address: s.address, items: s.items || [] });
+    setShowSupplierForm(true);
+  };
+
   const addTransferItem = () => {
-    setNewTransfer(p => ({
-      ...p,
-      items: [...p.items, { itemId: '', quantity: '', name: '', unit: '' }]
-    }));
+    setNewTransfer(p => ({ ...p, items: [...p.items, { itemId: '', quantity: '', name: '', unit: '' }] }));
   };
 
   const removeTransferItem = (index: number) => {
     if (newTransfer.items.length <= 1) return;
-    setNewTransfer(p => ({
-      ...p,
-      items: p.items.filter((_, i) => i !== index)
-    }));
+    setNewTransfer(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }));
   };
 
-  const updateTransferItem = (index: number, itemId: string) => {
-    const item = inventory.find(i => (i.id === itemId || i._id === itemId));
+  const updateTransferItem = (index: number, itemId: string, quantity?: string) => {
+    const item = allInventory.find(i => (i.id === itemId || i._id === itemId));
     if (!item) return;
-
     setNewTransfer(p => {
       const newItems = [...p.items];
       newItems[index] = {
         itemId: item.id || item._id || '',
         name: item.name,
         unit: item.unit,
-        quantity: newItems[index].quantity
+        quantity: quantity || newItems[index].quantity || ''
       };
       return { ...p, items: newItems };
     });
   };
 
-  const tabs: { key: Tab; label: string; icon: any; count?: number }[] = [
-    { key: 'stock', label: 'Stock', icon: Package },
-    { key: 'transfers', label: 'Transfers', icon: ArrowRightLeft },
-    { key: 'alerts', label: 'Alerts', icon: AlertTriangle, count: lowStockItems.length + expiringItems.length + expiredItems.length },
-    { key: 'logs', label: 'History', icon: Clock },
-    { key: 'suppliers', label: 'Suppliers', icon: Truck },
+  // Set initial transfer locations
+  useEffect(() => {
+    if (locations.length > 0 && !newTransfer.fromLocation) {
+      setNewTransfer(prev => ({ ...prev, fromLocation: locations[0], toLocation: locations[1] || locations[0] }));
+    }
+  }, [locations]);
+
+  const tabs = [
+    { key: 'stock' as Tab, label: 'Stock', icon: Package },
+    { key: 'transfers' as Tab, label: 'Transfers', icon: ArrowRightLeft },
+    { key: 'alerts' as Tab, label: 'Alerts', icon: AlertTriangle, count: lowStockItems.length + expiringItems.length + expiredItems.length },
+    { key: 'logs' as Tab, label: 'History', icon: Clock },
+    { key: 'suppliers' as Tab, label: 'Suppliers', icon: Truck },
   ];
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="font-serif text-xl font-bold text-foreground">Inventory Management</h1>
         <div className="flex gap-2">
           {tab === 'suppliers' ? (
-            <button onClick={() => { setEditingSupplier(null); setSupplierData({ name: '', phone: '', email: '', address: '', items: [] }); setShowSupplierForm(true); }} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
+            <button onClick={() => { setEditingSupplier(null); setSupplierData({ name: '', phone: '', email: '', address: '', items: [] }); setShowSupplierForm(true); }}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
               <Plus className="w-4 h-4" /> Add Supplier
             </button>
           ) : (
             <>
-              <button onClick={() => setShowTransferForm(true)} className="bg-muted text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors">
+              <button onClick={() => setShowTransferForm(true)}
+                className="bg-muted text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors">
                 <ArrowRightLeft className="w-4 h-4" /> Transfer
               </button>
-              <button onClick={openAddItemForm} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
+              <button onClick={openAddItemForm}
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
                 <Plus className="w-4 h-4" /> Add Item
               </button>
             </>
@@ -464,422 +379,153 @@ export default function InventoryManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><Package className="w-3.5 h-3.5" /> Total Items</div>
-          <p className="text-2xl font-bold text-foreground">{inventory.length}</p>
-        </div>
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-2 text-warning text-xs mb-1"><TrendingDown className="w-3.5 h-3.5" /> Low Stock</div>
-          <p className="text-2xl font-bold text-warning">{lowStockItems.length}</p>
-        </div>
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-2 text-orange-500 text-xs mb-1"><Clock className="w-3.5 h-3.5" /> Expiring Soon</div>
-          <p className="text-2xl font-bold text-orange-500">{expiringItems.length}</p>
-        </div>
-        <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-2 text-destructive text-xs mb-1"><AlertTriangle className="w-3.5 h-3.5" /> Expired</div>
-          <p className="text-2xl font-bold text-destructive">{expiredItems.length}</p>
-        </div>
-        <div className="bg-card rounded-2xl p-4 border border-border col-span-2 lg:col-span-1 shadow-sm">
-          <div className="flex items-center gap-2 text-orange-600 text-xs mb-1"><Archive className="w-3.5 h-3.5" /> Perishable SKUs</div>
-          <p className="text-2xl font-bold text-foreground">{perishableCount}</p>
-        </div>
-      </div>
+      <SummaryCards
+        totalItems={totalItems}
+        lowStockCount={lowStockCount}
+        expiringCount={expiringItems.length}
+        expiredCount={expiredItems.length}
+        perishableCount={perishableCount}
+      />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 overflow-x-auto no-scrollbar">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${tab === t.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-            <t.icon className="w-3.5 h-3.5" />
-            {t.label}
-            {t.count ? <span className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-full">{t.count}</span> : null}
-          </button>
-        ))}
-      </div>
+      {/* Tabs Navigation */}
+      <TabsNavigation tabs={tabs} activeTab={tab} onTabChange={setTab} />
 
       {/* Tab Content */}
       {tab === 'stock' && (
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search inventory..." className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-xl text-sm outline-none shadow-sm" />
-            </div>
-            <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="bg-card border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm">
-              <option value="All">All Categories</option>
-              {inventoryCategories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <label className="flex items-center gap-2 text-sm text-foreground whitespace-nowrap cursor-pointer">
-              <input type="checkbox" checked={perishableOnly} onChange={e => setPerishableOnly(e.target.checked)} className="rounded accent-primary" />
-              Perishable only
-            </label>
-          </div>
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div
-              className="overflow-x-auto overflow-y-auto"
-              style={{ maxHeight: `${STOCK_VIEWPORT_HEIGHT}px` }}
-              onScroll={(e) => setStockScrollTop(e.currentTarget.scrollTop)}
-            >
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Item</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Category</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Qty</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Min</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Supplier</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Expiry</th>
-                    <th className="text-center px-4 py-3 font-medium text-muted-foreground">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockStartIndex > 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ height: stockStartIndex * STOCK_ROW_HEIGHT }} />
-                    </tr>
-                  )}
-                  {virtualStockRows.map(item => {
-                    const isLow = item.quantity <= item.minStock;
-                    const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date();
-                    return (
-                      <tr key={item.id || item._id} className={`border-b border-border/50 ${isExpired ? 'bg-destructive/5' : isLow ? 'bg-warning/5' : ''} hover:bg-muted/20 transition-colors`}>
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          {item.name}
-                          {item.perishable && <span className="ml-1.5 text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">P</span>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{item.category}</td>
-                        <td className={`px-4 py-3 text-right font-semibold ${isLow ? 'text-warning' : 'text-foreground'}`}>{item.quantity} {item.unit}</td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">{item.minStock}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {item.supplier && typeof item.supplier === 'object' ? item.supplier.name : '—'}
-                        </td>
-                        <td className={`px-4 py-3 text-xs ${isExpired ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{item.expiryDate || '—'}</td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => {
-                                setRestockItem(item);
-                                setRestockData({
-                                  quantity: '',
-                                  costPerUnit: item.costPerUnit?.toString() || '',
-                                  supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : '',
-                                  note: '',
-                                });
-                              }}
-                              className="bg-success/10 text-success px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-success hover:text-white transition-colors"
-                            >
-                              <Plus className="w-3 h-3" /> Restock
-                            </button>
-                            <button onClick={() => openEditItemForm(item)} className="bg-primary/10 text-primary px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-primary hover:text-primary-foreground transition-colors">
-                              <Edit2 className="w-3 h-3" /> Edit
-                            </button>
-                            <button onClick={() => { setAdjustItem(item); setAdjustAction('use'); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground border border-border" title="Adjustment"><RotateCcw className="w-3.5 h-3.5" /></button>
-                            <button
-                              onClick={() => { void runLocked(`inventory-delete-item-${item.id || item._id}`, () => handleDeleteItem(item)); }}
-                              disabled={isLocked(`inventory-delete-item-${item.id || item._id}`)}
-                              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive border border-destructive/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                              title="Delete item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {inventory.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground italic">No items in inventory.</td></tr>
-                  )}
-                  {stockEndIndex < inventory.length && (
-                    <tr>
-                      <td colSpan={7} style={{ height: (inventory.length - stockEndIndex) * STOCK_ROW_HEIGHT }} />
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 p-3">
-            <button disabled={!stockMeta.hasPrev} onClick={() => setStockPage(p => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted transition-colors shadow-sm">Previous</button>
-            <button disabled={!stockMeta.hasNext} onClick={() => setStockPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted transition-colors shadow-sm">Next</button>
-          </div>
-        </div>
+        <StockTab
+          inventory={inventory}
+          stockMeta={stockQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
+          stockPage={stockPage}
+          setStockPage={setStockPage}
+          search={search}
+          setSearch={setSearch}
+          catFilter={catFilter}
+          setCatFilter={setCatFilter}
+          perishableOnly={perishableOnly}
+          setPerishableOnly={setPerishableOnly}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          setRestockItem={setRestockItem}
+          setRestockData={setRestockData}
+          openEditItemForm={openEditItemForm}
+          setAdjustItem={setAdjustItem}
+          setAdjustAction={setAdjustAction}
+          handleDeleteItem={handleDeleteItem}
+        />
+      )}
+
+      {tab === 'alerts' && (
+        <AlertsTab
+          lowStockItems={lowStockItems}
+          expiredItems={expiredItems}
+          setRestockItem={setRestockItem}
+          setRestockData={setRestockData}
+          setAdjustItem={setAdjustItem}
+          setAdjustAction={setAdjustAction}
+        />
       )}
 
       {tab === 'suppliers' && (
-        <div className="space-y-4">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)} placeholder="Search suppliers..." className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-xl text-sm outline-none shadow-sm" />
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {suppliers.map(s => (
-              <div key={supplierId(s)} className="bg-card rounded-2xl border border-border p-5 space-y-4 shadow-sm hover:shadow-md transition-shadow relative group">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"><Truck className="w-5 h-5" /></div>
-                    <h3 className="font-bold text-foreground">{s.name}</h3>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditSupplier(s)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground border border-border"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDeleteSupplier(supplierId(s))} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive border border-destructive/20"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-                <div className="space-y-2 pt-1 border-t border-border/50 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2"><Phone className="w-3 h-3" /> {s.phone}</div>
-                  <div className="flex items-center gap-2"><Mail className="w-3 h-3" /> {s.email || '—'}</div>
-                  <div className="flex items-center gap-2"><MapPin className="w-3 h-3" /> {s.address || '—'}</div>
-                </div>
-              </div>
-            ))}
-            {suppliers.length === 0 && (
-              <div className="col-span-full py-20 text-center bg-muted/20 border border-dashed border-border rounded-2xl italic text-muted-foreground">
-                No suppliers found matching your criteria.
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <button disabled={!supplierMeta.hasPrev} onClick={() => setSupplierPage(p => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Previous</button>
-            <button disabled={!supplierMeta.hasNext} onClick={() => setSupplierPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Next</button>
-          </div>
-        </div>
+        <SuppliersTab
+          suppliers={suppliers}
+          supplierSearch={supplierSearch}
+          setSupplierSearch={setSupplierSearch}
+          supplierMeta={suppliersQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
+          supplierPage={supplierPage}
+          setSupplierPage={setSupplierPage}
+          onEditSupplier={openEditSupplier}
+          onDeleteSupplier={handleDeleteSupplier}
+        />
       )}
 
       {tab === 'transfers' && (
-        <div className="space-y-3">
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Transfer #</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Category</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">From</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">To</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Items</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Date</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transfers.map(tr => (
-                    <tr key={transferId(tr)} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 font-bold text-foreground">{tr.transferNumber}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{tr.transferCategory}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{tr.fromLocation}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{tr.toLocation}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{tr.items.length} items</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(tr.transferDate).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 text-[10px] font-bold uppercase"><span className={tr.status === 'completed' ? 'text-green-600' : 'text-orange-600'}>{tr.status}</span></td>
-                    </tr>
-                  ))}
-                  {transfers.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground italic">No transfers recorded.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 p-3">
-            <button disabled={!transferMeta.hasPrev} onClick={() => setTransferPage(p => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Previous</button>
-            <button disabled={!transferMeta.hasNext} onClick={() => setTransferPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Next</button>
-          </div>
-        </div>
+        <TransfersTab
+          transfers={transfers}
+          transferMeta={transfersQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
+          transferPage={transferPage}
+          setTransferPage={setTransferPage}
+        />
       )}
 
       {tab === 'logs' && (
-        <div className="space-y-3">
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Time</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Item</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Action</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Qty</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Price</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map(log => (
-                    <tr key={logId(log)} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 text-muted-foreground text-[10px]">{new Date(log.timestamp).toLocaleString()}</td>
-                      <td className="px-4 py-3 font-bold">{log.itemName}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${log.action === 'restocked' ? 'bg-green-100 text-green-700' : log.action === 'wasted' ? 'bg-red-100 text-red-700' : 'bg-muted text-muted-foreground'}`}>{log.action}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold">{log.quantity}{(log as any).unit ? ` ${(log as any).unit}` : ''}</td>
-                      <td className="px-4 py-3 text-right font-mono text-primary font-bold">
-                        {log.price ? `Rs. ${log.price}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs italic">{log.note}</td>
-                    </tr>
-                  ))}
-                  {logs.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground italic">No activities recorded yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 p-3">
-            <button disabled={!logsMeta.hasPrev} onClick={() => setLogsPage(p => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Previous</button>
-            <button disabled={!logsMeta.hasNext} onClick={() => setLogsPage(p => p + 1)} className="px-3 py-1.5 rounded-xl border border-border text-xs disabled:opacity-50 hover:bg-muted shadow-sm transition-colors">Next</button>
-          </div>
-        </div>
-      )}
-
-      {/* Alerts Tab (Same as stock filtering basically) */}
-      {tab === 'alerts' && (
-        <div className="space-y-4">
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Critical Item</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Issue</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Current Stock</th>
-                    <th className="text-center px-4 py-3 font-medium text-muted-foreground">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lowStockItems.map(item => (
-                    <tr key={item.id || item._id} className="border-b border-border/50 bg-warning/5">
-                      <td className="px-4 py-3 font-bold">{item.name}</td>
-                      <td className="px-4 py-3 text-warning text-xs font-bold uppercase tracking-tight flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Low Stock (Min: {item.minStock})</td>
-                      <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
-                      <td className="px-4 py-3 text-center"><button onClick={() => { setRestockItem(item); setRestockData({ quantity: '', costPerUnit: item.costPerUnit?.toString() || '', supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : '', note: '' }); }} className="bg-primary text-primary-foreground px-3 py-1 rounded-lg text-xs font-bold">Restock</button></td>
-                    </tr>
-                  ))}
-                  {expiredItems.map(item => (
-                    <tr key={item.id || item._id} className="border-b border-border/50 bg-destructive/5">
-                      <td className="px-4 py-3 font-bold">{item.name}</td>
-                      <td className="px-4 py-3 text-destructive text-xs font-bold uppercase tracking-tight flex items-center gap-1"><X className="w-3 h-3" /> Expired ({item.expiryDate})</td>
-                      <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
-                      <td className="px-4 py-3 text-center"><button onClick={() => { setAdjustItem(item); setAdjustAction('waste'); }} className="bg-destructive text-destructive-foreground px-3 py-1 rounded-lg text-xs font-bold">Mark Wasted</button></td>
-                    </tr>
-                  ))}
-                  {lowStockItems.length === 0 && expiredItems.length === 0 && (
-                    <tr><td colSpan={4} className="px-4 py-20 text-center text-muted-foreground italic"><Package className="w-12 h-12 mx-auto mb-3 opacity-20" /><p>No critical alerts at this time.</p></td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <LogsTab
+          logs={logs}
+          logsMeta={logsQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
+          logsPage={logsPage}
+          setLogsPage={setLogsPage}
+        />
       )}
 
       {/* Modals */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between">
-              <h3 className="font-serif text-lg font-bold text-foreground">{editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}</h3>
-              <button type="button" onClick={() => { setShowAddForm(false); setEditingItem(null); }}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button>
-            </div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Item Name</label><input value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Basmati Rice" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Category</label><select value={newItem.category} onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20">{inventoryCategories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Base Unit</label><select value={newItem.unit} onChange={e => setNewItem(p => ({ ...p, unit: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20">{BASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Opening Qty</label><input type="number" value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: e.target.value }))} placeholder="0" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Min Stock</label><input type="number" value={newItem.minStock} onChange={e => setNewItem(p => ({ ...p, minStock: e.target.value }))} placeholder="5" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Cost/Unit</label><input type="number" value={newItem.costPerUnit} onChange={e => setNewItem(p => ({ ...p, costPerUnit: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            </div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Supplier (Optional)</label><select value={newItem.supplier} onChange={e => setNewItem(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={supplierId(s)} value={supplierId(s)}>{s.name}</option>)}</select></div>
-            <label className="flex items-center gap-2 text-sm py-1 cursor-pointer"><input type="checkbox" checked={newItem.perishable} onChange={e => setNewItem(p => ({ ...p, perishable: e.target.checked }))} className="rounded accent-primary" /><span className="text-muted-foreground text-xs">Perishable item (has expiry date)</span></label>
-            {newItem.perishable && (
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Expiry Date</label><input type="date" value={newItem.expiryDate} onChange={e => setNewItem(p => ({ ...p, expiryDate: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            )}
-            <div className="flex gap-2 pt-2"><button onClick={() => { setShowAddForm(false); setEditingItem(null); }} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-add-item', handleAddItem); }} disabled={isLocked('inventory-add-item')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-add-item') ? 'Saving...' : editingItem ? 'Save Changes' : 'Add Item'}</button></div>
-          </div>
-        </div>
+        <AddItemModal
+          editingItem={editingItem}
+          newItem={newItem}
+          setNewItem={setNewItem}
+          suppliers={suppliers}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          onClose={() => { setShowAddForm(false); setEditingItem(null); }}
+          onSubmit={handleAddItem}
+        />
       )}
 
       {restockItem && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground flex items-center gap-2"><RotateCcw className="w-5 h-5 text-primary" /> Restock Item</h3><button onClick={() => setRestockItem(null)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
-            <div className="p-3 bg-primary/5 border border-primary/10 rounded-xl"><p className="text-sm font-bold text-foreground">{restockItem.name}</p><p className="text-xs text-muted-foreground">Current Stock: {restockItem.quantity} {restockItem.unit}</p></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">New Quantity</label><input type="number" value={restockData.quantity} onChange={e => setRestockData(p => ({ ...p, quantity: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-              <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Cost Per {restockItem.unit}</label><input type="number" value={restockData.costPerUnit} onChange={e => setRestockData(p => ({ ...p, costPerUnit: e.target.value }))} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            </div>
-            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Supplier</label><select value={restockData.supplier} onChange={e => setRestockData(p => ({ ...p, supplier: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">Select Supplier</option>{suppliers.map(s => <option key={supplierId(s)} value={supplierId(s)}>{s.name}</option>)}</select></div>
-            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Note</label><input value={restockData.note} onChange={e => setRestockData(p => ({ ...p, note: e.target.value }))} placeholder="Purchase details..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setRestockItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-restock', handleRestockSubmit); }} disabled={isLocked('inventory-restock')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-restock') ? 'Saving...' : 'Confirm'}</button></div>
-          </div>
-        </div>
+        <RestockModal
+          restockItem={restockItem}
+          restockData={restockData}
+          setRestockData={setRestockData}
+          suppliers={suppliers}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          onClose={() => setRestockItem(null)}
+          onSubmit={handleRestockSubmit}
+        />
       )}
 
       {adjustItem && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground">Stock Adjustment</h3><button onClick={() => setAdjustItem(null)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
-            <div className="p-3 bg-muted/50 rounded-xl"><p className="text-sm font-bold text-foreground">{adjustItem.name}</p><p className="text-xs text-muted-foreground">Current Balance: {adjustItem.quantity} {adjustItem.unit}</p></div>
-            <div className="flex gap-1 bg-muted rounded-xl p-1">{(['use', 'waste'] as const).map(a => (<button key={a} onClick={() => setAdjustAction(a)} className={`flex-1 py-2 rounded-lg text-xs font-bold capitalize transition-all ${adjustAction === a ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>{a}</button>))}</div>
-            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Quantity to {adjustAction}</label><input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} placeholder="0.00" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="space-y-1"><label className="text-[10px] font-bold text-muted-foreground ml-1 uppercase">Reason / Note</label><input value={adjustNote} onChange={e => setAdjustNote(e.target.value)} placeholder="e.g. Daily prep..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setAdjustItem(null)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-adjust', handleAdjust); }} disabled={isLocked('inventory-adjust')} className={`flex-1 py-2 rounded-xl text-sm font-bold text-primary-foreground transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed ${adjustAction === 'waste' ? 'bg-red-600 hover:bg-red-700' : 'bg-foreground hover:bg-black'}`}>{isLocked('inventory-adjust') ? 'Saving...' : 'Confirm'}</button></div>
-          </div>
-        </div>
+        <AdjustmentModal
+          adjustItem={adjustItem}
+          adjustQty={adjustQty}
+          setAdjustQty={setAdjustQty}
+          adjustAction={adjustAction}
+          setAdjustAction={setAdjustAction}
+          adjustNote={adjustNote}
+          setAdjustNote={setAdjustNote}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          onClose={() => setAdjustItem(null)}
+          onSubmit={handleAdjust}
+        />
       )}
 
       {showTransferForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between">
-              <h3 className="font-serif text-lg font-bold text-foreground flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-primary" /> Stock Transfer</h3>
-              <button type="button" onClick={() => setShowTransferForm(false)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Section</label><select value={newTransfer.transferCategory} onChange={e => setNewTransfer(p => ({ ...p, transferCategory: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm">{transferCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">From</label><select value={newTransfer.fromLocation} onChange={e => setNewTransfer(p => ({ ...p, fromLocation: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm">{locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}</select></div>
-                <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">To</label><select value={newTransfer.toLocation} onChange={e => setNewTransfer(p => ({ ...p, toLocation: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm">{locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}</select></div>
-              </div>
-            </div>
-            <div className="space-y-2 pt-2">
-              <div className="flex justify-between items-center"><label className="text-xs font-medium text-muted-foreground ml-1">Items to Transfer</label><button onClick={addTransferItem} className="text-xs text-primary font-bold hover:underline">+ Add</button></div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
-                {newTransfer.items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 p-2 border border-border rounded-xl bg-muted/30 items-center">
-                    <select value={item.itemId} onChange={e => updateTransferItem(idx, e.target.value)} className="flex-1 bg-transparent border-none text-sm outline-none"><option value="">Select Item</option>{inventory.map(i => <option key={i.id || i._id} value={i.id || i._id}>{i.name} ({i.quantity} {i.unit})</option>)}</select>
-                    <input type="number" step="0.01" min="0.01" value={item.quantity} onChange={e => { const newItems = [...newTransfer.items]; newItems[idx].quantity = e.target.value; setNewTransfer(p => ({ ...p, items: newItems })); }} placeholder="Qty" className="w-20 bg-transparent border-none text-sm text-right outline-none" />
-                    <span className="text-xs text-muted-foreground w-12 text-left">{item.unit || 'unit'}</span>
-                    <button onClick={() => removeTransferItem(idx)} className="text-destructive p-1 hover:bg-destructive/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Reason (Optional)</label><input value={newTransfer.note} onChange={e => setNewTransfer(p => ({ ...p, note: e.target.value }))} placeholder="Reason for transfer..." className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20" /></div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setShowTransferForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-transfer', handleCreateTransfer); }} disabled={isLocked('inventory-transfer')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary transition-all shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-transfer') ? 'Saving...' : 'Complete Transfer'}</button></div>
-          </div>
-        </div>
+        <TransferModal
+          inventory={allInventory}
+          locations={locations}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          onClose={() => setShowTransferForm(false)}
+          onSubmit={handleCreateTransfer}
+          newTransfer={newTransfer}
+          setNewTransfer={setNewTransfer}
+          addTransferItem={addTransferItem}
+          removeTransferItem={removeTransferItem}
+          updateTransferItem={updateTransferItem}
+        />
       )}
 
       {showSupplierForm && (
-        <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between"><h3 className="font-serif text-lg font-bold text-foreground">{editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}</h3><button onClick={() => setShowSupplierForm(false)}><X className="w-5 h-5 text-muted-foreground hover:bg-muted rounded-full p-1" /></button></div>
-            <div className="space-y-3">
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Business Name</label><input value={supplierData.name} onChange={e => setSupplierData(p => ({ ...p, name: e.target.value }))} placeholder="Business Name" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Phone</label><input value={supplierData.phone} onChange={e => setSupplierData(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-                <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Email</label><input value={supplierData.email} onChange={e => setSupplierData(p => ({ ...p, email: e.target.value }))} placeholder="Email" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-              </div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground ml-1">Address</label><textarea value={supplierData.address} onChange={e => setSupplierData(p => ({ ...p, address: e.target.value }))} placeholder="Address" className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm min-h-[60px] shadow-sm outline-none focus:ring-2 focus:ring-primary/20" /></div>
-            </div>
-            <div className="flex gap-2 pt-2"><button onClick={() => setShowSupplierForm(false)} className="flex-1 py-2 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:bg-muted transition-colors">Cancel</button><button onClick={() => { void runLocked('inventory-supplier', handleSupplierSubmit); }} disabled={isLocked('inventory-supplier')} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-secondary shadow-lg shadow-primary/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{isLocked('inventory-supplier') ? 'Saving...' : editingSupplier ? 'Save Changes' : 'Add Supplier'}</button></div>
-          </div>
-        </div>
+        <SupplierFormModal
+          editingSupplier={editingSupplier}
+          supplierData={supplierData}
+          setSupplierData={setSupplierData}
+          isLocked={isLocked}
+          runLocked={runLocked}
+          onClose={() => setShowSupplierForm(false)}
+          onSubmit={handleSupplierSubmit}
+        />
       )}
     </div>
   );
 }
-
