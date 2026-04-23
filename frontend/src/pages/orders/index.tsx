@@ -89,7 +89,7 @@ export default function OrderManagement() {
     onError: () => toast.error('Failed to update status')
   });
 
-  usePosRealtimeScopes(['orders'], () => refetch());
+  usePosRealtimeScopes(['orders', 'tables'], () => refetch());
 
   const handleUpdateStatus = (id: string, status: string) => {
     updateStatusMutation.mutate({ id, status });

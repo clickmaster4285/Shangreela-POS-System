@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { COMMON_ADDONS } from '@/data/pos/posConstants';
 import { usePOSStore } from '@/stores/pos/posStore';
 
@@ -41,9 +41,11 @@ export function ItemCustomizationModal() {
     handleClose();
   };
 
+  const allAddons = [...COMMON_ADDONS, ...(isCustomAddon ? [] : [])];
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-      <div className="w-full max-w-md bg-card rounded-xl border border-border shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg bg-card rounded-xl border border-border shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-sm font-bold truncate">Customize: {customizingItem.name}</h2>
           <button onClick={handleClose} className="p-1 hover:bg-muted rounded-md transition-colors">
@@ -64,64 +66,53 @@ export function ItemCustomizationModal() {
             />
           </div>
 
-          {/* Addons Selection */}
+          {/* Addon Selection and Price */}
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Select Addon / Variety</label>
-            <div className="grid grid-cols-2 gap-2">
-              {COMMON_ADDONS.map(addon => (
-                <button
-                  key={addon}
-                  onClick={() => {
-                    setIsCustomAddon(false);
-                    setExtraName(addon === extraName ? '' : addon);
+            <div className="flex gap-2">
+              <select
+                value={isCustomAddon ? 'custom' : extraName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'custom') {
+                    setIsCustomAddon(true);
+                    setExtraName('');
                     setExtraPrice('');
-                  }}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${extraName === addon && !isCustomAddon
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card text-foreground border-border hover:bg-muted'
-                    }`}
-                >
-                  {addon}
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setIsCustomAddon(true);
-                  setExtraName('');
+                  } else {
+                    setIsCustomAddon(false);
+                    setExtraName(value);
+                    setExtraPrice('');
+                  }
                 }}
-                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${isCustomAddon
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-card text-foreground border-border hover:bg-muted'
-                  }`}
+                className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary outline-none"
               >
-                + Custom Addon
-              </button>
+                <option value="">No Addon</option>
+                {COMMON_ADDONS.map(addon => (
+                  <option key={addon} value={addon}>{addon}</option>
+                ))}
+                <option value="custom">+ Custom Addon</option>
+              </select>
+              <input
+                type="number"
+                value={extraPrice}
+                onChange={e => setExtraPrice(e.target.value)}
+                placeholder="Price (Rs.)"
+                className="w-24 bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary outline-none"
+              />
             </div>
           </div>
 
-          {/* Custom Addon Inputs */}
+          {/* Custom Addon Name */}
           {isCustomAddon && (
-            <div className="pt-2 grid grid-cols-2 gap-2 anim-in fade-in slide-in-from-top-2">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-muted-foreground">Addon Name</label>
-                <input
-                  type="text"
-                  value={extraName}
-                  onChange={e => setExtraName(e.target.value)}
-                  placeholder="e.g., Extra Cheese"
-                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary outline-none"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-muted-foreground">Addon Price (Rs.)</label>
-                <input
-                  type="number"
-                  value={extraPrice}
-                  onChange={e => setExtraPrice(e.target.value)}
-                  placeholder="0"
-                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary outline-none"
-                />
-              </div>
+            <div className="space-y-1.5 anim-in fade-in slide-in-from-top-2">
+              <label className="text-[10px] font-medium text-muted-foreground">Custom Addon Name</label>
+              <input
+                type="text"
+                value={extraName}
+                onChange={e => setExtraName(e.target.value)}
+                placeholder="e.g., Extra Cheese"
+                className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary outline-none"
+              />
             </div>
           )}
         </div>

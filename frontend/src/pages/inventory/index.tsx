@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Plus, ArrowRightLeft, Truck, Package, Clock, AlertTriangle } from 'lucide-react';
-import { type InventoryItem, type Supplier, type StockTransfer, type InventoryLog, inventoryCategories, transferCategories } from '@/data/inventory/inventoryData';
+import { type InventoryItem, type Supplier, type StockTransfer, type InventoryLog } from '@/data/inventory/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
@@ -36,6 +36,7 @@ export default function InventoryManagement() {
 
   // Pagination state
   const [stockPage, setStockPage] = useState(1);
+  const [alertsPage, setAlertsPage] = useState(1);
   const [logsPage, setLogsPage] = useState(1);
   const [transferPage, setTransferPage] = useState(1);
   const [supplierPage, setSupplierPage] = useState(1);
@@ -79,17 +80,23 @@ export default function InventoryManagement() {
       });
       return api<PaginatedResponse<InventoryItem>>(`/inventory/items?${params.toString()}`);
     },
-    enabled: tab === 'stock' || tab === 'alerts',
+    enabled: tab === 'stock',
+  });
+
+  const alertsQuery = useQuery({
+    queryKey: ['inventory-alerts', alertsPage],
+    queryFn: async () => api<PaginatedResponse<InventoryItem>>(`/inventory/items/alerts?page=${alertsPage}&limit=30`),
+    enabled: tab === 'alerts',
   });
 
   const statsQuery = useQuery({
     queryKey: ['inventory-stats'],
     queryFn: async () => {
-      const [lowStock, all] = await Promise.all([
-        api<PaginatedResponse<InventoryItem>>('/inventory/items/low-stock?page=1&limit=1'),
+      const [alerts, all] = await Promise.all([
+        api<PaginatedResponse<InventoryItem>>('/inventory/items/alerts?page=1&limit=1'),
         api<PaginatedResponse<InventoryItem>>('/inventory/items?page=1&limit=1'),
       ]);
-      return { totalItems: all.pagination.total, lowStockCount: lowStock.pagination.total };
+      return { totalItems: all.pagination.total, lowStockCount: alerts.pagination.total };
     },
   });
 
@@ -127,27 +134,20 @@ export default function InventoryManagement() {
   });
 
   const inventory = stockQuery.data?.items ?? [];
+  const alertItems = alertsQuery.data?.items ?? [];
   const allInventory = allInventoryQuery.data?.items ?? inventory;
   const suppliers = suppliersQuery.data?.items ?? [];
   const transfers = transfersQuery.data?.items ?? [];
   const logs = logsQuery.data?.items ?? [];
   const locations = locationsQuery.data?.locations ?? [];
 
-  // Computed values for alerts
-  const lowStockItems = inventory.filter(i => i.quantity <= i.minStock);
-  const expiringItems = inventory.filter(i => {
-    if (!i.expiryDate) return false;
-    const diff = (new Date(i.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-    return diff <= 2 && diff >= 0;
-  });
-  const expiredItems = inventory.filter(i => i.expiryDate && new Date(i.expiryDate) < new Date());
-  const perishableCount = inventory.filter(i => i.perishable).length;
-
-  const totalItems = statsQuery.data?.totalItems ?? stockQuery.data?.pagination.total ?? inventory.length;
+  // Derived values
+  const totalItems = statsQuery.data?.totalItems ?? 0;
   const lowStockCount = statsQuery.data?.lowStockCount ?? 0;
 
   const refreshInventoryViews = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
+    void queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-all'] });
     void queryClient.invalidateQueries({ queryKey: ['inventory-logs'] });
@@ -347,7 +347,7 @@ export default function InventoryManagement() {
   const tabs = [
     { key: 'stock' as Tab, label: 'Stock', icon: Package },
     { key: 'transfers' as Tab, label: 'Transfers', icon: ArrowRightLeft },
-    { key: 'alerts' as Tab, label: 'Alerts', icon: AlertTriangle, count: lowStockItems.length + expiringItems.length + expiredItems.length },
+    { key: 'alerts' as Tab, label: 'Alerts', icon: AlertTriangle, count: lowStockCount },
     { key: 'logs' as Tab, label: 'History', icon: Clock },
     { key: 'suppliers' as Tab, label: 'Suppliers', icon: Truck },
   ];
@@ -382,9 +382,9 @@ export default function InventoryManagement() {
       <SummaryCards
         totalItems={totalItems}
         lowStockCount={lowStockCount}
-        expiringCount={expiringItems.length}
-        expiredCount={expiredItems.length}
-        perishableCount={perishableCount}
+        expiringCount={0}
+        expiredCount={0}
+        perishableCount={0}
       />
 
       {/* Tabs Navigation */}
@@ -416,8 +416,10 @@ export default function InventoryManagement() {
 
       {tab === 'alerts' && (
         <AlertsTab
-          lowStockItems={lowStockItems}
-          expiredItems={expiredItems}
+          alertItems={alertItems}
+          alertsMeta={alertsQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
+          alertsPage={alertsPage}
+          setAlertsPage={setAlertsPage}
           setRestockItem={setRestockItem}
           setRestockData={setRestockData}
           setAdjustItem={setAdjustItem}

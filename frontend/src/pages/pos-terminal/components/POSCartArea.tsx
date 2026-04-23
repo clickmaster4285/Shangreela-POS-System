@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Trash2, Minus, Plus, ShoppingBag, X } from 'lucide-react';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { COMMON_ADDONS } from '@/data/pos/posConstants';
@@ -43,6 +44,44 @@ export function POSCartArea({
     setExtraName, setExtraPrice, setItemNotes, setIsCustomAddon,
     setShowDiscardPopup, setPendingOrderType
   } = store;
+
+  const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
+
+  const getCartItemKey = (item: any, index: number) =>
+    `${item.menuItem.id}-${index}-${item.notes || ''}-${item.extraName || ''}-${item.extraPrice || 0}`;
+
+  useEffect(() => {
+    setQtyInputs((prev) => {
+      const next = { ...prev };
+      cart.forEach((item, index) => {
+        const key = getCartItemKey(item, index);
+        const quantity = String(item.quantity);
+        if (next[key] !== quantity) {
+          next[key] = quantity;
+        }
+      });
+      return next;
+    });
+  }, [cart]);
+
+  const handleQtyChange = (key: string, value: string) => {
+    if (!/^[0-9]*$/.test(value)) return;
+    setQtyInputs((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const commitQty = (item: any, key: string) => {
+    const raw = qtyInputs[key] ?? String(item.quantity);
+    const qty = Number(raw);
+
+    if (!raw || Number.isNaN(qty) || qty < 1) {
+      setQtyInputs((prev) => ({ ...prev, [key]: String(item.quantity) }));
+      return;
+    }
+
+    if (qty !== item.quantity) {
+      updateQty(item.menuItem.id, 0, item.notes, item.extraName, item.extraPrice || 0, qty);
+    }
+  };
 
   const handleOrderTypeClick = (type: 'dine-in' | 'takeaway' | 'delivery') => {
     if (type === orderType) return;
@@ -164,7 +203,7 @@ export function POSCartArea({
                       setExtraName(c.extraName || '');
                       setExtraPrice(c.extraPrice || '');
                       setItemNotes(c.notes || '');
-                      setIsCustomAddon(!!c.extraName && !COMMON_ADDONS.includes(c.extraName));
+                      setIsCustomAddon(!!c.extraName && !(COMMON_ADDONS as readonly string[]).includes(c.extraName));
                     }}
                     className="p-1 rounded bg-primary/5 text-primary hover:bg-primary hover:text-white"
                   >
@@ -185,7 +224,20 @@ export function POSCartArea({
                   >
                     {c.quantity === 1 ? <Trash2 className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                   </button>
-                  <span className="w-4 text-center text-sm font-bold">{c.quantity}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={qtyInputs[getCartItemKey(c, index)] ?? String(c.quantity)}
+                    onChange={(e) => handleQtyChange(getCartItemKey(c, index), e.target.value)}
+                    onBlur={() => commitQty(c, getCartItemKey(c, index))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-16 text-center text-sm font-bold bg-card border border-border rounded-md px-1 py-1 outline-none focus:ring-1 focus:ring-primary"
+                  />
                   <button
                     onClick={() => updateQty(c.menuItem.id, 1, c.notes, c.extraName, c.extraPrice || 0)}
                     className="w-6 h-6 rounded bg-card text-muted-foreground hover:bg-primary hover:text-white flex items-center justify-center transition-colors"
@@ -234,7 +286,9 @@ export function POSCartArea({
               className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
             />
           </button>
-          <span className="text-[10px] font-bold text-muted-foreground uppercase">Include GST (16%)</span>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase">
+            Include GST ({Math.round(taxRates.gstRate * 100)}%)
+          </span>
         </div>
 
         <button

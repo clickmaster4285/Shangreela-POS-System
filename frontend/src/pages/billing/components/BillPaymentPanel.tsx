@@ -89,7 +89,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     );
   }, [subtotal, discountAmt, gstEnabled, taxRates, order?.type]);
 
-  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = taxTotals;
+  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge = 0 } = taxTotals;
 
   // Create a stable string of current values to compare
   const currentSyncValues = useMemo(() => {
@@ -173,7 +173,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       : breakdown.grandTotal;
 
     const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
-    const tableInfo = targetOrder.table ? tableMap.get(targetOrder.table) : null;
+    const tableInfo = targetOrder.table ? tableMap.get(Number(targetOrder.table)) : null;
 
     return {
       orderId: targetOrder.id,
@@ -214,12 +214,29 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     };
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!order) return;
+    
+    // 1. Print locally immediately for speed
     const data = buildReceiptData(order, false);
     printReceipt(data);
     markOrderAsPrinted(order.id);
     toast.success('Receipt sent to printer!');
+
+    // 2. Update status in DB if it's currently pending or preparing
+    // This ensures other terminals see it as "Ready"
+    if (order.dbId && (order.status === 'pending' || order.status === 'preparing')) {
+      try {
+        await api(`/orders/${order.dbId}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'ready' }),
+        });
+        // onPaymentComplete usually refreshes the list
+        await onPaymentComplete();
+      } catch (err) {
+        console.error('Failed to update order status to ready:', err);
+      }
+    }
   };
 
   const handleVoidOrder = () => {
@@ -330,8 +347,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             <div className="text-right flex flex-col items-end gap-1.5">
               {order.table && (
                 <div className="flex gap-1.5 items-center">
-                  <span className="text-[10px] font-black text-muted-foreground uppercase">{tableMap.get(order.table)?.floorId || "Floor"}</span>
-                  <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-md font-black text-sm">{tableMap.get(order.table)?.name || order.table}</span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase">{tableMap.get(Number(order.table))?.floorId || "Floor"}</span>
+                  <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-md font-black text-sm">{tableMap.get(Number(order.table))?.name || order.table}</span>
                 </div>
               )}
               {order.orderTaker && (

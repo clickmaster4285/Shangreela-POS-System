@@ -121,12 +121,19 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
 
       <div className="space-y-3 mb-4 min-h-[4rem]">
         {order.items.slice(0, 2).map((item: any, i: number) => (
-          <div key={i} className="flex justify-between items-center text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0 w-5 h-5 rounded bg-muted flex items-center justify-center font-bold text-[10px]">{item.quantity}x</span>
-              <span className="truncate font-semibold text-foreground">{item.menuItem.name}</span>
+          <div key={i} className="flex justify-between items-start text-xs">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="shrink-0 w-5 h-5 rounded bg-muted flex items-center justify-center font-bold text-[10px]">{item.quantity}x</span>
+                <span className="truncate font-semibold text-foreground">{item.menuItem.name}</span>
+              </div>
+              {item.extraName && (
+                <p className="text-[10px] text-primary font-bold mt-0.5 ml-7">
+                  + {item.extraName} (Rs. {Number(item.extraPrice || 0).toLocaleString()})
+                </p>
+              )}
             </div>
-            <span className="shrink-0 text-muted-foreground font-medium">Rs. {(item.menuItem.price * item.quantity).toLocaleString()}</span>
+            <span className="shrink-0 text-muted-foreground font-medium">Rs. {((Number(item.menuItem.price) + Number(item.extraPrice || 0)) * item.quantity).toLocaleString()}</span>
           </div>
         ))}
         {order.items.length > 2 && (

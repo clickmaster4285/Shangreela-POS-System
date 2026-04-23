@@ -84,14 +84,16 @@ export default function Billing() {
   const getBillStatusLabel = (order?: Order & { printed?: boolean }) => {
     if (!order) return 'Pending';
     if (order.status === 'completed') return 'Paid';
-    if (order.status === 'ready' || order.printed || isOrderPrinted(order.id)) return 'Ready';
+    const isReady = ['ready', 'served', 'taken away'].includes(order.status || '') || order.printed || isOrderPrinted(order.id);
+    if (isReady) return 'Ready';
     return 'Pending';
   };
 
   const getStatusBadgeClass = (order?: Order & { printed?: boolean }) => {
     if (!order) return 'bg-warning/15 text-warning border-warning/30';
     if (order.status === 'completed') return 'bg-success/15 text-success border-success/30';
-    if (order.status === 'ready' || order.printed || isOrderPrinted(order.id)) return 'bg-primary/15 text-primary border-primary/30';
+    const isReady = ['ready', 'served', 'taken away'].includes(order.status || '') || order.printed || isOrderPrinted(order.id);
+    if (isReady) return 'bg-primary/15 text-primary border-primary/30';
     return 'bg-warning/15 text-warning border-warning/30';
   };
 
@@ -99,7 +101,7 @@ export default function Billing() {
     setLoading(true);
     const params = new URLSearchParams({
       status: 'all',
-      limit: '50',
+      limit: '100',
       page: String(pageNum),
       today: 'false',
       from: startDate,
@@ -125,7 +127,8 @@ export default function Billing() {
       setOrders(prev => {
         const next = append ? [...prev, ...ordersWithPrinted] : ordersWithPrinted;
         return next.sort((a, b) => {
-          const getPrio = (o: any) => o.status === 'completed' ? 3 : (o.status === 'ready' || o.printed ? 2 : 1);
+          const isReady = (o: any) => ['ready', 'served', 'taken away'].includes(o.status || '') || o.printed || isOrderPrinted(o.id);
+          const getPrio = (o: any) => o.status === 'completed' ? 3 : (isReady(o) ? 1 : 2);
           const pA = getPrio(a);
           const pB = getPrio(b);
           if (pA !== pB) return pA - pB;
@@ -207,10 +210,11 @@ export default function Billing() {
   const filteredOrders = useMemo(() => {
     if (billingStatusFilter === 'all') return orders;
     return orders.filter(o => {
-      const status = o.status === 'completed' ? 'paid' : (o.status === 'ready' || o.printed ? 'ready' : 'pending');
+      const isReady = ['ready', 'served', 'taken away'].includes(o.status || '') || o.printed || isOrderPrinted(o.id);
+      const status = o.status === 'completed' ? 'paid' : (isReady ? 'ready' : 'pending');
       return status === billingStatusFilter;
     });
-  }, [orders, billingStatusFilter]);
+  }, [orders, billingStatusFilter, printedOrderIds]);
 
   const billsByDay = useMemo(() => groupOrdersByCalendarDay(filteredOrders, true), [filteredOrders]);
 
@@ -222,11 +226,17 @@ export default function Billing() {
   const stats = useMemo(() => {
     return {
       all: orders.length,
-      pending: orders.filter(o => o.status !== 'completed' && o.status !== 'ready' && !o.printed).length,
-      ready: orders.filter(o => o.status !== 'completed' && (o.status === 'ready' || o.printed)).length,
+      pending: orders.filter(o => {
+        const isReady = ['ready', 'served', 'taken away'].includes(o.status || '') || o.printed || isOrderPrinted(o.id);
+        return o.status !== 'completed' && !isReady;
+      }).length,
+      ready: orders.filter(o => {
+        const isReady = ['ready', 'served', 'taken away'].includes(o.status || '') || o.printed || isOrderPrinted(o.id);
+        return o.status !== 'completed' && isReady;
+      }).length,
       paid: orders.filter(o => o.status === 'completed').length,
     };
-  }, [orders]);
+  }, [orders, printedOrderIds]);
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4">

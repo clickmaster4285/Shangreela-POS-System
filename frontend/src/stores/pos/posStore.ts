@@ -64,6 +64,7 @@ interface POSState {
   updateQty: (id: string, delta: number, notes?: string, extraN?: string, extraP?: number, absoluteQty?: number) => void;
   removeItem: (id: string, notes?: string, extraN?: string, extraP?: number) => void;
   addCustomItem: (name: string, price: number, qty: number) => void;
+  updateCartItem: (index: number, updates: { notes?: string; extraName?: string; extraPrice?: number }) => void;
 
   // Actions - Navigation
   setOpenFolder: (folder: string | null) => void;
@@ -260,6 +261,21 @@ export const usePOSStore = create<POSState>((set) => ({
         };
       }
       return { cart: [...state.cart, { menuItem: customMenuItem, quantity: qty, notes: '' }] };
+    });
+  },
+
+  updateCartItem: (index: number, updates: { notes?: string; extraName?: string; extraPrice?: number }) => {
+    set((state) => {
+      const newCart = [...state.cart];
+      if (newCart[index]) {
+        newCart[index] = {
+          ...newCart[index],
+          notes: updates.notes !== undefined ? updates.notes : newCart[index].notes,
+          extraName: updates.extraName !== undefined ? updates.extraName : newCart[index].extraName,
+          extraPrice: updates.extraPrice !== undefined ? updates.extraPrice : newCart[index].extraPrice,
+        };
+      }
+      return { cart: newCart };
     });
   },
 

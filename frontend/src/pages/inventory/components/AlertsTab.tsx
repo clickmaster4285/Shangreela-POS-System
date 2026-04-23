@@ -1,9 +1,11 @@
-import { AlertTriangle, X, Package } from 'lucide-react';
+import { AlertTriangle, X, Package, Clock } from 'lucide-react';
 import { type InventoryItem } from '@/data/inventory/inventoryData';
 
 interface AlertsTabProps {
-   lowStockItems: InventoryItem[];
-   expiredItems: InventoryItem[];
+   alertItems: InventoryItem[];
+   alertsMeta: { hasNext: boolean; hasPrev: boolean; pages?: number };
+   alertsPage: number;
+   setAlertsPage: (p: number) => void;
    setRestockItem: (item: InventoryItem) => void;
    setRestockData: (d: any) => void;
    setAdjustItem: (item: InventoryItem) => void;
@@ -11,9 +13,11 @@ interface AlertsTabProps {
 }
 
 export function AlertsTab({
-   lowStockItems, expiredItems, setRestockItem, setRestockData,
-   setAdjustItem, setAdjustAction
+   alertItems, alertsMeta, alertsPage, setAlertsPage,
+   setRestockItem, setRestockData, setAdjustItem, setAdjustAction
 }: AlertsTabProps) {
+   const today = new Date();
+
    return (
       <div className="space-y-4">
          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
@@ -28,52 +32,59 @@ export function AlertsTab({
                      </tr>
                   </thead>
                   <tbody>
-                     {lowStockItems.map(item => (
-                        <tr key={item.id || item._id} className="border-b border-border/50 bg-warning/5">
-                           <td className="px-4 py-3 font-bold">{item.name}</td>
-                           <td className="px-4 py-3 text-warning text-xs font-bold uppercase tracking-tight">
-                              <span className="flex items-center gap-1">
-                                 <AlertTriangle className="w-3 h-3" /> Low Stock (Min: {item.minStock})
-                              </span>
-                           </td>
-                           <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
-                           <td className="px-4 py-3 text-center">
-                              <button
-                                 onClick={() => {
-                                    setRestockItem(item);
-                                    setRestockData({
-                                       quantity: '', costPerUnit: item.costPerUnit?.toString() || '',
-                                       supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : '',
-                                       note: ''
-                                    });
-                                 }}
-                                 className="bg-primary text-primary-foreground px-3 py-1 rounded-lg text-xs font-bold"
-                              >
-                                 Restock
-                              </button>
-                           </td>
-                        </tr>
-                     ))}
-                     {expiredItems.map(item => (
-                        <tr key={item.id || item._id} className="border-b border-border/50 bg-destructive/5">
-                           <td className="px-4 py-3 font-bold">{item.name}</td>
-                           <td className="px-4 py-3 text-destructive text-xs font-bold uppercase tracking-tight">
-                              <span className="flex items-center gap-1">
-                                 <X className="w-3 h-3" /> Expired ({item.expiryDate})
-                              </span>
-                           </td>
-                           <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
-                           <td className="px-4 py-3 text-center">
-                              <button
-                                 onClick={() => { setAdjustItem(item); setAdjustAction('waste'); }}
-                                 className="bg-destructive text-destructive-foreground px-3 py-1 rounded-lg text-xs font-bold"
-                              >
-                                 Mark Wasted
-                              </button>
-                           </td>
-                        </tr>
-                     ))}
-                     {lowStockItems.length === 0 && expiredItems.length === 0 && (
+                     {alertItems.map(item => {
+                        const isLowStock = item.quantity <= item.minStock;
+                        const isExpired = item.expiryDate && new Date(item.expiryDate) < today;
+                        const isExpiringSoon = item.expiryDate && !isExpired && (new Date(item.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24) <= 3;
+
+                        return (
+                           <tr key={item.id || item._id} className={`border-b border-border/50 ${isExpired ? 'bg-destructive/5' : 'bg-warning/5'}`}>
+                              <td className="px-4 py-3 font-bold">{item.name}</td>
+                              <td className="px-4 py-3 text-xs font-bold uppercase tracking-tight">
+                                 {isExpired && (
+                                    <span className="flex items-center gap-1 text-destructive">
+                                       <X className="w-3 h-3" /> Expired ({new Date(item.expiryDate!).toLocaleDateString()})
+                                    </span>
+                                 )}
+                                 {isExpiringSoon && (
+                                    <span className="flex items-center gap-1 text-warning">
+                                       <Clock className="w-3 h-3" /> Expiring Soon ({new Date(item.expiryDate!).toLocaleDateString()})
+                                    </span>
+                                 )}
+                                 {isLowStock && (
+                                    <span className={`flex items-center gap-1 text-warning ${isExpired || isExpiringSoon ? 'mt-1' : ''}`}>
+                                       <AlertTriangle className="w-3 h-3" /> Low Stock (Min: {item.minStock})
+                                    </span>
+                                 )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold">{item.quantity} {item.unit}</td>
+                              <td className="px-4 py-3 text-center">
+                                 <div className="flex justify-center gap-2">
+                                    <button
+                                       onClick={() => {
+                                          setRestockItem(item);
+                                          setRestockData({
+                                             quantity: '', costPerUnit: item.costPerUnit?.toString() || '',
+                                             supplier: typeof item.supplier === 'object' ? (item.supplier as any)?._id : item.supplier || '',
+                                             note: ''
+                                          });
+                                       }}
+                                       className="bg-primary text-primary-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+                                    >
+                                       Restock
+                                    </button>
+                                    <button
+                                       onClick={() => { setAdjustItem(item); setAdjustAction('waste'); }}
+                                       className="bg-destructive text-destructive-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+                                    >
+                                       Waste
+                                    </button>
+                                 </div>
+                              </td>
+                           </tr>
+                        );
+                     })}
+                     {alertItems.length === 0 && (
                         <tr>
                            <td colSpan={4} className="px-4 py-20 text-center text-muted-foreground italic">
                               <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
@@ -83,6 +94,29 @@ export function AlertsTab({
                      )}
                   </tbody>
                </table>
+            </div>
+         </div>
+
+         {/* Pagination */}
+         <div className="flex items-center justify-between px-2">
+            <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+               Page {alertsPage} {alertsMeta.pages ? `of ${alertsMeta.pages}` : ''}
+            </div>
+            <div className="flex gap-2">
+               <button
+                  disabled={!alertsMeta.hasPrev}
+                  onClick={() => setAlertsPage(alertsPage - 1)}
+                  className="px-3 py-1 rounded-lg border border-border text-[10px] font-black uppercase tracking-widest disabled:opacity-50 hover:bg-muted transition-colors"
+               >
+                  Prev
+               </button>
+               <button
+                  disabled={!alertsMeta.hasNext}
+                  onClick={() => setAlertsPage(alertsPage + 1)}
+                  className="px-3 py-1 rounded-lg border border-border text-[10px] font-black uppercase tracking-widest disabled:opacity-50 hover:bg-muted transition-colors"
+               >
+                  Next
+               </button>
             </div>
          </div>
       </div>

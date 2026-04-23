@@ -160,11 +160,11 @@ export function POSMenuArea() {
                   className="flex flex-col text-left bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors group"
                 >
                   {result.item.image ? (
-                    <div className="aspect-square overflow-hidden bg-muted/30">
+                    <div className="aspect-[3/2] overflow-hidden bg-muted/30">
                       <img src={result.item.image} alt={result.item.name} className="h-full w-full object-cover" />
                     </div>
                   ) : (
-                    <div className="aspect-square flex items-center justify-center bg-muted/30 p-3">
+                    <div className="aspect-[3/2] flex items-center justify-center bg-muted/30 p-2">
                       <span className="text-base font-medium text-muted-foreground text-center">
                         {result.item.name}
                       </span>
@@ -182,7 +182,6 @@ export function POSMenuArea() {
                       <span className="text-sm font-bold text-primary">
                         Rs. {Math.round(result.item.price).toLocaleString()}
                       </span>
-                      <Plus className="w-4 h-4 text-primary" />
                     </div>
                   </div>
                 </button>

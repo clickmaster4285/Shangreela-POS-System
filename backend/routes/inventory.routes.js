@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Inventory Items
 router.get("/items", authRequired, inventoryController.listItems);
-router.get("/items/low-stock", authRequired, inventoryController.getLowStockItems);
+router.get("/items/alerts", authRequired, inventoryController.getInventoryAlerts);
 router.get("/items/categories", authRequired, inventoryController.getCategories);
 router.get("/items/:id", authRequired, inventoryController.getItem);
 router.post("/items", authRequired, inventoryController.createItem);

@@ -133,6 +133,11 @@ export default function KitchenDisplay() {
                   <div className="flex justify-between">
                     <span className="text-sm font-medium text-foreground">{item.quantity}× {item.menuItem.name}</span>
                   </div>
+                  {item.extraName && (
+                    <p className="text-xs text-primary font-bold mt-1">
+                      + {item.extraName}
+                    </p>
+                  )}
                   {item.notes && <p className="text-xs text-primary mt-1">⚠ {item.notes}</p>}
                 </div>
               ))}

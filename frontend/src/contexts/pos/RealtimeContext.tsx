@@ -28,18 +28,21 @@ function invalidateForScopes(
 
   if (hit("orders") || hit("deliveries")) {
     qc.invalidateQueries({ queryKey: ["deliveries"] });
+    qc.invalidateQueries({ queryKey: ["orders-management"] });
   }
 
   if (hit("orders") || hit("tables")) {
     qc.invalidateQueries({ queryKey: ["pos-tables"] });
     qc.invalidateQueries({ queryKey: ["pos-init-data"] });
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
+    qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
   }
 
   if (hit("menu")) {
     qc.invalidateQueries({ queryKey: ["pos-menu-items"] });
     qc.invalidateQueries({ queryKey: ["pos-init-data"] });
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
+    qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
   }
 
   if (hit("floors") || hit("tables")) {
@@ -47,10 +50,12 @@ function invalidateForScopes(
     qc.invalidateQueries({ queryKey: ["pos-floors"] });
     qc.invalidateQueries({ queryKey: ["pos-init-data"] });
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
+    qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
   }
 
   if (hit("users")) {
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
+    qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
   }
 }
 
