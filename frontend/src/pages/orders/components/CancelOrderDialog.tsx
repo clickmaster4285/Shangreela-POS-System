@@ -22,15 +22,14 @@ export function CancelOrderDialog({ onSuccess }: CancelOrderDialogProps) {
   const handleConfirm = async () => {
     if (!cancellingOrderId) return;
     try {
-      await api(`/orders/${cancellingOrderId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'cancelled' }),
+      await api(`/orders/${cancellingOrderId}/cancel`, {
+        method: 'POST',
       });
       toast.success('Order cancelled');
       setCancellingOrderId(null);
       onSuccess();
-    } catch {
-      toast.error('Failed to cancel order');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel order');
     }
   };
 

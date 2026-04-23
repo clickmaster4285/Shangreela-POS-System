@@ -135,6 +135,12 @@ exports.patchStatus = async (req, res) => {
     }
     const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
     if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Safety: if status is changed to cancelled via patch, free the table
+    if (newStatus === "cancelled" && order.type === "dine-in" && order.table) {
+      await Table.findOneAndUpdate({ name: order.table }, { status: "available", currentOrder: "" });
+    }
+
     broadcastOrderDomain();
     res.json({ ok: true, id: String(order._id), status: order.status });
   } catch (error) {
@@ -477,9 +483,6 @@ exports.cancel = async (req, res) => {
     if (!row) return res.status(404).json({ message: "Order not found" });
     if (row.status === "completed") {
       return res.status(400).json({ message: "Cannot cancel a completed/paid order" });
-    }
-    if (row.status === "served") {
-      return res.status(400).json({ message: "Cannot cancel a served order" });
     }
     row.status = "cancelled";
     await row.save();
