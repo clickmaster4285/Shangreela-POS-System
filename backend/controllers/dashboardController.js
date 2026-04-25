@@ -37,7 +37,7 @@ async function loadPaidOrdersLeanForReq(req) {
 }
 
 async function fetchDashboardAuxiliaryCounts(auxCreatedAt, orderTaker = null) {
-  const expenseQuery = { createdAt: auxCreatedAt };
+  const expenseQuery = { paymentDate: auxCreatedAt };
   const cancelledQuery = { status: "cancelled", createdAt: auxCreatedAt };
   const openQuery = { status: { $nin: ["completed", "cancelled"] } };
 
@@ -53,7 +53,17 @@ async function fetchDashboardAuxiliaryCounts(auxCreatedAt, orderTaker = null) {
     Employee.countDocuments({ status: "active" }),
     Order.countDocuments(cancelledQuery),
     Order.countDocuments(openQuery),
-    Expense.aggregate([{ $match: expenseQuery }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
+    Expense.aggregate([
+      { $match: expenseQuery },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$amount" },
+          totalPaid: { $sum: "$paidAmount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 }
 
@@ -235,6 +245,8 @@ function buildOrderTypeBreakdownItems(orders) {
 
 function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats) {
   const totalExpenses = expenseStats[0]?.total || 0;
+  const totalPaidExpenses = expenseStats[0]?.totalPaid || 0;
+  const totalUnpaidExpenses = totalExpenses - totalPaidExpenses;
   const expenseCount = expenseStats[0]?.count || 0;
   const revenue = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).total, 0);
   const totalServiceCharges = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).serviceCharge, 0);
@@ -267,6 +279,8 @@ function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelle
     lowStock,
     staff,
     totalExpenses,
+    totalPaidExpenses,
+    totalUnpaidExpenses,
     expenseCount,
     totalMenuOut,
   };

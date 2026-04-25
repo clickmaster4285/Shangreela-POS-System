@@ -1,4 +1,4 @@
-import { DollarSign, ShoppingCart, TrendingUp, XCircle, ArrowUpRight, Percent, ClipboardList, Tag } from 'lucide-react';
+import { DollarSign, ShoppingCart, TrendingUp, XCircle, ArrowUpRight, Percent, ClipboardList, Tag, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
 import { api, type PaginatedResponse } from '@/lib/api/api';
@@ -57,6 +57,8 @@ export default function POSDashboard() {
           lowStock: number;
           staff: number;
           totalExpenses: number;
+          totalPaidExpenses: number;
+          totalUnpaidExpenses: number;
           expenseCount: number;
           totalMenuOut: number;
         };
@@ -75,17 +77,37 @@ export default function POSDashboard() {
     },
   });
 
-  const summary = dashboardQuery.data?.summary ?? { revenue: 0, profit: 0, totalServiceCharges: 0, totalDiscount: 0, paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 }, totalOrders: 0, openOrders: 0, cancelledOrders: 0, menuCount: 0, lowStock: 0, staff: 0, totalExpenses: 0, expenseCount: 0, totalMenuOut: 0 };
+  const summary = dashboardQuery.data?.summary ?? {
+    revenue: 0,
+    profit: 0,
+    totalServiceCharges: 0,
+    totalDiscount: 0,
+    paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 },
+    totalOrders: 0,
+    openOrders: 0,
+    cancelledOrders: 0,
+    menuCount: 0,
+    lowStock: 0,
+    staff: 0,
+    totalExpenses: 0,
+    totalPaidExpenses: 0,
+    totalUnpaidExpenses: 0,
+    expenseCount: 0,
+    totalMenuOut: 0,
+  };
   const dailySalesData = dashboardQuery.data?.dailySalesData ?? [];
   const weeklySalesData = dashboardQuery.data?.weeklySalesData ?? [];
   const topSellingItems = dashboardQuery.data?.topSellingItems ?? [];
   const sampleOrders = dashboardQuery.data?.sampleOrders ?? [];
 
-  const { dineIn, delivery, takeaway } = useMemo(() => ({
-    dineIn: sampleOrders.filter(o => o.type === 'dine-in').length,
-    delivery: sampleOrders.filter(o => o.type === 'delivery').length,
-    takeaway: sampleOrders.filter(o => o.type === 'takeaway').length,
-  }), [sampleOrders]);
+  const { dineIn, delivery, takeaway } = useMemo(
+    () => ({
+      dineIn: sampleOrders.filter((o) => o.type === 'dine-in').length,
+      delivery: sampleOrders.filter((o) => o.type === 'delivery').length,
+      takeaway: sampleOrders.filter((o) => o.type === 'takeaway').length,
+    }),
+    [sampleOrders]
+  );
 
   const recentOrdersByDay = useMemo(() => {
     const rows: RecentOrderRow[] = sampleOrders.map((o) => ({
@@ -95,16 +117,24 @@ export default function POSDashboard() {
     return groupOrdersByCalendarDay(rows);
   }, [sampleOrders]);
 
-  const rangeLabel = `${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  const rangeLabel = `${new Date(startDate).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })} - ${new Date(endDate).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })}`;
   const stats = [
-    { label: `${rangeLabel} paid revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
+    { label: `${rangeLabel} revenue`, value: formatPKR(summary.revenue), icon: DollarSign, change: '' },
     { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp, change: '' },
+    { label: 'Paid Expenses', value: formatPKR(summary.totalPaidExpenses), icon: TrendingUp, change: '' },
+    { label: 'Unpaid Expenses', value: formatPKR(summary.totalUnpaidExpenses), icon: Clock, change: '' },
     { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent, change: '' },
     { label: 'Discounts given', value: formatPKR(summary.totalDiscount), icon: Tag, change: '' },
-    { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: TrendingUp, change: '' },
     { label: 'Paid orders', value: String(summary.totalOrders), icon: ShoppingCart, change: '' },
     { label: 'Open bills', value: String(summary.openOrders), icon: ClipboardList, change: '' },
-    { label: 'Cancelled Orders', value: String(summary.cancelledOrders), icon: XCircle, change: '' },
   ];
 
   return (

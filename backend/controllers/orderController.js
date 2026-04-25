@@ -497,6 +497,74 @@ exports.cancel = async (req, res) => {
   }
 };
 
+exports.switchType = async (req, res) => {
+  try {
+    const { type, table } = req.body;
+    if (!type) return res.status(400).json({ message: "Provide a valid order type." });
+
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status === "completed" || order.status === "cancelled") {
+      return res.status(400).json({ message: "Cannot switch type for a completed or cancelled order." });
+    }
+
+    const oldType = order.type;
+    const oldTable = order.table;
+
+    // 1. Handle table release if switching AWAY from dine-in OR changing table within dine-in
+    if (oldType === "dine-in" && oldTable) {
+      if (type !== "dine-in" || (type === "dine-in" && table && table !== oldTable)) {
+        await Table.findOneAndUpdate(
+          { name: oldTable, currentOrder: order.code },
+          { status: "available", currentOrder: "" }
+        );
+        if (type !== "dine-in") order.table = "";
+      }
+    }
+
+    // 2. Handle table assignment if switching TO dine-in
+    if (type === "dine-in") {
+      if (!table) return res.status(400).json({ message: "Provide a table for dine-in order." });
+      
+      const targetTable = await Table.findOne({ name: table });
+      if (!targetTable) return res.status(404).json({ message: "Target table not found." });
+      if (targetTable.status === "occupied" && targetTable.currentOrder !== order.code) {
+        return res.status(400).json({ message: "Target table is currently occupied." });
+      }
+
+      await Table.findOneAndUpdate({ name: table }, { status: "occupied", currentOrder: order.code });
+      order.table = table;
+    }
+
+    // 3. Update type and recalculate totals (service charges etc)
+    order.type = type;
+    const rates = await getEffectiveTaxRates();
+    const totals = calculateGrandTotal(
+      order.items || [],
+      order.tax,
+      order.discount,
+      order.gstEnabled,
+      rates,
+      type
+    );
+
+    order.subtotal = totals.subtotal;
+    order.tax = totals.tax;
+    order.discount = totals.discount;
+    order.gstAmount = totals.gstAmount;
+    order.serviceCharge = totals.serviceCharge;
+    order.total = totals.grandTotal;
+
+    await order.save();
+
+    broadcastOrderDomain();
+    res.json({ ok: true, type: order.type, table: order.table, total: order.total });
+  } catch (error) {
+    console.error("Switch type error:", error);
+    res.status(500).json({ message: error.message || "Failed to switch order type" });
+  }
+};
+
 exports.remove = async (req, res) => {
   try {
     const row = await Order.findById(req.params.id);

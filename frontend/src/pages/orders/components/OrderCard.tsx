@@ -12,7 +12,8 @@ import {
   RefreshCcw,
   CheckCircle2,
   XCircle,
-  Truck
+  Truck,
+  Repeat
 } from 'lucide-react';
 import { useOrderStore } from '@/stores/pos/orderStore';
 import { TableInfo } from '@/data/pos/mockData';
@@ -24,7 +25,7 @@ interface OrderCardProps {
 }
 
 export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCardProps) => {
-  const { setEditingOrder, setCancellingOrderId, setSwitchingTableOrder } = useOrderStore();
+  const { setEditingOrder, setCancellingOrderId, setSwitchingTypeOrder } = useOrderStore();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -100,14 +101,6 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
                    <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Ready
                  </button>
                )}
-               {order.type === 'dine-in' && (
-                 <button 
-                  onClick={() => setSwitchingTableOrder(order)}
-                  className="w-full px-4 py-2.5 text-xs text-left hover:bg-muted flex items-center gap-2 text-foreground font-semibold"
-                 >
-                   <RefreshCcw className="w-3.5 h-3.5" /> Switch Table
-                 </button>
-               )}
                <button 
                 onClick={() => setCancellingOrderId(order.dbId)}
                 className="w-full px-4 py-2.5 text-xs text-left hover:bg-red-500/10 text-red-500 flex items-center gap-2 font-bold"
@@ -154,6 +147,17 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
             {order.orderTaker || 'Cashier'}
           </div>
         </div>
+
+        {order.status !== 'completed' && order.status !== 'cancelled' && (
+          <button
+            onClick={() => setSwitchingTypeOrder(order)}
+            className="w-10 h-10 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-center text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-sm active:scale-95"
+            title="Switch Type/Table"
+          >
+            <Repeat className="w-4 h-4" />
+          </button>
+        )}
+
         <div className="text-right">
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-0.5">Total</p>
           <p className="text-sm font-black text-foreground tracking-tighter">Rs. {order.total.toLocaleString()}</p>

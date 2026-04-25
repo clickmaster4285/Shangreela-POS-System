@@ -58,6 +58,7 @@ exports.create = async (req, res) => {
   });
   const row = await Expense.create({
     category: req.body.category || "other",
+    title: req.body.title || req.body.description || "Untitled Expense",
     description: req.body.description || "",
     amount: totalAmount,
     paymentStatus: status,
@@ -125,6 +126,7 @@ exports.summary = async (req, res) => {
       $group: {
         _id: "$category",
         amount: { $sum: "$amount" },
+        paidAmount: { $sum: "$paidAmount" },
         count: { $sum: 1 },
       },
     },
@@ -132,12 +134,14 @@ exports.summary = async (req, res) => {
 
   const byCategory = {};
   let total = 0;
+  let totalPaid = 0;
   let count = 0;
   stats.forEach((s) => {
     byCategory[s._id] = s.amount;
     total += s.amount;
+    totalPaid += s.paidAmount;
     count += s.count;
   });
 
-  res.json({ total, byCategory, count });
+  res.json({ total, totalPaid, totalUnpaid: total - totalPaid, byCategory, count });
 };

@@ -1,13 +1,15 @@
 // In BillPaymentPanel.tsx - FIXED VERSION
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Printer, Wallet, Banknote, CreditCard, Trash2 } from 'lucide-react';
+import { Printer, Wallet, Banknote, CreditCard, Trash2, Repeat, Check, X as XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Order, TableInfo } from '@/data/pos/mockData';
 import { api } from '@/lib/api/api';
 import { printReceipt } from '@/utils/pos/printReceipt';
 import { computePakistanTaxTotals } from '@/utils/pos/pakistanTax';
+import { usePOSStore } from '@/stores/pos/posStore';
+import { TablePicker } from '@/components/pos/TablePicker';
 
 interface BillPaymentPanelProps {
   order: (Order & { dbId?: string; printed?: boolean }) | null;
@@ -45,6 +47,12 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
   const [paidAmount, setPaidAmount] = useState<number | string>('');
+  
+  // Switch type UI state
+  const [isSwitchingType, setIsSwitchingType] = useState(false);
+  const [showSwitchTablePicker, setShowSwitchTablePicker] = useState(false);
+  
+  const posStore = usePOSStore();
 
   // Add a ref to track if we've already synced
   const lastSyncedValues = useRef<string>('');
@@ -63,6 +71,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       setDiscountValue(0);
     }
     setPaidAmount('');
+    setPaymentMethod('cash');
+    setIsSwitchingType(false);
+    setShowSwitchTablePicker(false);
     // Reset sync tracking when order changes
     lastSyncedValues.current = '';
   }, [order?.id, order?.gstEnabled, order?.discount]);
@@ -302,6 +313,31 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     }).catch(err => toast.error(err instanceof Error ? err.message : 'Payment failed'));
   };
 
+  const performSwitchType = async (newType: 'dine-in' | 'takeaway' | 'delivery', tableName?: string) => {
+    if (!order?.dbId) return;
+    
+    await runLocked('switch-type', async () => {
+      await api(`/orders/${order.dbId}/switch-type`, {
+        method: 'PATCH',
+        body: JSON.stringify({ type: newType, table: tableName }),
+      });
+      toast.success(`Order switched to ${newType}`);
+      setIsSwitchingType(false);
+      setShowSwitchTablePicker(false);
+      await onPaymentComplete();
+    }).catch(err => {
+      toast.error(err instanceof Error ? err.message : 'Failed to switch type');
+    });
+  };
+
+  const handleSwitchTypeClick = (target: 'dine-in' | 'takeaway' | 'delivery') => {
+    if (target === 'dine-in') {
+      setShowSwitchTablePicker(true);
+    } else {
+      void performSwitchType(target);
+    }
+  };
+
   if (!order) {
     return (
       <div className="pos-card flex flex-col items-center justify-center p-8 border-dashed">
@@ -338,7 +374,18 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
 
           <div className="mb-5 shrink-0 border-b border-border pb-4 flex justify-between items-start">
             <div>
-              <h2 className="font-black text-xl text-foreground">{order.id}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-xl text-foreground">{order.id}</h2>
+                {order.status !== 'completed' && (
+                  <button
+                    onClick={() => setIsSwitchingType(!isSwitchingType)}
+                    className={`p-1.5 rounded-lg border transition-all ${isSwitchingType ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'}`}
+                    title="Switch Order Type"
+                  >
+                    <Repeat className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mb-2 mt-0.5 font-medium">{formatOrderDateTime(order.createdAt)} • <span className="capitalize">{order.type}</span></p>
               <span className={`inline-block text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full border ${getStatusBadgeClass(order)}`}>
                 {getBillStatusLabel(order)}
@@ -358,6 +405,45 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
+            
+            {/* Switch Type UI */}
+            {isSwitchingType && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 mb-4 space-y-3 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase font-black text-primary tracking-widest">Switch Order Type</p>
+                  <button onClick={() => setIsSwitchingType(false)}><XIcon className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" /></button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    disabled={order.type === 'dine-in'}
+                    onClick={() => handleSwitchTypeClick('dine-in')}
+                    className="py-2 rounded-lg bg-card border border-border text-[10px] font-black uppercase hover:border-primary transition-all disabled:opacity-30"
+                  >
+                    Dine-in
+                  </button>
+                  <button
+                    disabled={order.type === 'takeaway'}
+                    onClick={() => handleSwitchTypeClick('takeaway')}
+                    className="py-2 rounded-lg bg-card border border-border text-[10px] font-black uppercase hover:border-primary transition-all disabled:opacity-30"
+                  >
+                    Takeaway
+                  </button>
+                  <button
+                    disabled={order.type === 'delivery'}
+                    onClick={() => handleSwitchTypeClick('delivery')}
+                    className="py-2 rounded-lg bg-card border border-border text-[10px] font-black uppercase hover:border-primary transition-all disabled:opacity-30"
+                  >
+                    Delivery
+                  </button>
+                </div>
+                {order.type === 'dine-in' && (
+                  <p className="text-[10px] text-muted-foreground text-center italic">Switching from Dine-in will free table {order.table} and remove service charges.</p>
+                )}
+                {['takeaway', 'delivery'].includes(order.type) && (
+                  <p className="text-[10px] text-muted-foreground text-center italic">Switching to Dine-in will apply service charges.</p>
+                )}
+              </div>
+            )}
 
             <div className="rounded-xl border border-border/70 bg-muted/35 p-3 space-y-2 mb-4">
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">ORDER ITEMS</h3>
@@ -597,6 +683,49 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           </div>
         </motion.div>
       </AnimatePresence>
+
+      {/* Switch Type Table Picker */}
+      {showSwitchTablePicker && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-4xl bg-card rounded-2xl border border-border shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-5 border-b border-border shrink-0 bg-muted/20">
+              <div>
+                <h2 className="text-sm font-black text-foreground uppercase tracking-widest">Select Dine-in Table</h2>
+                <p className="text-[10px] text-muted-foreground font-bold mt-0.5">FOR SWITCHING ORDER {order.id}</p>
+              </div>
+              <button 
+                onClick={() => setShowSwitchTablePicker(false)} 
+                className="p-2 hover:bg-muted rounded-full transition-colors"
+              >
+                <XIcon className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <TablePicker
+                floors={posStore.floors}
+                tables={posStore.tables}
+                selectedTableId={null}
+                onTableSelect={(id) => {
+                  const t = posStore.tables.find(x => x.id === id);
+                  if (t) void performSwitchType('dine-in', t.name);
+                }}
+                activeFloorId={posStore.activeFloorId}
+                setActiveFloorId={posStore.setActiveFloorId}
+              />
+            </div>
+
+            <div className="p-4 bg-muted/30 border-t border-border flex justify-end shrink-0 gap-3">
+              <button 
+                onClick={() => setShowSwitchTablePicker(false)}
+                className="px-6 py-2.5 bg-card border border-border text-foreground rounded-xl hover:bg-muted transition-all text-[10px] font-black uppercase tracking-widest"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -21,7 +21,7 @@ interface OrderManagementState {
   // Dialogs
   editingOrder: any | null;
   cancellingOrderId: string | null;
-  switchingTableOrder: any | null;
+  switchingTypeOrder: any | null;
   showFilters: boolean;
 
   // Actions
@@ -32,7 +32,7 @@ interface OrderManagementState {
   
   setEditingOrder: (order: any | null) => void;
   setCancellingOrderId: (id: string | null) => void;
-  setSwitchingTableOrder: (order: any | null) => void;
+  setSwitchingTypeOrder: (order: any | null) => void;
   setShowFilters: (v: boolean) => void;
   
   resetFilters: () => void;
@@ -55,7 +55,7 @@ export const useOrderStore = create<OrderManagementState>((set) => ({
 
   editingOrder: null,
   cancellingOrderId: null,
-  switchingTableOrder: null,
+  switchingTypeOrder: null,
   showFilters: false,
 
   setFilters: (newFilters) => set((state) => ({ 
@@ -69,7 +69,7 @@ export const useOrderStore = create<OrderManagementState>((set) => ({
 
   setEditingOrder: (editingOrder) => set({ editingOrder }),
   setCancellingOrderId: (cancellingOrderId) => set({ cancellingOrderId }),
-  setSwitchingTableOrder: (switchingTableOrder) => set({ switchingTableOrder }),
+  setSwitchingTypeOrder: (switchingTypeOrder) => set({ switchingTypeOrder }),
   setShowFilters: (showFilters) => set({ showFilters }),
 
   resetFilters: () => set({

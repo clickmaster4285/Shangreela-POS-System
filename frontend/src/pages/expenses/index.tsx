@@ -1,17 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X } from 'lucide-react';
+import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X, DollarSign, Clock, CheckCircle2 } from 'lucide-react';
 import { api, getBackendOrigin } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/pos/use-submit-lock';
 
 type ExpenseCategory = 'supplies' | 'utilities' | 'rent' | 'wages' | 'maintenance' | 'other';
-type PaymentMethod = 'cash' | 'bank' | 'check';
+type PaymentMethod = 'cash' | 'online' | 'others';
 type PaymentStatus = 'paid' | 'unpaid' | 'half';
 
 interface Expense {
   id?: string;
   category: ExpenseCategory;
+  title: string;
   description: string;
   amount: number;
   paymentStatus: PaymentStatus;
@@ -66,10 +67,11 @@ export default function Expenses() {
   const getDefaultForm = useCallback(
     (): Expense => ({
       category: 'supplies',
+      title: '',
       description: '',
-      amount: 0,
+      amount: '',
       paymentStatus: 'paid',
-      paidAmount: 0,
+      paidAmount: '',
       paymentMethod: 'cash',
       paymentDate: new Date().toISOString().split('T')[0],
       notes: '',
@@ -78,7 +80,7 @@ export default function Expenses() {
     []
   );
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [summary, setSummary] = useState({ total: 0, count: 0 });
+  const [summary, setSummary] = useState({ total: 0, totalPaid: 0, totalUnpaid: 0, count: 0 });
   const [showForm, setShowForm] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [form, setForm] = useState<Expense>(getDefaultForm);
@@ -88,7 +90,6 @@ export default function Expenses() {
   const [selectedReceiptIsImage, setSelectedReceiptIsImage] = useState(false);
   const uploadHost = getBackendOrigin();
   const today = new Date().toISOString().split('T')[0];
-  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | 'all'>('all');
@@ -103,12 +104,17 @@ export default function Expenses() {
       
       const [listRes, summaryRes] = await Promise.all([
         api<ExpensesResponse>(`/expenses?${params.toString()}`),
-        api<{ total: number; count: number }>(`/expenses/summary?${params.toString()}`)
+        api<{ total: number; totalPaid: number; totalUnpaid: number; count: number }>(`/expenses/summary?${params.toString()}`)
       ]);
 
       setExpenses(listRes.items || []);
       setMeta({ hasNext: listRes.pagination?.hasNext || false, hasPrev: listRes.pagination?.hasPrev || false });
-      setSummary({ total: summaryRes.total || 0, count: summaryRes.count || 0 });
+      setSummary({
+        total: summaryRes.total || 0,
+        totalPaid: summaryRes.totalPaid || 0,
+        totalUnpaid: summaryRes.totalUnpaid || 0,
+        count: summaryRes.count || 0
+      });
     } catch (error) {
       toast.error('Failed to load expenses');
     }
@@ -173,13 +179,14 @@ export default function Expenses() {
   };
 
   const handleSubmit = async () => {
-    if (!form.description || form.amount <= 0) {
+    if (!form.title || form.amount <= 0) {
       toast.error('Please fill all required fields');
       return;
     }
     await runLocked('expense-submit', async () => {
       const body = new FormData();
       body.append('category', form.category);
+      body.append('title', form.title);
       body.append('description', form.description);
       body.append('amount', String(form.amount));
       body.append('paymentStatus', form.paymentStatus);
@@ -279,18 +286,42 @@ export default function Expenses() {
       </div>
 
       {/* Summary */}
-      <div className="grid sm:grid-cols-3 gap-4">
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Total Expenses</p>
-          <p className="text-2xl font-bold text-foreground mt-1">Rs. {summary.total.toLocaleString()}</p>
+      <div className="grid sm:grid-cols-4 gap-4">
+        <div className="pos-card flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Amount</p>
+            <p className="text-lg font-bold text-foreground">Rs. {summary.total.toLocaleString()}</p>
+          </div>
         </div>
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Expense Count</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{summary.count}</p>
+        <div className="pos-card flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center text-success">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Paid Amount</p>
+            <p className="text-lg font-bold text-foreground">Rs. {summary.totalPaid.toLocaleString()}</p>
+          </div>
         </div>
-        <div className="pos-card">
-          <p className="text-xs text-muted-foreground">Average Expense</p>
-          <p className="text-2xl font-bold text-foreground mt-1">Rs. {summary.count ? Math.round(summary.total / summary.count).toLocaleString() : 0}</p>
+        <div className="pos-card flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Unpaid Amount</p>
+            <p className="text-lg font-bold text-foreground">Rs. {summary.totalUnpaid.toLocaleString()}</p>
+          </div>
+        </div>
+        <div className="pos-card flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+            <List className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Count</p>
+            <p className="text-lg font-bold text-foreground">{summary.count}</p>
+          </div>
         </div>
       </div>
 
@@ -303,11 +334,12 @@ export default function Expenses() {
               className={`pos-card space-y-3 border ${paymentStatusCardColors[expense.paymentStatus || 'paid']}`}
             >
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-semibold text-foreground text-sm">{expense.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{categoryLabels[expense.category]} • {expense.vendor}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm truncate">{expense.title}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{expense.description}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{categoryLabels[expense.category]} • {expense.vendor}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full border font-medium ${categoryColors[expense.category]}`}>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ml-2 ${categoryColors[expense.category]}`}>
                   {categoryLabels[expense.category]}
                 </span>
               </div>
@@ -316,27 +348,27 @@ export default function Expenses() {
                 <p>📅 {new Date(expense.paymentDate).toLocaleDateString()}</p>
                 <p>💳 {expense.paymentMethod}</p>
                 <p>📌 {paymentStatusLabel[expense.paymentStatus || 'paid']} {expense.paymentStatus === 'half' ? `• Paid Rs. ${(expense.paidAmount || 0).toLocaleString()}` : ''}</p>
-                {expense.notes && <p>📝 {expense.notes}</p>}
+                {expense.notes && <p className="truncate">📝 {expense.notes}</p>}
                 {expense.receiptFile && (
                   <button
                     type="button"
-                    onClick={() => openReceiptPreview(expense.receiptFile!, expense.description)}
-                    className="rounded-xl border border-border px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                    onClick={() => openReceiptPreview(expense.receiptFile!, expense.title)}
+                    className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
                   >
                     Preview Receipt
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50">
                 <button
                   onClick={() => openEditForm(expense)}
-                  className="py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/15 transition-colors flex items-center justify-center gap-1"
+                  className="py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/15 transition-colors flex items-center justify-center gap-1"
                 >
                   <Pencil className="w-3 h-3" /> Edit
                 </button>
                 <button
                   onClick={() => handleDelete(expense.id)}
-                  className="py-2 rounded-lg bg-destructive/10 text-destructive text-xs font-medium hover:bg-destructive/15 transition-colors flex items-center justify-center gap-1"
+                  className="py-1.5 rounded-lg bg-destructive/10 text-destructive text-[10px] font-medium hover:bg-destructive/15 transition-colors flex items-center justify-center gap-1"
                 >
                   <Trash2 className="w-3 h-3" /> Delete
                 </button>
@@ -345,60 +377,61 @@ export default function Expenses() {
           ))}
         </div>
       ) : (
-        <div className="pos-card overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="pos-card overflow-x-auto p-0 border-none">
+          <table className="min-w-full text-xs">
             <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="px-3 py-3 font-medium">Category</th>
-                <th className="px-3 py-3 font-medium">Description</th>
-                <th className="px-3 py-3 font-medium">Vendor</th>
-                <th className="px-3 py-3 font-medium">Date</th>
-                <th className="px-3 py-3 font-medium">Payment</th>
-                <th className="px-3 py-3 font-medium">Status</th>
-                <th className="px-3 py-3 font-medium">Receipt</th>
-                <th className="px-3 py-3 font-medium text-right">Amount</th>
-                <th className="px-3 py-3 font-medium">Action</th>
+              <tr className="border-b border-border text-left text-muted-foreground bg-muted/30">
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Title</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Category</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Vendor</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Date</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Payment</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider text-right">Amount</th>
+                <th className="px-4 py-3 font-semibold uppercase tracking-wider text-center">Action</th>
               </tr>
             </thead>
             <tbody>
               {expenses.map((expense, i) => (
-                <tr key={expense.id || i} className="border-b border-border/50 last:border-0 hover:bg-muted/10">
-                  <td className="px-3 py-3 text-sm text-foreground">{categoryLabels[expense.category]}</td>
-                  <td className="px-3 py-3 text-sm text-foreground">{expense.description}</td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">{expense.vendor}</td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">{new Date(expense.paymentDate).toLocaleDateString()}</td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">{expense.paymentMethod}</td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">
-                    {paymentStatusLabel[expense.paymentStatus || 'paid']}
-                    {expense.paymentStatus === 'half' ? ` (Rs. ${(expense.paidAmount || 0).toLocaleString()})` : ''}
+                <tr key={expense.id || i} className="border-b border-border/50 last:border-0 hover:bg-muted/10 transition-colors">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-foreground">{expense.title}</p>
+                    <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">{expense.description}</p>
                   </td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">
-                    {expense.receiptFile ? (
-                      <button
-                        type="button"
-                        onClick={() => openReceiptPreview(expense.receiptFile!, expense.description)}
-                        className="text-primary underline"
-                      >
-                        Preview
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">None</span>
-                    )}
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full border font-medium ${categoryColors[expense.category]}`}>
+                      {categoryLabels[expense.category]}
+                    </span>
                   </td>
-                  <td className="px-3 py-3 text-right font-semibold text-foreground">Rs. {expense.amount.toLocaleString()}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
+                  <td className="px-4 py-3 text-muted-foreground">{expense.vendor}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(expense.paymentDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-muted-foreground capitalize">{expense.paymentMethod}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full border font-medium ${
+                      expense.paymentStatus === 'paid' ? 'bg-success/10 text-success border-success/20' :
+                      expense.paymentStatus === 'half' ? 'bg-warning/10 text-warning border-warning/20' :
+                      'bg-destructive/10 text-destructive border-destructive/20'
+                    }`}>
+                      {paymentStatusLabel[expense.paymentStatus || 'paid']}
+                      {expense.paymentStatus === 'half' ? ` (Rs. ${(expense.paidAmount || 0).toLocaleString()})` : ''}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold text-foreground">Rs. {expense.amount.toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => openEditForm(expense)}
-                        className="rounded-lg bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15 transition-colors"
+                        className="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                        title="Edit"
                       >
-                        Edit
+                        <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(expense.id)}
-                        className="rounded-lg bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/15 transition-colors"
+                        className="p-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/15 transition-colors"
+                        title="Delete"
                       >
-                        Delete
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -473,8 +506,8 @@ export default function Expenses() {
 
       {/* Add Expense Form */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4">
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-foreground">{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</h2>
               <button
@@ -486,129 +519,185 @@ export default function Expenses() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <input
-              type="text"
-              placeholder="Description"
-              value={form.description}
-              onChange={e => setForm({ ...form, description: e.target.value })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            />
-            <select
-              value={form.category}
-              onChange={e => setForm({ ...form, category: e.target.value as ExpenseCategory })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            >
-              {Object.entries(categoryLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <input
-              type="number"
-              placeholder="Amount (Rs)"
-              value={form.amount}
-              onChange={e => {
-                const amount = Number(e.target.value);
-                const nextAmount = Number.isFinite(amount) ? amount : 0;
-                setForm(prev => ({
-                  ...prev,
-                  amount: nextAmount,
-                  paidAmount:
-                    prev.paymentStatus === 'paid'
-                      ? nextAmount
-                      : prev.paymentStatus === 'unpaid'
-                        ? 0
-                        : Math.min(prev.paidAmount, Math.max(0, nextAmount)),
-                }));
-              }}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            />
-            <select
-              value={form.paymentStatus}
-              onChange={e => {
-                const paymentStatus = e.target.value as PaymentStatus;
-                setForm(prev => ({
-                  ...prev,
-                  paymentStatus,
-                  paidAmount:
-                    paymentStatus === 'paid'
-                      ? prev.amount
-                      : paymentStatus === 'unpaid'
-                        ? 0
-                        : prev.paidAmount > 0
-                          ? Math.min(prev.paidAmount, Math.max(0, prev.amount))
-                          : Math.max(0, prev.amount) / 2,
-                }));
-              }}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            >
-              <option value="paid">Paid</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="half">Half Paid</option>
-            </select>
-            {form.paymentStatus === 'half' && (
-              <input
-                type="number"
-                placeholder="Paid Amount (Rs)"
-                value={form.paidAmount}
-                min={0}
-                max={form.amount || 0}
-                onChange={e =>
-                  setForm({
-                    ...form,
-                    paidAmount: Math.min(Math.max(0, Number(e.target.value) || 0), Math.max(0, form.amount)),
-                  })
-                }
-                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-              />
-            )}
-            <input
-              type="text"
-              placeholder="Vendor"
-              value={form.vendor}
-              onChange={e => setForm({ ...form, vendor: e.target.value })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={form.paymentDate}
-              onChange={e => setForm({ ...form, paymentDate: e.target.value })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            />
-              {receiptFile && <p className="text-xs text-muted-foreground">Selected: {receiptFile.name}</p>}
-            <select
-              value={form.paymentMethod}
-              onChange={e => setForm({ ...form, paymentMethod: e.target.value as PaymentMethod })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            >
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-              <option value="check">Check</option>
-            </select>
-            <textarea
-              placeholder="Notes (optional)"
-              value={form.notes}
-              onChange={e => setForm({ ...form, notes: e.target.value })}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
-            />
-            <label className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <span className="text-xs font-medium text-foreground">Upload receipt image</span>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
-                className="file:border-0 file:bg-primary/10 file:text-primary file:px-3 file:py-2 file:rounded-xl file:font-medium text-sm text-foreground"
-              />
-              {receiptFile && <p className="text-xs text-muted-foreground">Selected: {receiptFile.name}</p>}
-            </label>
-            <div className="flex gap-2">
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Expense Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Monthly Rent, Electricity Bill"
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Category</label>
+                <select
+                  value={form.category}
+                  onChange={e => setForm({ ...form, category: e.target.value as ExpenseCategory })}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                >
+                  {Object.entries(categoryLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Total Amount (Rs)</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={form.amount}
+                  onChange={e => {
+                    const amount = Number(e.target.value);
+                    const nextAmount = Number.isFinite(amount) ? amount : 0;
+                    setForm(prev => ({
+                      ...prev,
+                      amount: nextAmount,
+                      paidAmount:
+                        prev.paymentStatus === 'paid'
+                          ? nextAmount
+                          : prev.paymentStatus === 'unpaid'
+                            ? 0
+                            : Math.min(prev.paidAmount, Math.max(0, nextAmount)),
+                    }));
+                  }}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Status</label>
+                  <select
+                    value={form.paymentStatus}
+                    onChange={e => {
+                      const paymentStatus = e.target.value as PaymentStatus;
+                      setForm(prev => ({
+                        ...prev,
+                        paymentStatus,
+                        paidAmount:
+                          paymentStatus === 'paid'
+                            ? prev.amount
+                            : paymentStatus === 'unpaid'
+                              ? 0
+                              : prev.paidAmount > 0
+                                ? Math.min(prev.paidAmount, Math.max(0, prev.amount))
+                                : Math.max(0, prev.amount) / 2,
+                      }));
+                    }}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  >
+                    <option value="paid">Paid</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="half">Half Paid</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Payment Type</label>
+                  <select
+                    value={form.paymentMethod}
+                    onChange={e => setForm({ ...form, paymentMethod: e.target.value as PaymentMethod })}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="online">Online</option>
+                    <option value="others">Others</option>
+                  </select>
+                </div>
+              </div>
+
+              {form.paymentStatus === 'half' && (
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Paid Amount (Rs)</label>
+                  <input
+                    type="number"
+                    placeholder="Enter custom amount"
+                    value={form.paidAmount}
+                    min={0}
+                    max={form.amount || 0}
+                    onChange={e =>
+                      setForm({
+                        ...form,
+                        paidAmount: Math.min(Math.max(0, Number(e.target.value) || 0), Math.max(0, form.amount)),
+                      })
+                    }
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Vendor</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., K-Electric"
+                    value={form.vendor}
+                    onChange={e => setForm({ ...form, vendor: e.target.value })}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Date</label>
+                  <input
+                    type="date"
+                    value={form.paymentDate}
+                    onChange={e => setForm({ ...form, paymentDate: e.target.value })}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Description</label>
+                <input
+                  type="text"
+                  placeholder="Brief description"
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Notes (optional)</label>
+                <textarea
+                  placeholder="Additional information..."
+                  value={form.notes}
+                  onChange={e => setForm({ ...form, notes: e.target.value })}
+                  rows={2}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Receipt File</label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
+                    className="w-full text-xs text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 transition-all"
+                  />
+                  {receiptFile && <p className="text-[10px] text-success font-medium">Selected: {receiptFile.name}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={closeForm}
-                className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted"
+                className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={isLocked('expense-submit')}
-                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary"
+                className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50"
               >
                 {isLocked('expense-submit') ? 'Saving...' : editingExpenseId ? 'Update' : 'Add'}
               </button>

@@ -4,11 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useOrderStore } from '@/stores/pos/orderStore';
-import { useDebounce } from '@/hooks/common/use-debounce'; // Import your debounce hook
+import { useDebounce } from '@/hooks/common/use-debounce'; 
 import { OrderCard } from './components/OrderCard';
 import { EditOrderDialog } from './components/EditOrderDialog';
 import { CancelOrderDialog } from './components/CancelOrderDialog';
-import { SwitchTableDialog } from './components/SwitchTableDialog';
+import { SwitchTypeDialog } from './components/SwitchTypeDialog';
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
 import { MenuItem, TableInfo } from '@/data/pos/mockData';
 import { RefreshCcw } from 'lucide-react';
@@ -16,7 +16,7 @@ import { RefreshCcw } from 'lucide-react';
 export default function OrderManagement() {
   const queryClient = useQueryClient();
   const store = useOrderStore();
-  const { filters, setFilters, page, setPage, pageSize } = store;
+  const { filters, setFilters, page, setPage, pageSize, setSwitchingTypeOrder } = store;
 
   // Debounce the search query
   const debouncedSearch = useDebounce(filters.search, 500);
@@ -30,7 +30,6 @@ export default function OrderManagement() {
   // Main Orders Query - Use debounced search
   const { data: ordersData, isLoading, refetch } = useQuery({
     queryKey: ['orders-management', filters, page, pageSize, debouncedSearch],
-    //                                                    ^^^^^^^^^^^^^^^^ Use debounced value
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -39,7 +38,7 @@ export default function OrderManagement() {
         type: filters.type,
         floorKey: filters.floor,
         orderTaker: filters.cashier,
-        search: debouncedSearch, // Use debounced search value
+        search: debouncedSearch,
       });
       if (filters.dateRange) {
         params.append('from', filters.dateRange.from);
@@ -97,7 +96,6 @@ export default function OrderManagement() {
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-6 overflow-hidden">
-      {/* Header & Filters */}
       <div className="shrink-0 space-y-6">
         <div>
           <h1 className="text-3xl font-black text-foreground uppercase tracking-tight">Order Management</h1>
@@ -149,10 +147,9 @@ export default function OrderManagement() {
         />
       </div>
 
-      {/* Orders Grid */}
       <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
         {isLoading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-pulse">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 animate-pulse">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="h-64 bg-card/60 border border-border/50 rounded-3xl" />
             ))}
@@ -175,7 +172,7 @@ export default function OrderManagement() {
             </p>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
             {ordersData?.items.map(order => (
               <OrderCard
                 key={order.dbId}
@@ -187,7 +184,6 @@ export default function OrderManagement() {
           </div>
         )}
 
-        {/* Pagination Footer */}
         <div className="mt-12 mb-6 flex items-center justify-center gap-4">
           <button
             disabled={page === 1}
@@ -217,7 +213,7 @@ export default function OrderManagement() {
       <CancelOrderDialog
         onSuccess={() => refetch()}
       />
-      <SwitchTableDialog
+      <SwitchTypeDialog
         tables={tables}
         floors={floors}
         onSuccess={() => refetch()}

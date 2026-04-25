@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag } from 'lucide-react';
+import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag, Clock, CheckCircle2 } from 'lucide-react';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { MAX_LIST_LIMIT } from '@/lib/api/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
@@ -120,6 +120,8 @@ export default function Reports() {
           revenue: number;
           profit: number;
           totalExpenses: number;
+          totalPaidExpenses: number;
+          totalUnpaidExpenses: number;
           totalServiceCharges: number;
           totalDiscount: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
@@ -135,6 +137,8 @@ export default function Reports() {
     revenue: 0,
     profit: 0,
     totalExpenses: 0,
+    totalPaidExpenses: 0,
+    totalUnpaidExpenses: 0,
     totalServiceCharges: 0,
     totalDiscount: 0,
     paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 },
@@ -334,6 +338,8 @@ export default function Reports() {
             { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent },
             { label: 'Discounts given', value: formatPKR(summary.totalDiscount ?? 0), icon: Tag },
             { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: Wallet },
+            { label: 'Paid Expenses', value: formatPKR(summary.totalPaidExpenses), icon: CheckCircle2 },
+            { label: 'Unpaid Expenses', value: formatPKR(summary.totalUnpaidExpenses), icon: Clock },
             { label: 'Cash Sales', value: formatPKR(summary.paymentBreakdown.cash), icon: DollarSign },
             { label: 'Card Sales', value: formatPKR(summary.paymentBreakdown.card), icon: CreditCard },
             { label: 'EasyPesa Sales', value: formatPKR(summary.paymentBreakdown.easypesa), icon: Wallet },
@@ -382,6 +388,14 @@ export default function Reports() {
               <tr>
                 <td>Total Expenses</td>
                 <td>{formatPKR(summary.totalExpenses)}</td>
+              </tr>
+              <tr>
+                <td>Paid Expenses</td>
+                <td>{formatPKR(summary.totalPaidExpenses)}</td>
+              </tr>
+              <tr>
+                <td>Unpaid Expenses</td>
+                <td>{formatPKR(summary.totalUnpaidExpenses)}</td>
               </tr>
               <tr>
                 <td>Menu Out</td>
