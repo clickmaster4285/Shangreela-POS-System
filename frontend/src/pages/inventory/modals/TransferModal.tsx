@@ -6,6 +6,7 @@ import Fuse from 'fuse.js';
 interface TransferModalProps {
    inventory: InventoryItem[];
    locations: string[];
+   categories?: string[];
    isLocked: (key: string) => boolean;
    runLocked: (key: string, fn: () => Promise<void>) => Promise<void>;
    onClose: () => void;
@@ -24,7 +25,7 @@ interface TransferModalProps {
 }
 
 export function TransferModal({
-   inventory, locations, isLocked, runLocked, onClose, onSubmit,
+   inventory, locations, categories = transferCategories, isLocked, runLocked, onClose, onSubmit,
    newTransfer, setNewTransfer, addTransferItem, removeTransferItem, updateTransferItem
 }: TransferModalProps) {
    const [searchQuery, setSearchQuery] = useState('');
@@ -86,7 +87,7 @@ export function TransferModal({
                      onChange={e => setNewTransfer((p: any) => ({ ...p, transferCategory: e.target.value }))}
                      className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm focus:ring-2 focus:ring-primary/20"
                   >
-                     {transferCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                     {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                </div>
 

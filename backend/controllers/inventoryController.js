@@ -27,7 +27,7 @@ exports.listItems = async (req, res) => {
   if (req.query.category && req.query.category !== "All") where.category = String(req.query.category);
   if (req.query.perishableOnly === "true") where.perishable = true;
   const [items, total] = await Promise.all([
-    InventoryItem.find(where).populate("supplier", "name").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    InventoryItem.find(where).populate("supplier", "name").sort({ name: 1 }).skip(skip).limit(limit).lean(),
     InventoryItem.countDocuments(where),
   ]);
   res.json(buildPaginatedResponse({ items: items.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
@@ -238,15 +238,41 @@ exports.createTransfer = async (req, res) => {
 exports.listTransfers = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const where = {};
-  if (req.query.fromLocation) where.fromLocation = String(req.query.fromLocation);
-  if (req.query.toLocation) where.toLocation = String(req.query.toLocation);
-  if (req.query.transferCategory) where.transferCategory = String(req.query.transferCategory);
+  if (req.query.fromLocation && req.query.fromLocation !== "All") where.fromLocation = String(req.query.fromLocation);
+  if (req.query.toLocation && req.query.toLocation !== "All") where.toLocation = String(req.query.toLocation);
+  if (req.query.transferCategory && req.query.transferCategory !== "All") where.transferCategory = String(req.query.transferCategory);
   if (req.query.status) where.status = String(req.query.status);
+  if (req.query.search) {
+    const search = { $regex: String(req.query.search), $options: "i" };
+    where.$or = [
+      { transferNumber: search },
+      { transferCategory: search },
+      { fromLocation: search },
+      { toLocation: search },
+      { note: search },
+      { "items.itemName": search },
+    ];
+  }
 
-  const [transfers, total] = await Promise.all([
+  if (req.query.from && req.query.to) {
+    where.transferDate = {
+      $gte: new Date(req.query.from + "T00:00:00.000Z"),
+      $lte: new Date(req.query.to + "T23:59:59.999Z"),
+    };
+  }
+
+  let [transfers, total] = await Promise.all([
     StockTransfer.find(where).populate("createdBy", "name").populate("items.itemId", "name category").sort({ transferDate: -1 }).skip(skip).limit(limit).lean(),
     StockTransfer.countDocuments(where),
   ]);
+
+  // Fallback: If no results found for the filtered date, show latest 20 records
+  if (total === 0 && (req.query.from || req.query.to)) {
+    [transfers, total] = await Promise.all([
+      StockTransfer.find({}).populate("createdBy", "name").populate("items.itemId", "name category").sort({ transferDate: -1 }).limit(20).lean(),
+      20,
+    ]);
+  }
 
   res.json(buildPaginatedResponse({ items: transfers.map((t) => ({ ...t, id: String(t._id) })), total, page, limit }));
 };
@@ -271,10 +297,31 @@ exports.getTransferCategories = async (_req, res) => {
 // List inventory logs
 exports.listLogs = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
-  const [items, total] = await Promise.all([
-    InventoryLog.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    InventoryLog.countDocuments({}),
+  const where = {};
+
+  if (req.query.search) {
+    where.itemName = { $regex: String(req.query.search), $options: "i" };
+  }
+
+  if (req.query.from && req.query.to) {
+    where.createdAt = {
+      $gte: new Date(req.query.from + "T00:00:00.000Z"),
+      $lte: new Date(req.query.to + "T23:59:59.999Z"),
+    };
+  }
+
+  let [items, total] = await Promise.all([
+    InventoryLog.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    InventoryLog.countDocuments(where),
   ]);
+
+  // Fallback: If no results found for the filtered criteria, show latest 20 records
+  if (total === 0 && (req.query.search || req.query.from || req.query.to)) {
+    [items, total] = await Promise.all([
+      InventoryLog.find({}).sort({ createdAt: -1 }).limit(20).lean(),
+      20,
+    ]);
+  }
   res.json(buildPaginatedResponse({ items: items.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };
 
@@ -340,7 +387,7 @@ exports.getInventoryAlerts = async (req, res) => {
   const [items, total] = await Promise.all([
     InventoryItem.find(where)
       .populate("supplier", "name")
-      .sort({ quantity: 1, expiryDate: 1 })
+      .sort({ name: 1 })
       .skip(skip)
       .limit(limit)
       .lean(),

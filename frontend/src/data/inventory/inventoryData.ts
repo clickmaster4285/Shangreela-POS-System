@@ -11,6 +11,13 @@ export interface InventoryItem {
   expiryDate?: string;
   supplier: string | { _id: string; name: string };
   lastRestocked?: string;
+  restockHistory?: {
+    quantity: number;
+    costPerUnit: number;
+    totalPrice: number;
+    date?: string;
+    note?: string;
+  }[];
 }
 
 export type InventoryCategory = 'Meat' | 'Poultry' | 'Seafood' | 'Vegetables' | 'Dairy' | 'Spices' | 'Grains' | 'Beverages' | 'Oils' | 'Dry Goods' | 'Other';
@@ -22,6 +29,7 @@ export interface InventoryLog {
   action: 'added' | 'used' | 'wasted' | 'adjusted' | 'restocked' | 'transferred';
   quantity: number;
   price: number;
+  unit?: string;
   note: string;
   timestamp: string;
   userId: string;
@@ -55,6 +63,8 @@ export const transferCategories = [
   'Chinese Section',
   'Continental Section',
   'Beverage Section',
+  'Chai Bar',
+  'Tandoor',
   'General'
 ];
 

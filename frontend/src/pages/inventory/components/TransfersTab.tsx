@@ -1,17 +1,61 @@
 import { type StockTransfer } from '@/data/inventory/inventoryData';
+import { InventoryFilters } from './InventoryFilters';
 
 interface TransfersTabProps {
    transfers: StockTransfer[];
    transferMeta: { hasNext: boolean; hasPrev: boolean };
    transferPage: number;
    setTransferPage: React.Dispatch<React.SetStateAction<number>>;
+   search: string;
+   setSearch: (value: string) => void;
+   category: string;
+   setCategory: (value: string) => void;
+   categories: string[];
+   location: string;
+   setLocation: (value: string) => void;
+   locations: string[];
 }
 
 const transferId = (t: StockTransfer) => t.id || (t as any)._id || '';
 
-export function TransfersTab({ transfers, transferMeta, transferPage, setTransferPage }: TransfersTabProps) {
+export function TransfersTab({
+   transfers,
+   transferMeta,
+   transferPage,
+   setTransferPage,
+   search,
+   setSearch,
+   category,
+   setCategory,
+   categories,
+   location,
+   setLocation,
+   locations,
+}: TransfersTabProps) {
    return (
       <div className="space-y-3">
+         <InventoryFilters
+            search={search}
+            setSearch={(value) => {
+               setSearch(value);
+               setTransferPage(1);
+            }}
+            searchPlaceholder="Search transfers..."
+            category={category}
+            setCategory={(value) => {
+               setCategory(value);
+               setTransferPage(1);
+            }}
+            categories={categories}
+            location={location}
+            setLocation={(value) => {
+               setLocation(value);
+               setTransferPage(1);
+            }}
+            locations={locations}
+            showLocation
+            debounceMs={250}
+         />
          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
                <table className="w-full text-sm">

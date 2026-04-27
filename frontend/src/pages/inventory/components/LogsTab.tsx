@@ -1,17 +1,38 @@
 import { type InventoryLog } from '@/data/inventory/inventoryData';
+import { InventoryFilters } from './InventoryFilters';
 
 interface LogsTabProps {
    logs: InventoryLog[];
    logsMeta: { hasNext: boolean; hasPrev: boolean };
    logsPage: number;
    setLogsPage: React.Dispatch<React.SetStateAction<number>>;
+   search: string;
+   setSearch: (s: string) => void;
 }
 
 const logId = (l: InventoryLog) => l.id || (l as any)._id || '';
 
-export function LogsTab({ logs, logsMeta, logsPage, setLogsPage }: LogsTabProps) {
+export function LogsTab({ 
+   logs, 
+   logsMeta, 
+   logsPage, 
+   setLogsPage,
+   search,
+   setSearch
+}: LogsTabProps) {
    return (
       <div className="space-y-3">
+         <InventoryFilters
+            search={search}
+            setSearch={(value) => {
+               setSearch(value);
+               setLogsPage(1);
+            }}
+            searchPlaceholder="Search history..."
+            showCategory={false}
+            debounceMs={250}
+         />
+
          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
                <table className="w-full text-sm">
@@ -39,7 +60,7 @@ export function LogsTab({ logs, logsMeta, logsPage, setLogsPage }: LogsTabProps)
                               </span>
                            </td>
                            <td className="px-4 py-3 text-right font-mono font-bold">{log.quantity}{(log as any).unit ? ` ${(log as any).unit}` : ''}</td>
-                           <td className="px-4 py-3 text-right font-mono text-primary font-bold">{log.price ? `Rs. ${log.price}` : '—'}</td>
+                           <td className="px-4 py-3 text-right font-mono text-primary font-bold">{log.price ? `Rs. ${log.price}` : '-'}</td>
                            <td className="px-4 py-3 text-muted-foreground text-xs italic">{log.note}</td>
                         </tr>
                      ))}

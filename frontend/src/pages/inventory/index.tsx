@@ -1,12 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { Plus, ArrowRightLeft, Truck, Package, Clock, AlertTriangle } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Plus, ArrowRightLeft, Truck, Package, Clock, AlertTriangle, Calendar } from 'lucide-react';
 import { type InventoryItem, type Supplier, type StockTransfer, type InventoryLog } from '@/data/inventory/inventoryData';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/pos/use-submit-lock';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { SummaryCards } from './components/SummaryCards';
 import { TabsNavigation } from './components/TabsNavigation';
 import { StockTab } from './components/StockTab';
 import { AlertsTab } from './components/AlertsTab';
@@ -29,10 +28,17 @@ export default function InventoryManagement() {
   const [tab, setTab] = useState<Tab>('stock');
 
   // Filter state
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [search, setSearch] = useState('');
+  const [logSearch, setLogSearch] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
+  const [transferSearch, setTransferSearch] = useState('');
   const [catFilter, setCatFilter] = useState<string>('All');
   const [perishableOnly, setPerishableOnly] = useState(false);
+  const [transferCatFilter, setTransferCatFilter] = useState<string>('All');
+  const [locationFilter, setLocationFilter] = useState<string>('All');
 
   // Pagination state
   const [stockPage, setStockPage] = useState(1);
@@ -92,11 +98,18 @@ export default function InventoryManagement() {
   const statsQuery = useQuery({
     queryKey: ['inventory-stats'],
     queryFn: async () => {
-      const [alerts, all] = await Promise.all([
+      const [alerts, all, transfers, suppliers] = await Promise.all([
         api<PaginatedResponse<InventoryItem>>('/inventory/items/alerts?page=1&limit=1'),
         api<PaginatedResponse<InventoryItem>>('/inventory/items?page=1&limit=1'),
+        api<PaginatedResponse<StockTransfer>>('/inventory/transfers?page=1&limit=1'),
+        api<PaginatedResponse<Supplier>>('/inventory/suppliers?page=1&limit=1'),
       ]);
-      return { totalItems: all.pagination.total, lowStockCount: alerts.pagination.total };
+      return {
+        totalItems: all.pagination.total,
+        lowStockCount: alerts.pagination.total,
+        totalTransfers: transfers.pagination.total,
+        totalSuppliers: suppliers.pagination.total,
+      };
     },
   });
 
@@ -110,20 +123,45 @@ export default function InventoryManagement() {
   });
 
   const logsQuery = useQuery({
-    queryKey: ['inventory-logs', logsPage],
-    queryFn: async () => api<PaginatedResponse<InventoryLog>>(`/inventory/logs?page=${logsPage}&limit=30`),
+    queryKey: ['inventory-logs', logsPage, logSearch, startDate, endDate],
+    queryFn: async () => {
+      const params = new URLSearchParams({ 
+        page: String(logsPage), 
+        limit: '30', 
+        search: logSearch,
+        from: startDate,
+        to: endDate
+      });
+      return api<PaginatedResponse<InventoryLog>>(`/inventory/logs?${params.toString()}`);
+    },
     enabled: tab === 'logs',
   });
 
   const transfersQuery = useQuery({
-    queryKey: ['inventory-transfers', transferPage],
-    queryFn: async () => api<PaginatedResponse<StockTransfer>>(`/inventory/transfers?page=${transferPage}&limit=30`),
+    queryKey: ['inventory-transfers', transferPage, startDate, endDate, transferSearch, transferCatFilter, locationFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({ 
+        page: String(transferPage), 
+        limit: '30',
+        from: startDate,
+        to: endDate,
+        search: transferSearch,
+        transferCategory: transferCatFilter,
+        toLocation: locationFilter,
+      });
+      return api<PaginatedResponse<StockTransfer>>(`/inventory/transfers?${params.toString()}`);
+    },
     enabled: tab === 'transfers',
   });
 
   const locationsQuery = useQuery({
     queryKey: ['inventory-locations'],
     queryFn: async () => api<{ locations: string[] }>('/inventory/locations'),
+  });
+
+  const transferCategoriesQuery = useQuery({
+    queryKey: ['inventory-transfer-categories'],
+    queryFn: async () => api<{ categories: string[] }>('/inventory/transfers/categories'),
   });
 
   const allInventoryQuery = useQuery({
@@ -140,10 +178,13 @@ export default function InventoryManagement() {
   const transfers = transfersQuery.data?.items ?? [];
   const logs = logsQuery.data?.items ?? [];
   const locations = locationsQuery.data?.locations ?? [];
+  const transferCategories = transferCategoriesQuery.data?.categories ?? ['General'];
 
   // Derived values
   const totalItems = statsQuery.data?.totalItems ?? 0;
   const lowStockCount = statsQuery.data?.lowStockCount ?? 0;
+  const totalTransfers = statsQuery.data?.totalTransfers ?? 0;
+  const totalSuppliers = statsQuery.data?.totalSuppliers ?? 0;
 
   const refreshInventoryViews = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['inventory-stock'] });
@@ -345,11 +386,11 @@ export default function InventoryManagement() {
   }, [locations]);
 
   const tabs = [
-    { key: 'stock' as Tab, label: 'Stock', icon: Package },
-    { key: 'transfers' as Tab, label: 'Transfers', icon: ArrowRightLeft },
+    { key: 'stock' as Tab, label: 'Stock', icon: Package, count: totalItems },
+    { key: 'transfers' as Tab, label: 'Transfers', icon: ArrowRightLeft, count: totalTransfers },
     { key: 'alerts' as Tab, label: 'Alerts', icon: AlertTriangle, count: lowStockCount },
     { key: 'logs' as Tab, label: 'History', icon: Clock },
-    { key: 'suppliers' as Tab, label: 'Suppliers', icon: Truck },
+    { key: 'suppliers' as Tab, label: 'Suppliers', icon: Truck, count: totalSuppliers },
   ];
 
   return (
@@ -365,27 +406,36 @@ export default function InventoryManagement() {
             </button>
           ) : (
             <>
+              {(tab === 'transfers' || tab === 'logs') && (
+                <div className="flex items-center gap-2 bg-muted/50 border border-border px-3 py-2 rounded-xl mr-2 shadow-sm">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-transparent border-none text-xs font-bold focus:outline-none text-foreground"
+                  />
+                  <span className="text-muted-foreground text-[10px] font-black uppercase">to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-transparent border-none text-xs font-bold focus:outline-none text-foreground"
+                  />
+                </div>
+              )}
               <button onClick={() => setShowTransferForm(true)}
-                className="bg-muted text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors">
+                className="bg-muted text-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors shadow-sm">
                 <ArrowRightLeft className="w-4 h-4" /> Transfer
               </button>
               <button onClick={openAddItemForm}
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors">
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-secondary transition-colors shadow-sm">
                 <Plus className="w-4 h-4" /> Add Item
               </button>
             </>
           )}
         </div>
       </div>
-
-      {/* Summary Cards */}
-      <SummaryCards
-        totalItems={totalItems}
-        lowStockCount={lowStockCount}
-        expiringCount={0}
-        expiredCount={0}
-        perishableCount={0}
-      />
 
       {/* Tabs Navigation */}
       <TabsNavigation tabs={tabs} activeTab={tab} onTabChange={setTab} />
@@ -446,6 +496,14 @@ export default function InventoryManagement() {
           transferMeta={transfersQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
           transferPage={transferPage}
           setTransferPage={setTransferPage}
+          search={transferSearch}
+          setSearch={setTransferSearch}
+          category={transferCatFilter}
+          setCategory={setTransferCatFilter}
+          categories={transferCategories}
+          location={locationFilter}
+          setLocation={setLocationFilter}
+          locations={locations}
         />
       )}
 
@@ -455,6 +513,8 @@ export default function InventoryManagement() {
           logsMeta={logsQuery.data?.pagination ?? { hasNext: false, hasPrev: false }}
           logsPage={logsPage}
           setLogsPage={setLogsPage}
+          search={logSearch}
+          setSearch={setLogSearch}
         />
       )}
 
@@ -505,6 +565,7 @@ export default function InventoryManagement() {
         <TransferModal
           inventory={allInventory}
           locations={locations}
+          categories={transferCategories}
           isLocked={isLocked}
           runLocked={runLocked}
           onClose={() => setShowTransferForm(false)}

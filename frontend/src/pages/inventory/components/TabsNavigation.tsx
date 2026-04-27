@@ -26,12 +26,10 @@ export function TabsNavigation({ tabs, activeTab, onTabChange }: TabsNavigationP
                   }`}
             >
                <tab.icon className="w-3.5 h-3.5" />
-               {tab.label}
-               {tab.count !== undefined && tab.count > 0 && (
-                  <span className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-full">
-                     {tab.count}
-                  </span>
-               )}
+               <span>
+                  {tab.label}
+                  {tab.count !== undefined ? ` (${tab.count})` : ''}
+               </span>
             </button>
          ))}
       </div>

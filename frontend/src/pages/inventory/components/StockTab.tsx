@@ -1,6 +1,7 @@
-import { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Edit2, RotateCcw, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Edit2, RotateCcw, Trash2 } from 'lucide-react';
 import { type InventoryItem, inventoryCategories } from '@/data/inventory/inventoryData';
+import { InventoryFilters } from './InventoryFilters';
 
 interface StockTabProps {
    inventory: InventoryItem[];
@@ -27,15 +28,33 @@ const STOCK_ROW_HEIGHT = 66;
 const STOCK_VIEWPORT_HEIGHT = 520;
 const STOCK_OVERSCAN = 6;
 
+const getExpiryState = (expiryDate?: string) => {
+   if (!expiryDate) {
+      return { isExpired: false, isExpiringSoon: false };
+   }
+
+   const today = new Date();
+   today.setHours(0, 0, 0, 0);
+
+   const threshold = new Date(today);
+   threshold.setDate(threshold.getDate() + 3);
+
+   const expiry = new Date(expiryDate);
+   expiry.setHours(0, 0, 0, 0);
+
+   return {
+      isExpired: expiry < today,
+      isExpiringSoon: expiry >= today && expiry <= threshold,
+   };
+};
+
 export function StockTab({
-   inventory, stockMeta, stockPage, setStockPage,
+   inventory, stockMeta, setStockPage,
    search, setSearch, catFilter, setCatFilter, perishableOnly, setPerishableOnly,
    isLocked, runLocked, setRestockItem, setRestockData, openEditItemForm,
    setAdjustItem, setAdjustAction, handleDeleteItem,
 }: StockTabProps) {
    const [scrollTop, setScrollTop] = useState(0);
-   const [localSearch, setLocalSearch] = useState(search);
-   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
    const stockStartIndex = Math.max(0, Math.floor(scrollTop / STOCK_ROW_HEIGHT) - STOCK_OVERSCAN);
    const stockEndIndex = Math.min(
@@ -47,35 +66,29 @@ export function StockTab({
       [inventory, stockStartIndex, stockEndIndex]
    );
 
-   const handleSearchChange = (val: string) => {
-      setLocalSearch(val);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-         setSearch(val);
-         setStockPage(1);
-      }, 350);
-   };
+   const expiringSoonCount = useMemo(
+      () => inventory.filter((item) => getExpiryState(item.expiryDate).isExpiringSoon).length,
+      [inventory]
+   );
 
    return (
       <div className="space-y-3">
          <div className="flex gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-               <input
-                  value={localSearch}
-                  onChange={e => handleSearchChange(e.target.value)}
-                  placeholder="Search all inventory (server-side)…"
-                  className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-xl text-sm outline-none shadow-sm"
-               />
-            </div>
-            <select
-               value={catFilter}
-               onChange={e => { setCatFilter(e.target.value); setStockPage(1); }}
-               className="bg-card border border-border rounded-xl px-3 py-2 text-sm outline-none shadow-sm"
-            >
-               <option value="All">All Categories</option>
-               {inventoryCategories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <InventoryFilters
+               search={search}
+               setSearch={(value) => {
+                  setSearch(value);
+                  setStockPage(1);
+               }}
+               searchPlaceholder="Search stock..."
+               category={catFilter}
+               setCategory={(value) => {
+                  setCatFilter(value);
+                  setStockPage(1);
+               }}
+               categories={inventoryCategories}
+               debounceMs={350}
+            />
             <label className="flex items-center gap-2 text-sm text-foreground whitespace-nowrap cursor-pointer">
                <input
                   type="checkbox"
@@ -102,7 +115,7 @@ export function StockTab({
                         <th className="text-right px-4 py-3 font-medium text-muted-foreground">Min</th>
                         <th className="text-right px-4 py-3 font-medium text-muted-foreground">Price/Unit</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground">Supplier</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">Expiry</th>
+                        <th className="text-left px-4 py-3 font-medium text-muted-foreground">{`Expiry (${expiringSoonCount})`}</th>
                         <th className="text-center px-4 py-3 font-medium text-muted-foreground">Actions</th>
                      </tr>
                   </thead>
@@ -112,14 +125,14 @@ export function StockTab({
                      )}
                      {virtualRows.map(item => {
                         const isLow = item.quantity <= item.minStock;
-                        const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date();
+                        const { isExpired, isExpiringSoon } = getExpiryState(item.expiryDate);
                         const latestPrice = item.restockHistory?.length
                            ? item.restockHistory[item.restockHistory.length - 1].costPerUnit
                            : item.costPerUnit;
                         return (
                            <tr
                               key={item.id || item._id}
-                              className={`border-b border-border/50 ${isExpired ? 'bg-destructive/5' : isLow ? 'bg-warning/5' : ''} hover:bg-muted/20 transition-colors`}
+                              className={`border-b border-border/50 ${isExpired ? 'bg-destructive/5' : isExpiringSoon ? 'bg-orange-50' : isLow ? 'bg-warning/5' : ''} hover:bg-muted/20 transition-colors`}
                            >
                               <td className="px-4 py-3 font-medium text-foreground">
                                  {item.name}
@@ -131,13 +144,13 @@ export function StockTab({
                               </td>
                               <td className="px-4 py-3 text-right text-muted-foreground">{item.minStock}</td>
                               <td className="px-4 py-3 text-right font-mono text-primary font-semibold text-xs">
-                                 {latestPrice != null && latestPrice > 0 ? `Rs. ${latestPrice}` : '—'}
+                                 {latestPrice != null && latestPrice > 0 ? `Rs. ${latestPrice}` : '-'}
                               </td>
                               <td className="px-4 py-3 text-muted-foreground text-xs">
-                                 {item.supplier && typeof item.supplier === 'object' ? (item.supplier as any).name : '—'}
+                                 {item.supplier && typeof item.supplier === 'object' ? (item.supplier as any).name : '-'}
                               </td>
-                              <td className={`px-4 py-3 text-xs ${isExpired ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
-                                 {item.expiryDate || '—'}
+                              <td className={`px-4 py-3 text-xs ${isExpired ? 'text-destructive font-semibold' : isExpiringSoon ? 'text-orange-600 font-semibold' : 'text-muted-foreground'}`}>
+                                 {item.expiryDate || '-'}
                               </td>
                               <td className="px-4 py-3 text-center">
                                  <div className="flex items-center justify-center gap-2">

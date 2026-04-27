@@ -18,6 +18,7 @@ router.post("/items/:id/adjust", authRequired, inventoryController.adjustItem);
 // Stock Transfers
 router.post("/transfers", authRequired, inventoryController.createTransfer);
 router.get("/transfers", authRequired, inventoryController.listTransfers);
+router.get("/transfers/categories", authRequired, inventoryController.getTransferCategories);
 router.get("/transfers/:id", authRequired, inventoryController.getTransfer);
 
 // Locations
