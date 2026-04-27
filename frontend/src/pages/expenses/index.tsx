@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X, DollarSign, Clock, CheckCircle2 } from 'lucide-react';
+import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X, DollarSign, Clock, CheckCircle2, Printer } from 'lucide-react';
 import { api, getBackendOrigin } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/pos/use-submit-lock';
+import { printExpenseReport } from '@/utils/expenses/printExpenseReport';
 
 type ExpenseCategory = 'supplies' | 'utilities' | 'rent' | 'wages' | 'maintenance' | 'other';
 type PaymentMethod = 'cash' | 'online' | 'others';
@@ -227,12 +228,20 @@ export default function Expenses() {
           <h1 className="font-serif text-2xl font-bold text-foreground">Expenses</h1>
           <p className="text-sm text-muted-foreground">Track and manage business expenses.</p>
         </div>
-        <button
-          onClick={openCreateForm}
-          className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2 hover:bg-secondary transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Expense
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => printExpenseReport(expenses, summary, startDate, endDate)}
+            className="px-4 py-2.5 rounded-xl border border-border bg-card text-foreground text-xs font-medium flex items-center gap-2 hover:bg-muted transition-colors"
+          >
+            <Printer className="w-4 h-4" /> Print Report
+          </button>
+          <button
+            onClick={openCreateForm}
+            className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2 hover:bg-secondary transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Expense
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

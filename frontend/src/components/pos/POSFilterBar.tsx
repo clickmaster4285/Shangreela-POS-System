@@ -68,25 +68,34 @@ export function POSFilterBar({
 }: POSFilterBarProps) {
   const filtersContent = (
     <>
-      {/* Floor Filter */}
+      {/* Floor Filter Tabs */}
       <div className="flex items-center gap-2">
-        <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Floor</label>
-        <Select value={selectedFloor} onValueChange={onFloorChange}>
-          <SelectTrigger className="w-[140px] h-9 bg-background border-border rounded-xl text-xs font-semibold focus:ring-primary/20">
-            <div className="flex items-center gap-2">
-              <Map className="w-3.5 h-3.5 text-primary" />
-              <SelectValue placeholder="All Floors" />
-            </div>
-          </SelectTrigger>
-          <SelectContent className="rounded-xl border-border shadow-xl">
-            <SelectItem value="all" className="text-xs font-medium">All Floors</SelectItem>
-            {floors.map((f) => (
-              <SelectItem key={f.key} value={f.key} className="text-xs font-medium">
-                {f.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground whitespace-nowrap">Floor</label>
+        <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => onFloorChange('all')}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${
+              selectedFloor === 'all'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            }`}
+          >
+            All Floors
+          </button>
+          {floors.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => onFloorChange(f.key)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${
+                selectedFloor === f.key
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              {f.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Cashier Filter */}

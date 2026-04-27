@@ -8,6 +8,21 @@ const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliverie
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const normalizeTableSearch = (query) => {
+  const q = String(query || "").trim().toUpperCase();
+  const match = q.match(/^([MRBE])(\d+)$/);
+  if (match) {
+    const prefixMap = {
+      'M': 'MH',
+      'R': 'RT',
+      'B': 'BT',
+      'E': 'ET'
+    };
+    return `${prefixMap[match[1]]}-${match[2]}`;
+  }
+  return query.trim();
+};
+
 const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
@@ -62,14 +77,23 @@ exports.list = async (req, res) => {
 
     // Search logic
     if (req.query.search?.trim()) {
-      const search = req.query.search.trim();
+      const searchInput = req.query.search.trim();
+      const normalizedSearch = normalizeTableSearch(searchInput);
+      const isNormalized = normalizedSearch !== searchInput;
+      
       const conditions = [];
 
       // Order code match
-      conditions.push({ code: { $regex: escapeRegex(search), $options: "i" } });
+      conditions.push({ code: { $regex: escapeRegex(searchInput), $options: "i" } });
 
       // Table name match
-      conditions.push({ table: { $regex: escapeRegex(search), $options: "i" } });
+      if (isNormalized) {
+        // If it was normalized (e.g., M1 -> MH-1), use exact match for table
+        conditions.push({ table: { $regex: `^${escapeRegex(normalizedSearch)}$`, $options: "i" } });
+      } else {
+        // Otherwise use loose regex match
+        conditions.push({ table: { $regex: escapeRegex(searchInput), $options: "i" } });
+      }
 
       if (conditions.length) where.$or = conditions;
     }
