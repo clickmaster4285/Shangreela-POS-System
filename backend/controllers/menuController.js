@@ -1,6 +1,6 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
 const { emitPosChange } = require("../utils/realtime");
-const { MenuItem, MenuCategory } = require("../models");
+const { MenuItem, MenuCategory, Recipe } = require("../models");
 const Fuse = require("fuse.js");
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -33,7 +33,7 @@ exports.list = async (req, res) => {
     if (categoryFilter) where.category = categoryFilter;
 
     [items, total] = await Promise.all([
-      MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe"),
       MenuItem.countDocuments(where)
     ]);
 
@@ -72,12 +72,13 @@ exports.list = async (req, res) => {
   const end = start + limit;
   const paginatedResults = results.slice(start, end);
 
+  const populated = await MenuItem.populate(paginatedResults.map(r => r.item), { path: "recipe" });
+
   res.json(buildPaginatedResponse({
-    items: paginatedResults.map((result) => ({
-      ...result.item,
-      id: String(result.item._id),
-      score: result.score,
-      matches: result.matches // Optional: send match positions for frontend highlighting
+    items: populated.map((item) => ({
+      ...item,
+      id: String(item._id),
+      score: results.find(r => String(r.item._id) === String(item._id))?.score,
     })),
     total: results.length,
     page,
@@ -91,6 +92,9 @@ exports.create = async (req, res) => {
     price: Number(req.body.price || 0),
     kitchenRequired: req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true,
     image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
+    recipe: req.body.recipe || null,
+    scale: Number(req.body.scale || 1),
+    ingredientOverrides: req.body.ingredientOverrides || [],
   };
   const row = await MenuItem.create(payload);
   // Invalidate cache
@@ -110,7 +114,11 @@ exports.update = async (req, res) => {
   if (req.file) {
     payload.image = `/uploads/menu/${req.file.filename}`;
   }
-  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true });
+  if (req.body.recipe !== undefined) payload.recipe = req.body.recipe || null;
+  if (req.body.scale !== undefined) payload.scale = Number(req.body.scale || 1);
+  if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = req.body.ingredientOverrides;
+
+  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe");
   // Invalidate cache
   cachedMenuItems = null;
   emitPosChange(["menu", "dashboard"]);

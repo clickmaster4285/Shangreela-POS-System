@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { type InventoryItem, type Supplier, inventoryCategories } from '@/data/inventory/inventoryData';
 
-const BASE_UNITS = ['kg', 'g', 'liter', 'ml', 'dozen', 'tray', 'piece', 'pack', 'box', 'bottle', 'can', 'jar', 'bag', 'sack', 'cup', 'tbsp', 'tsp', 'slice', 'portion', 'plate'] as const;
+export const BASE_UNITS = ['kg', 'g', 'liter', 'ml', 'dozen', 'tray', 'piece', 'pack', 'box', 'bottle', 'can', 'jar', 'bag', 'sack', 'cup', 'tbsp', 'tsp', 'slice', 'portion', 'plate'] as const;
 
 interface AddItemModalProps {
    editingItem: InventoryItem | null;

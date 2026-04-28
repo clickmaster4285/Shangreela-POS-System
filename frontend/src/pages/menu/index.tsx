@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type MenuItem } from '@/data/pos/mockData';
-import { Plus, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Plus, Pencil, Search, Trash2, X, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { BASE_UNITS } from '@/pages/inventory/modals/AddItemModal';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 
 type MenuCategoriesResponse = { categories: string[] };
+type Recipe = {
+  id: string;
+  name: string;
+  ingredients: Array<{
+    inventoryItem: {
+      _id: string;
+      name: string;
+      unit: string;
+    };
+    baseQuantity: number;
+    unit: string;
+  }>;
+};
+type RecipesResponse = PaginatedResponse<Recipe>;
 const DEFAULT_SPECIAL_CATEGORIES = ['Deals', 'Platters'] as const;
 type BundleEntry = { id: string; name: string; quantity: number };
 
@@ -38,6 +53,9 @@ export default function MenuManagement() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryPickerSearch, setCategoryPickerSearch] = useState('');
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [showRecipeDropdown, setShowRecipeDropdown] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<Array<{ _id: string; name: string; unit: string }>>([]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
@@ -56,6 +74,24 @@ export default function MenuManagement() {
     }
   }, []);
 
+  const fetchRecipes = useCallback(async () => {
+    try {
+      const response = await api<RecipesResponse>('/recipes?limit=100');
+      setRecipes(response.items);
+    } catch (error) {
+      console.error('Failed to load recipes', error);
+    }
+  }, []);
+
+  const fetchInventoryItems = useCallback(async () => {
+    try {
+      const response = await api<{ items: Array<{ id: string; name: string; unit: string }>; pagination: any }>('/inventory/items?limit=500');
+      setInventoryItems(response.items.map((i: any) => ({ _id: i.id, name: i.name, unit: i.unit })));
+    } catch (error) {
+      console.error('Failed to load inventory items', error);
+    }
+  }, []);
+
   const fetchItems = useCallback(async () => {
     try {
       const categoryQuery = categoryFilter !== 'All' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
@@ -70,7 +106,9 @@ export default function MenuManagement() {
 
   useEffect(() => {
     fetchCategories();
-  }, [fetchCategories]);
+    fetchRecipes();
+    fetchInventoryItems();
+  }, [fetchCategories, fetchRecipes, fetchInventoryItems]);
 
   useEffect(() => {
     fetchItems();
@@ -86,6 +124,15 @@ export default function MenuManagement() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [scale, setScale] = useState('1');
+  const [ingredientOverrides, setIngredientOverrides] = useState<Array<{ inventoryItem: string; baseQuantity: number; unit: string }>>([]);
+  const [showOverrides, setShowOverrides] = useState(false);
+  const [showCreateRecipe, setShowCreateRecipe] = useState(false);
+  const [newRecipeName, setNewRecipeName] = useState('');
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState<Array<{ inventoryItem: string; baseQuantity: string; unit: string }>>([]);
+  const [recipeSearch, setRecipeSearch] = useState('');
+  const [ingredientSearch, setIngredientSearch] = useState('');
   const [bundleItemId, setBundleItemId] = useState('');
   const [bundleQty, setBundleQty] = useState('1');
   const [bundleItems, setBundleItems] = useState<BundleEntry[]>([]);
@@ -116,6 +163,13 @@ export default function MenuManagement() {
     setBundleItems([]);
     setBundleItemId('');
     setBundleQty('1');
+    setSelectedRecipeId(null);
+    setScale('1');
+    setIngredientOverrides([]);
+    setShowCreateRecipe(false);
+    setNewRecipeName('');
+    setNewRecipeIngredients([]);
+    setIngredientSearch('');
     setEditing(null);
     setShowForm(true);
   };
@@ -133,6 +187,12 @@ export default function MenuManagement() {
     }
     setBundleItemId('');
     setBundleQty('1');
+    setSelectedRecipeId((item as { recipe?: string | null } & MenuItem).recipe || null);
+    setScale(String((item as { scale?: number } & MenuItem).scale || 1));
+    setIngredientOverrides(((item as { ingredientOverrides?: Array<{ inventoryItem: string; baseQuantity: number; unit: string }> } & MenuItem).ingredientOverrides) || []);
+    setShowCreateRecipe(false);
+    setNewRecipeName('');
+    setNewRecipeIngredients([]);
     setEditing(item);
     setShowForm(true);
   };
@@ -166,6 +226,9 @@ export default function MenuManagement() {
     formData.append('description', form.description);
     formData.append('kitchenRequired', String(form.kitchenRequired));
     formData.append('image', form.image || '');
+    formData.append('recipe', selectedRecipeId || '');
+    formData.append('scale', scale);
+    formData.append('ingredientOverrides', JSON.stringify(ingredientOverrides));
     if (imageFile) {
       formData.set('image', imageFile);
     }
@@ -320,112 +383,419 @@ export default function MenuManagement() {
 
       {showForm && (
         <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" style={{ boxShadow: 'var(--shadow-elevated)' }}>
+          <div className={`bg-card rounded-2xl p-6 w-full ${showCreateRecipe ? 'max-w-4xl' : 'max-w-md'} space-y-4`} style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="flex justify-between items-center">
               <h3 className="font-serif text-lg font-bold">{editing ? 'Edit Item' : 'New Item'}</h3>
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
-            <input className={inputClass} placeholder="Item name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rs.</span>
-              <input className={`${inputClass} pl-12`} placeholder="Price" type="number" step="1" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
-            </div>
-            <select className={inputClass} value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-              {allCategories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-            {isBundleCategory && (
-              <div className="space-y-2 rounded-xl border border-border p-3">
-                <p className="text-sm font-medium text-foreground">Select items and quantity</p>
-                <div className="grid grid-cols-[1fr_92px_auto] gap-2">
-                  <select
-                    className={inputClass}
-                    value={bundleItemId}
-                    onChange={e => setBundleItemId(e.target.value)}
-                  >
-                    <option value="">Select item</option>
-                    {bundleSourceItems.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                  <input
-                    className={inputClass}
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={bundleQty}
-                    onChange={e => setBundleQty(e.target.value)}
-                    placeholder="Qty"
-                  />
-                  <button
-                    type="button"
-                    onClick={addBundleItem}
-                    className="px-3 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
-                  >
-                    Add
-                  </button>
+
+            <div className={showCreateRecipe ? 'grid grid-cols-2 gap-6' : ''}>
+              {/* Left column - Menu Item Fields */}
+              <div className="space-y-4">
+                <input className={inputClass} placeholder="Item name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rs.</span>
+                  <input className={`${inputClass} pl-12`} placeholder="Price" type="number" step="1" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
                 </div>
-                {bundleItems.length > 0 && (
-                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                    {bundleItems.map(entry => (
-                      <div key={entry.id} className="flex items-center justify-between rounded-lg bg-muted/60 px-2 py-1.5 text-xs">
-                        <span className="truncate pr-2">{entry.name}</span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-semibold">x{entry.quantity}</span>
-                          <button
-                            type="button"
-                            className="text-destructive hover:underline"
-                            onClick={() => setBundleItems(prev => prev.filter(x => x.id !== entry.id))}
-                          >
-                            Remove
-                          </button>
-                        </div>
+                <select className={inputClass} value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                  {allCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                {isBundleCategory && (
+                  <div className="space-y-2 rounded-xl border border-border p-3">
+                    <p className="text-sm font-medium text-foreground">Select items and quantity</p>
+                    <div className="grid grid-cols-[1fr_92px_auto] gap-2">
+                      <select
+                        className={inputClass}
+                        value={bundleItemId}
+                        onChange={e => setBundleItemId(e.target.value)}
+                      >
+                        <option value="">Select item</option>
+                        {bundleSourceItems.map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        className={inputClass}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={bundleQty}
+                        onChange={e => setBundleQty(e.target.value)}
+                        placeholder="Qty"
+                      />
+                      <button
+                        type="button"
+                        onClick={addBundleItem}
+                        className="px-3 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {bundleItems.length > 0 && (
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                        {bundleItems.map(entry => (
+                          <div key={entry.id} className="flex items-center justify-between rounded-lg bg-muted/60 px-2 py-1.5 text-xs">
+                            <span className="truncate pr-2">{entry.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-semibold">x{entry.quantity}</span>
+                              <button
+                                type="button"
+                                className="text-destructive hover:underline"
+                                onClick={() => setBundleItems(prev => prev.filter(x => x.id !== entry.id))}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={form.kitchenRequired}
-                onChange={e => setForm({...form, kitchenRequired: e.target.checked})}
-                className="accent-primary"
-              />
-              Send to kitchen
-            </label>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Item image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className={inputClass}
-              />
-              {form.image ? (
-                <div className="relative">
-                  <img src={form.image} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      cleanupImagePreview();
-                      setImageFile(null);
-                      setImagePreviewUrl('');
-                      setForm(prev => ({ ...prev, image: '' }));
-                    }}
-                    className="absolute right-2 top-2 rounded-full bg-foreground/80 p-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Remove
-                  </button>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={form.kitchenRequired}
+                    onChange={e => setForm({...form, kitchenRequired: e.target.checked})}
+                    className="accent-primary"
+                  />
+                  Send to kitchen
+                </label>
+
+                {/* Recipe Section - Left Side (select/create) */}
+                {!isBundleCategory && !showCreateRecipe && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Layers className="w-4 h-4" /> Recipe
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Search recipes..."
+                        value={recipeSearch}
+                        onChange={e => setRecipeSearch(e.target.value)}
+                        className={`${inputClass} flex-1`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateRecipe(true)}
+                        className="px-3 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors whitespace-nowrap"
+                      >
+                        <Plus className="w-4 h-4 inline mr-1" /> New
+                      </button>
+                    </div>
+                    <select
+                      className={inputClass}
+                      value={selectedRecipeId || ''}
+                      onChange={e => {
+                        setSelectedRecipeId(e.target.value || null);
+                        setIngredientOverrides([]);
+                      }}
+                    >
+                      <option value="">No recipe</option>
+                      {recipes
+                        .filter(r => r.name.toLowerCase().includes(recipeSearch.toLowerCase()))
+                        .map(r => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Selected Recipe Info - Left Side */}
+                {selectedRecipeId && !showCreateRecipe && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-muted-foreground whitespace-nowrap">Scale:</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0.1"
+                        value={scale}
+                        onChange={e => setScale(e.target.value)}
+                        className={`${inputClass} w-24`}
+                        placeholder="1.0"
+                      />
+                      <span className="text-xs text-muted-foreground">x multiplier</span>
+                    </div>
+
+                    {(() => {
+                      const recipe = recipes.find(r => r.id === selectedRecipeId);
+                      if (!recipe) return null;
+                      const scaleNum = parseFloat(scale) || 1;
+                      return (
+                        <div className="rounded-xl border border-border p-3 space-y-1.5 bg-muted/30">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Ingredients (base × scale)</p>
+                          {recipe.ingredients.map((ing, i) => {
+                            const override = ingredientOverrides.find(o => o.inventoryItem === ing.inventoryItem._id);
+                            const displayQty = override ? override.baseQuantity : (ing.baseQuantity * scaleNum);
+                            return (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-foreground">{ing.inventoryItem.name}</span>
+                                <span className="text-muted-foreground font-mono">
+                                  {displayQty.toFixed(1)} {ing.unit}
+                                  {override && <span className="text-primary ml-1">(override)</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOverrides(!showOverrides)}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      {showOverrides ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {showOverrides ? 'Hide' : 'Edit'} ingredient overrides
+                    </button>
+
+                    {showOverrides && (
+                      <div className="space-y-2">
+                        {(() => {
+                          const recipe = recipes.find(r => r.id === selectedRecipeId);
+                          if (!recipe) return null;
+                          return (
+                            <>
+                              {recipe.ingredients.map((ing, i) => {
+                                const existing = ingredientOverrides.find(o => o.inventoryItem === ing.inventoryItem._id);
+                                return (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="text-xs text-foreground w-32 truncate">{ing.inventoryItem.name}</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={existing ? existing.baseQuantity : ''}
+                                      placeholder={`${(ing.baseQuantity * (parseFloat(scale) || 1)).toFixed(1)}`}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        if (!val) {
+                                          setIngredientOverrides(prev => prev.filter(o => o.inventoryItem !== ing.inventoryItem._id));
+                                        } else {
+                                          setIngredientOverrides(prev => {
+                                            const filtered = prev.filter(o => o.inventoryItem !== ing.inventoryItem._id);
+                                            return [...filtered, { inventoryItem: ing.inventoryItem._id, baseQuantity: parseFloat(val), unit: ing.unit }];
+                                          });
+                                        }
+                                      }}
+                                      className={`${inputClass} w-24`}
+                                    />
+                                    <span className="text-xs text-muted-foreground">{ing.unit}</span>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Item image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className={inputClass}
+                  />
+                  {form.image ? (
+                    <div className="relative">
+                      <img src={form.image} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cleanupImagePreview();
+                          setImageFile(null);
+                          setImagePreviewUrl('');
+                          setForm(prev => ({ ...prev, image: '' }));
+                        }}
+                        className="absolute right-2 top-2 rounded-full bg-foreground/80 p-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+                <textarea className={`${inputClass} resize-none h-20`} placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
+              </div>
+
+              {/* Right column - Recipe Creator */}
+              {showCreateRecipe && (
+                <div className="space-y-4 border-l border-border pl-6">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm font-medium">New Recipe</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateRecipe(false);
+                        setNewRecipeName('');
+                        setNewRecipeIngredients([]);
+                        setIngredientSearch('');
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Recipe name (e.g. Biryani Base)"
+                    value={newRecipeName}
+                    onChange={e => setNewRecipeName(e.target.value)}
+                    className={inputClass}
+                  />
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground">Ingredients</p>
+
+                    {/* Search inventory items */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search inventory items..."
+                        className={`${inputClass} pl-10 text-sm`}
+                        onChange={e => setIngredientSearch(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Available items list - show only when searching */}
+                    <div className="border border-border rounded-xl max-h-64 overflow-y-auto bg-muted/20">
+                      {ingredientSearch === '' ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">Type to search ingredients</p>
+                      ) : inventoryItems
+                        .filter(item => item.name.toLowerCase().includes(ingredientSearch.toLowerCase()))
+                        .map(item => (
+                          <button
+                            key={item._id}
+                            type="button"
+                            onClick={() => {
+                              const exists = newRecipeIngredients.some(i => i.inventoryItem === item._id);
+                              if (exists) {
+                                toast.error('Item already added');
+                                return;
+                              }
+                              setNewRecipeIngredients(prev => [...prev, { inventoryItem: item._id, baseQuantity: '', unit: item.unit }]);
+                              setIngredientSearch('');
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/50 border-b border-border/50 last:border-0 text-left transition-colors"
+                          >
+                            <span className="font-medium text-sm">{item.name}</span>
+                            <span className="text-xs text-muted-foreground">{item.unit}</span>
+                          </button>
+                        ))}
+                      {ingredientSearch !== '' && inventoryItems.filter(item => item.name.toLowerCase().includes(ingredientSearch.toLowerCase())).length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-4">No items found</p>
+                      )}
+                    </div>
+
+                    {/* Added ingredients */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {newRecipeIngredients.map((ing, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
+                          <span className="flex-1 font-medium text-sm">{inventoryItems.find(x => x._id === ing.inventoryItem)?.name || 'Unknown'}</span>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="Qty"
+                            value={ing.baseQuantity}
+                            onChange={e => {
+                              const updated = [...newRecipeIngredients];
+                              updated[i].baseQuantity = e.target.value;
+                              setNewRecipeIngredients(updated);
+                            }}
+                            className={`${inputClass} w-20 text-sm`}
+                          />
+                          <select
+                            value={ing.unit}
+                            onChange={e => {
+                              const updated = [...newRecipeIngredients];
+                              updated[i].unit = e.target.value;
+                              setNewRecipeIngredients(updated);
+                            }}
+                            className={`${inputClass} w-24 text-xs`}
+                          >
+                            {BASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setNewRecipeIngredients(prev => prev.filter((_, idx) => idx !== i))}
+                            className="text-destructive hover:text-destructive/80"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      {newRecipeIngredients.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-2">Search and add ingredients above</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newRecipeName.trim()) {
+                          toast.error('Enter recipe name');
+                          return;
+                        }
+                        if (newRecipeIngredients.length === 0 || newRecipeIngredients.some(i => !i.inventoryItem || !i.baseQuantity)) {
+                          toast.error('Add all ingredients');
+                          return;
+                        }
+                        const payload = {
+                          name: newRecipeName.trim(),
+                          ingredients: newRecipeIngredients.map(i => ({
+                            inventoryItem: i.inventoryItem,
+                            baseQuantity: parseFloat(i.baseQuantity),
+                            unit: i.unit,
+                          })),
+                        };
+                        api('/recipes', { method: 'POST', body: JSON.stringify(payload) })
+                          .then((res) => {
+                            const newRecipe = { id: (res as { id: string }).id, ...payload, ingredients: newRecipeIngredients.map((i, idx) => ({ inventoryItem: { _id: i.inventoryItem, name: inventoryItems.find(x => x._id === i.inventoryItem)?.name || '', unit: i.unit }, baseQuantity: parseFloat(i.baseQuantity), unit: i.unit })) };
+                            setRecipes(prev => [newRecipe, ...prev]);
+                            setSelectedRecipeId(newRecipe.id);
+                            setShowCreateRecipe(false);
+                            setNewRecipeName('');
+                            setNewRecipeIngredients([]);
+                            toast.success('Recipe created');
+                          })
+                          .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to create recipe'));
+                      }}
+                      className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary transition-colors"
+                    >
+                      Save Recipe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateRecipe(false);
+                        setNewRecipeName('');
+                        setNewRecipeIngredients([]);
+                        setIngredientSearch('');
+                      }}
+                      className="px-4 py-2 rounded-xl border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <textarea className={`${inputClass} resize-none h-20`} placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
-            <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
-              {editing ? 'Update' : 'Add'} Item
-            </button>
+
+            {!showCreateRecipe && (
+              <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
+                {editing ? 'Update' : 'Add'} Item
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -470,6 +840,7 @@ export default function MenuManagement() {
               <th className="sticky left-0 z-10 bg-card py-3 px-2 font-medium">#</th>
               <th className="py-3 px-2 font-medium">Item</th>
               <th className="py-3 px-2 font-medium">Category</th>
+              <th className="py-3 px-2 font-medium">Recipe</th>
               <th className="py-3 px-2 font-medium">Kitchen</th>
               <th className="py-3 px-2 font-medium">Price (PKR)</th>
               <th className="py-3 px-2 font-medium">Status</th>
@@ -494,6 +865,16 @@ export default function MenuManagement() {
                   </div>
                 </td>
                 <td className="py-3 px-2 text-muted-foreground">{item.category}</td>
+                <td className="py-3 px-2">
+                  {(item as { recipe?: { name?: string } } & MenuItem).recipe?.name ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {(item as { recipe?: { name?: string } } & MenuItem).recipe?.name}
+                      {(item as { scale?: number } & MenuItem).scale && (item as { scale?: number } & MenuItem).scale !== 1 ? ` ×${(item as { scale?: number } & MenuItem).scale}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
                 <td className="py-3 px-2 text-sm font-medium text-foreground">{item.kitchenRequired !== false ? 'Yes' : 'No'}</td>
                 <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.price.toLocaleString()}</td>
                 <td className="py-3 px-2">
@@ -557,4 +938,3 @@ export default function MenuManagement() {
     </div>
   );
 }
-

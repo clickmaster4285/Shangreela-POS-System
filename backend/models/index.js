@@ -25,4 +25,5 @@ module.exports = {
   TaxConfig: require("./taxConfig"),
   MobileConfig: require("./mobileConfig"),
   Expense: require("./expense"),
+  Recipe: require("./recipe"),
 };
