@@ -11,7 +11,12 @@ exports.list = async (req, res) => {
   }
 
   const [items, total] = await Promise.all([
-    Recipe.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Recipe.find(where)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("ingredients.inventoryItem")
+      .lean(),
     Recipe.countDocuments(where),
   ]);
 

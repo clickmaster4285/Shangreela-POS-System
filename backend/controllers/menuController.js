@@ -4,6 +4,22 @@ const { MenuItem, MenuCategory, Recipe } = require("../models");
 const Fuse = require("fuse.js");
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const parseIngredientOverrides = (value) => {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return [];
+};
 
 // Cache for menu items to avoid repeated DB queries
 let cachedMenuItems = null;
@@ -94,7 +110,7 @@ exports.create = async (req, res) => {
     image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
     recipe: req.body.recipe || null,
     scale: Number(req.body.scale || 1),
-    ingredientOverrides: req.body.ingredientOverrides || [],
+    ingredientOverrides: parseIngredientOverrides(req.body.ingredientOverrides) || [],
   };
   const row = await MenuItem.create(payload);
   // Invalidate cache
@@ -116,7 +132,7 @@ exports.update = async (req, res) => {
   }
   if (req.body.recipe !== undefined) payload.recipe = req.body.recipe || null;
   if (req.body.scale !== undefined) payload.scale = Number(req.body.scale || 1);
-  if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = req.body.ingredientOverrides;
+  if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = parseIngredientOverrides(req.body.ingredientOverrides);
 
   const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe");
   // Invalidate cache
