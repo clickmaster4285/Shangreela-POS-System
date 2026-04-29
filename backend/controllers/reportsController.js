@@ -1,4 +1,4 @@
-const { Order, Delivery, MenuItem, Table } = require("../models");
+const { Order, Delivery, MenuItem, Table, Recipe, InventoryItem } = require("../models");
 const { buildPaidOrdersQuery, parseCustomDateRange } = require("../utils/reportingQueries");
 
 const sumOrderTotal = (order) => Number(order.total || 0);
@@ -154,4 +154,76 @@ exports.outdoorDelivery = async (_req, res) => {
     map.set(supervisor, prev);
   }
   res.json({ items: [...map.values()] });
+};
+
+exports.inventoryUsageReport = async (req, res) => {
+  const tableNames = await getTableNames(req.query.floorKey);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNames, req.query.orderTaker)).lean();
+
+  // Aggregate sold quantities by MenuItem ID
+  const soldItems = new Map();
+  for (const o of orders) {
+    for (const i of o.items || []) {
+      if (!i.menuItem?.id) continue;
+      const id = String(i.menuItem.id);
+      const qty = Number(i.quantity || 0);
+      soldItems.set(id, (soldItems.get(id) || 0) + qty);
+    }
+  }
+
+  const mongoose = require("mongoose");
+  const validIds = Array.from(soldItems.keys()).filter((id) => mongoose.Types.ObjectId.isValid(id));
+
+  // Fetch MenuItems with their recipes and ingredients
+  const menuItems = await MenuItem.find({ _id: { $in: validIds } })
+    .populate({
+      path: "recipe",
+      populate: {
+        path: "ingredients.inventoryItem",
+        model: "InventoryItem",
+        select: "name category unit",
+      },
+    })
+    .populate("ingredientOverrides.inventoryItem", "name category unit")
+    .lean();
+
+  const usageMap = new Map();
+
+  for (const item of menuItems) {
+    const soldQty = soldItems.get(String(item._id)) || 0;
+    if (soldQty <= 0) continue;
+
+    const scale = Number(item.scale || 1);
+
+    // If overrides exist, use them; otherwise use recipe ingredients
+    let ingredientsToUse = [];
+    if (item.ingredientOverrides && item.ingredientOverrides.length > 0) {
+      ingredientsToUse = item.ingredientOverrides.map(override => ({
+        inventoryItem: override.inventoryItem,
+        baseQuantity: override.baseQuantity,
+      }));
+    } else if (item.recipe && item.recipe.ingredients) {
+      ingredientsToUse = item.recipe.ingredients;
+    }
+
+    for (const ing of ingredientsToUse) {
+      if (!ing.inventoryItem) continue;
+      const invItemId = String(ing.inventoryItem._id);
+      const usedQty = soldQty * scale * Number(ing.baseQuantity || 0);
+
+      const existing = usageMap.get(invItemId) || {
+        inventoryItemName: ing.inventoryItem.name,
+        category: ing.inventoryItem.category || "Uncategorized",
+        unit: ing.inventoryItem.unit || "unit",
+        usedQuantity: 0,
+      };
+
+      existing.usedQuantity += usedQty;
+      usageMap.set(invItemId, existing);
+    }
+  }
+
+  // Return sorted array
+  const result = Array.from(usageMap.values()).sort((a, b) => b.usedQuantity - a.usedQuantity);
+  res.json({ items: result });
 };

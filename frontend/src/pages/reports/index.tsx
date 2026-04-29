@@ -113,7 +113,7 @@ export default function Reports() {
     queryFn: async () => {
       const floorParam = selectedFloor !== 'all' ? `&floorKey=${selectedFloor}` : '';
       const cashierParam = selectedCashier !== 'all' ? `&orderTaker=${selectedCashier}` : '';
-      const [w, t, s] = await Promise.all([
+      const [w, t, s, inv] = await Promise.all([
         api<{ items: { day: string; revenue: number }[] }>(`/reports/weekly-sales?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
         api<{ items: { name: string; sold: number; revenue: number }[] }>(`/reports/top-items?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
         api<{
@@ -127,12 +127,14 @@ export default function Reports() {
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
         }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
+        api<{ items: { inventoryItemName: string; category: string; unit: string; usedQuantity: number }[] }>(`/reports/inventory-usage?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
       ]);
-      return { weeklySalesData: w.items, topSellingItems: t.items, summary: s };
+      return { weeklySalesData: w.items, topSellingItems: t.items, summary: s, inventoryUsage: inv.items };
     },
   });
   const weeklySalesData = reportsQuery.data?.weeklySalesData ?? [];
   const topSellingItems = reportsQuery.data?.topSellingItems ?? [];
+  const inventoryUsage = reportsQuery.data?.inventoryUsage ?? [];
   const summary = reportsQuery.data?.summary ?? {
     revenue: 0,
     profit: 0,
@@ -169,6 +171,7 @@ export default function Reports() {
       summary,
       revenueSeries: weeklySalesData,
       topItems: topSellingItems,
+      inventoryUsage,
       logoPngDataUrl,
       theme,
       business: {
@@ -484,6 +487,34 @@ export default function Reports() {
               )}
             </tbody>
           </table>
+
+          {/* Inventory Usage Table */}
+          <table className="tabular-report">
+            <caption>Inventory Usage</caption>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Ingredient</th>
+                <th>Category</th>
+                <th>Quantity Used</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inventoryUsage.map((item, i) => (
+                <tr key={item.inventoryItemName}>
+                  <td>{i + 1}</td>
+                  <td>{item.inventoryItemName}</td>
+                  <td>{item.category}</td>
+                  <td>{item.usedQuantity.toFixed(2)} {item.unit}</td>
+                </tr>
+              ))}
+              {inventoryUsage.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center' }}>No data available</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         {/* Charts - Visible on screen only */}
@@ -539,6 +570,40 @@ export default function Reports() {
                     <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Inventory Usage Table - Visible on screen */}
+        <div className="pos-card no-print">
+          <h3 className="font-semibold text-foreground text-sm mb-4">Inventory Usage</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="py-3 px-2 font-medium">#</th>
+                  <th className="py-3 px-2 font-medium">Ingredient</th>
+                  <th className="py-3 px-2 font-medium">Category</th>
+                  <th className="py-3 px-2 font-medium">Quantity Used</th>
+                 </tr>
+              </thead>
+              <tbody>
+                {inventoryUsage.map((item, i) => (
+                  <tr key={item.inventoryItemName} className="border-b border-border/50 last:border-0">
+                    <td className="py-3 px-2">
+                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                     </td>
+                    <td className="py-3 px-2 font-medium text-foreground">{item.inventoryItemName}</td>
+                    <td className="py-3 px-2 text-muted-foreground">{item.category}</td>
+                    <td className="py-3 px-2 font-semibold text-foreground">{item.usedQuantity.toFixed(2)} {item.unit}</td>
+                  </tr>
+                ))}
+                {inventoryUsage.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-muted-foreground">No data available</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

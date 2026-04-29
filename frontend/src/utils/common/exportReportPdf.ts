@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 
 type RevenueRow = { day: string; revenue: number };
 type TopItemRow = { name: string; sold: number; revenue: number };
+type InventoryUsageRow = { inventoryItemName: string; category: string; unit: string; usedQuantity: number };
 
 export type ReportPdfPayload = {
   range: 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -24,6 +25,7 @@ export type ReportPdfPayload = {
   };
   revenueSeries: RevenueRow[];
   topItems: TopItemRow[];
+  inventoryUsage?: InventoryUsageRow[];
   logoPngDataUrl?: string;
   theme?: {
     primaryRgb?: [number, number, number];
@@ -221,6 +223,26 @@ export function exportReportPdf(payload: ReportPdfPayload) {
     alternateRowStyles,
     columnStyles: { 0: { halign: 'right', cellWidth: 10 }, 2: { halign: 'right', cellWidth: 16 }, 3: { halign: 'right', cellWidth: 34 } },
   });
+
+  // Inventory Usage
+  if (payload.inventoryUsage && payload.inventoryUsage.length > 0) {
+    autoTable(doc, {
+      startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6,
+      head: [['#', 'Ingredient', 'Category', 'Quantity Used']],
+      body: payload.inventoryUsage.map((it, i) => [
+        String(i + 1),
+        String(it.inventoryItemName || ''),
+        String(it.category || ''),
+        `${it.usedQuantity.toFixed(2)} ${it.unit}`,
+      ]),
+      theme: 'striped',
+      styles: { font: 'helvetica', fontSize: 9.3, cellPadding: 2.1, lineColor: border as unknown as number[], lineWidth: 0.2 },
+      headStyles,
+      bodyStyles,
+      alternateRowStyles,
+      columnStyles: { 0: { halign: 'right', cellWidth: 10 }, 3: { halign: 'right', cellWidth: 34 } },
+    });
+  }
 
   const fileName = payload.range === 'custom'
     ? `report-${payload.customDateFrom}-to-${payload.customDateTo}.pdf`
