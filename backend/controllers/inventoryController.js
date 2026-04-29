@@ -335,7 +335,7 @@ exports.listSuppliers = async (req, res) => {
     Supplier.find(where).sort({ name: 1 }).skip(skip).limit(limit).lean(),
     Supplier.countDocuments(where),
   ]);
-  
+
   res.json(buildPaginatedResponse({ items: rows.map((s) => ({ ...s, id: String(s._id) })), total, page, limit }));
 };
 
@@ -371,16 +371,17 @@ exports.getCategories = async (_req, res) => {
 // Get inventory alerts (low stock or expired/expiring soon)
 exports.getInventoryAlerts = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
-  
+
   const today = new Date();
   const expiringSoonDate = new Date();
   expiringSoonDate.setDate(today.getDate() + 3); // Alerts for items expiring in 3 days
+  const expiringSoonStr = expiringSoonDate.toISOString().split("T")[0];
 
   const where = {
     isActive: { $ne: false },
     $or: [
       { $expr: { $lte: ["$quantity", "$minStock"] } }, // Low stock
-      { expiryDate: { $lte: expiringSoonDate } },     // Expired or expiring soon
+      { expiryDate: { $nin: [null, ""], $lte: expiringSoonStr } },     // Expired or expiring soon
     ],
   };
 
