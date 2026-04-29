@@ -31,6 +31,7 @@ export type PageKey =
   | 'kitchen'
   | 'billing'
   | 'menu'
+  | 'recipes'
   | 'reports'
   | 'users'
   | 'inventory'
@@ -72,6 +73,7 @@ const ALL_PAGE_KEYS: PageKey[] = [
   'kitchen',
   'billing',
   'menu',
+  'recipes',
   'reports',
   'users',
   'inventory',

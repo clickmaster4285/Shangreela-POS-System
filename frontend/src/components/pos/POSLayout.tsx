@@ -25,6 +25,7 @@ import {
   Smartphone,
   MapPinned,
   DollarSign,
+  BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { usePOSStore } from '@/stores/pos/posStore';
@@ -41,6 +42,7 @@ const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page:
   { to: '/pos/kitchen', icon: ChefHat, label: 'Kitchen', page: 'kitchen' },
   { to: '/pos/billing', icon: Receipt, label: 'Billing', page: 'billing' },
   { to: '/pos/menu', icon: UtensilsCrossed, label: 'Menu', page: 'menu' },
+  { to: '/pos/recipes', icon: BookOpen, label: 'Recipes', page: 'recipes' },
   { to: '/pos/inventory', icon: Package, label: 'Inventory', page: 'inventory' },
   { to: '/pos/delivery', icon: Truck, label: 'Delivery', page: 'delivery' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports', page: 'reports' },

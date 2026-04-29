@@ -33,6 +33,7 @@ const ALL_PAGES = [
   "kitchen",
   "billing",
   "menu",
+  "recipes",
   "reports",
   "users",
   "inventory",
@@ -102,6 +103,34 @@ async function initializeRolePermissions() {
     if (!permExists) {
       await Permission.create(roleConfig);
       console.log(`✓ ${roleConfig.role} permissions initialized`);
+    } else {
+      let updated = false;
+
+      const existingPages = permExists.pageAccess || [];
+      const existingActions = permExists.actionPermissions || [];
+      const existingData = permExists.dataVisibility || [];
+
+      const missingPages = roleConfig.pageAccess.filter(p => !existingPages.includes(p));
+      const missingActions = roleConfig.actionPermissions.filter(p => !existingActions.includes(p));
+      const missingData = roleConfig.dataVisibility.filter(p => !existingData.includes(p));
+
+      if (missingPages.length > 0) {
+        permExists.pageAccess = [...existingPages, ...missingPages];
+        updated = true;
+      }
+      if (missingActions.length > 0) {
+        permExists.actionPermissions = [...existingActions, ...missingActions];
+        updated = true;
+      }
+      if (missingData.length > 0) {
+        permExists.dataVisibility = [...existingData, ...missingData];
+        updated = true;
+      }
+
+      if (updated) {
+        await permExists.save();
+        console.log(`✓ ${roleConfig.role} permissions updated with new modules`);
+      }
     }
   }
 }

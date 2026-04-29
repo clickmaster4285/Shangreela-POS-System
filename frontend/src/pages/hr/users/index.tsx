@@ -11,6 +11,7 @@ const ALL_PAGES: { key: PageKey; label: string }[] = [
   { key: 'kitchen', label: 'Kitchen' },
   { key: 'billing', label: 'Billing' },
   { key: 'menu', label: 'Menu Management' },
+  { key: 'recipes', label: 'Recipes' },
   { key: 'reports', label: 'Reports' },
   { key: 'users', label: 'User Management' },
   { key: 'inventory', label: 'Inventory' },
