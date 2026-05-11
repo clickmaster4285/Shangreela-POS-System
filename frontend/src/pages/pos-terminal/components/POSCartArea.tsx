@@ -9,6 +9,7 @@ interface POSCartAreaProps {
   subtotal: number;
   taxableAmount: number;
   serviceCharge: number;
+  takeawayCharge?: number;
   totalTaxAmount: number;
   grandTotal: number;
   gstAmount: number;
@@ -22,6 +23,7 @@ export function POSCartArea({
   subtotal,
   taxableAmount,
   serviceCharge,
+  takeawayCharge = 0,
   totalTaxAmount,
   grandTotal,
   gstAmount,
@@ -39,6 +41,7 @@ export function POSCartArea({
     deliveryPhone, setDeliveryPhone,
     deliveryAddress, setDeliveryAddress,
     gstEnabled, setGstEnabled,
+    takeawayChargeEnabled, setTakeawayChargeEnabled,
     taxRates, currentOrderForEdit, setCurrentOrderForEdit,
     setCustomizingItem, setEditingCartItemIndex,
     setExtraName, setExtraPrice, setItemNotes, setIsCustomAddon,
@@ -262,6 +265,11 @@ export function POSCartArea({
               <span>Service Charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>Rs. {serviceCharge.toLocaleString()}</span>
             </div>
           )}
+          {orderType === 'takeaway' && takeawayChargeEnabled && (
+            <div className="flex justify-between text-primary">
+              <span>TA Charges ({Math.round(taxRates.takeawayChargeRate * 100)}%)</span><span>Rs. {takeawayCharge.toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Tax Amount</span><span>Rs. {totalTaxAmount.toLocaleString()}</span>
           </div>
@@ -272,23 +280,47 @@ export function POSCartArea({
           <span className="text-lg font-bold text-primary">Rs. {grandTotal.toLocaleString()}</span>
         </div>
 
-        {/* GST Toggle */}
-        <div className="flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => setGstEnabled(!gstEnabled)}
-            className={`w-10 h-5 rounded-full relative transition-colors duration-200 ${gstEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-          >
-            <motion.div
-              initial={false}
-              animate={{ x: gstEnabled ? 20 : 2 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
-            />
-          </button>
-          <span className="text-[10px] font-bold text-muted-foreground uppercase">
-            Include GST ({Math.round(taxRates.gstRate * 100)}%)
-          </span>
+        {/* Settings Toggles */}
+        <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
+          {/* GST Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGstEnabled(!gstEnabled)}
+              className={`w-10 h-5 rounded-full relative transition-colors duration-200 ${gstEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            >
+              <motion.div
+                initial={false}
+                animate={{ x: gstEnabled ? 20 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+              />
+            </button>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase">
+              GST ({Math.round(taxRates.gstRate * 100)}%)
+            </span>
+          </div>
+
+          {/* Takeaway Charge Toggle */}
+          {orderType === 'takeaway' && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTakeawayChargeEnabled(!takeawayChargeEnabled)}
+                className={`w-10 h-5 rounded-full relative transition-colors duration-200 ${takeawayChargeEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+              >
+                <motion.div
+                  initial={false}
+                  animate={{ x: takeawayChargeEnabled ? 20 : 2 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+                />
+              </button>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                Take-away Charges ({Math.round(taxRates.takeawayChargeRate * 100)}%)
+              </span>
+            </div>
+          )}
         </div>
 
         <button

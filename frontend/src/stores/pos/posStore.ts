@@ -8,7 +8,7 @@ interface POSState {
   menuItems: MenuItem[];
   floors: { id: string; name: string }[];
   tables: TableInfo[];
-  taxRates: { gstRate: number; serviceChargeRate: number };
+  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number };
 
   // UI State - Navigation
   openFolder: string | null;
@@ -50,13 +50,14 @@ interface POSState {
 
   // Settings
   gstEnabled: boolean;
+  takeawayChargeEnabled: boolean;
   cart: CartItem[];
 
   // Actions - Data
   setMenuItems: (items: MenuItem[]) => void;
   setFloors: (floors: { id: string; name: string }[]) => void;
   setTables: (tables: TableInfo[]) => void;
-  setTaxRates: (rates: { gstRate: number; serviceChargeRate: number }) => void;
+  setTaxRates: (rates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number }) => void;
   setCart: (cart: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
 
   // Actions - Cart Logic
@@ -106,6 +107,7 @@ interface POSState {
 
   // Actions - Settings
   setGstEnabled: (v: boolean) => void;
+  setTakeawayChargeEnabled: (v: boolean) => void;
 
   // Helpers
   resetCustomItemForm: () => void;
@@ -117,7 +119,7 @@ export const usePOSStore = create<POSState>((set) => ({
   menuItems: [],
   floors: [],
   tables: [],
-  taxRates: { gstRate: 0.16, serviceChargeRate: 0.05 },
+  taxRates: { gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05 },
 
   // UI Defaults
   openFolder: 'All',
@@ -153,6 +155,7 @@ export const usePOSStore = create<POSState>((set) => ({
   isCustomAddon: false,
 
   gstEnabled: localStorage.getItem('pos_gst_enabled') !== 'false',
+  takeawayChargeEnabled: localStorage.getItem('pos_takeaway_charge_enabled') !== 'false',
   cart: [],
 
   // Basic Setters
@@ -319,6 +322,11 @@ export const usePOSStore = create<POSState>((set) => ({
     set({ gstEnabled });
   },
 
+  setTakeawayChargeEnabled: (takeawayChargeEnabled) => {
+    localStorage.setItem('pos_takeaway_charge_enabled', takeawayChargeEnabled.toString());
+    set({ takeawayChargeEnabled });
+  },
+
   resetCustomItemForm: () => set({
     customItemName: '',
     customItemPrice: '',
@@ -334,4 +342,3 @@ export const usePOSStore = create<POSState>((set) => ({
     customizingItem: null
   })
 }));
-

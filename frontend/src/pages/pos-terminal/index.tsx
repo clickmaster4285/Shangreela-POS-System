@@ -74,11 +74,12 @@ export default function POSScreen() {
 
   // Tax and Realtime Logic
   const loadTaxRates = useCallback(() => {
-    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax')
+    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number }>('/settings/tax')
       .then((r) => {
         setTaxRates({
           gstRate: Number(r.salesTaxRate ?? 16) / 100,
           serviceChargeRate: Number(r.serviceChargeRate ?? 5) / 100,
+          takeawayChargeRate: Number(r.takeawayChargeRate ?? 5) / 100,
         });
       })
       .catch(() => {});
@@ -137,9 +138,12 @@ export default function POSScreen() {
     cart.reduce((s, c) => s + (c.menuItem.price + (c.extraPrice || 0)) * c.quantity, 0)
   , [cart]);
 
-  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge } = useMemo(() => 
-    computePakistanTaxTotals(subtotal, 0, gstEnabled, taxRates, { applyServiceCharge: orderType === 'dine-in' })
-  , [subtotal, gstEnabled, taxRates, orderType]);
+  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge, takeawayCharge } = useMemo(() => 
+    computePakistanTaxTotals(subtotal, 0, gstEnabled, taxRates, { 
+      applyServiceCharge: orderType === 'dine-in',
+      applyTakeawayCharge: orderType === 'takeaway' && store.takeawayChargeEnabled
+    })
+  , [subtotal, gstEnabled, taxRates, orderType, store.takeawayChargeEnabled]);
 
   const selectedTable = useMemo(() => 
     selectedTableId != null ? tables.find(t => t.id === selectedTableId) ?? null : null
@@ -174,6 +178,7 @@ export default function POSScreen() {
         total: grandTotal,
         gstEnabled,
         items: cart,
+        takeawayChargeEnabled: orderType === 'takeaway' ? store.takeawayChargeEnabled : undefined
       };
 
       if (orderType === 'dine-in' && selectedTable?.id) {
@@ -220,6 +225,7 @@ export default function POSScreen() {
           subtotal={subtotal}
           taxableAmount={taxableAmount}
           serviceCharge={serviceCharge}
+          takeawayCharge={takeawayCharge}
           totalTaxAmount={totalTaxAmount}
           grandTotal={grandTotal}
           gstAmount={gstAmount}
@@ -238,4 +244,3 @@ export default function POSScreen() {
     </div>
   );
 }
-

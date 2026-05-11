@@ -27,7 +27,7 @@ const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
   }
-  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge", "amountPaid", "changeDue"];
+  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge", "takeawayCharge", "amountPaid", "changeDue"];
   for (const f of numericFields) {
     if (body[f] !== undefined && body[f] !== null && body[f] !== "") {
       const n = Number(body[f]);

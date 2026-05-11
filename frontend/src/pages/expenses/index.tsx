@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X, DollarSign, Clock, CheckCircle2, Printer } from 'lucide-react';
+import { Trash2, Plus, Calendar, Filter, List, LayoutGrid, Pencil, X, DollarSign, Clock, CheckCircle2, Printer, Search } from 'lucide-react';
 import { api, getBackendOrigin } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { useSubmitLock } from '@/hooks/pos/use-submit-lock';
+import { useDebounce } from '@/hooks/common/use-debounce';
 import { printExpenseReport } from '@/utils/expenses/printExpenseReport';
 
 type ExpenseCategory = 'supplies' | 'utilities' | 'rent' | 'wages' | 'maintenance' | 'other';
@@ -94,6 +95,8 @@ export default function Expenses() {
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 500);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -102,6 +105,7 @@ export default function Expenses() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '24', from: startDate, to: endDate });
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       
       const [listRes, summaryRes] = await Promise.all([
         api<ExpensesResponse>(`/expenses?${params.toString()}`),
@@ -119,11 +123,11 @@ export default function Expenses() {
     } catch (error) {
       toast.error('Failed to load expenses');
     }
-  }, [page, startDate, endDate, categoryFilter]);
+  }, [page, startDate, endDate, categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     setPage(1);
-  }, [startDate, endDate, categoryFilter]);
+  }, [startDate, endDate, categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchExpenses();
@@ -227,6 +231,16 @@ export default function Expenses() {
         <div>
           <h1 className="font-serif text-2xl font-bold text-foreground">Expenses</h1>
           <p className="text-sm text-muted-foreground">Track and manage business expenses.</p>
+        </div>
+        <div className="flex-1 max-w-md relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search expenses..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+          />
         </div>
         <div className="flex items-center gap-2">
           <button

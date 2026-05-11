@@ -38,6 +38,10 @@ exports.list = async (req, res) => {
     toDate.setDate(toDate.getDate() + 1);
     where.paymentDate = { ...where.paymentDate, $lt: toDate };
   }
+  if (req.query.search) {
+    const searchRegex = new RegExp(String(req.query.search), "i");
+    where.$or = [{ title: searchRegex }, { vendor: searchRegex }, { description: searchRegex }];
+  }
   const [items, total] = await Promise.all([Expense.find(where).sort({ paymentDate: -1 }).skip(skip).limit(limit).lean(), Expense.countDocuments(where)]);
   res.json(
     buildPaginatedResponse({

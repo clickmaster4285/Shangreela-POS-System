@@ -27,10 +27,13 @@ export interface ReceiptData {
   discountPercent: number;
   gstEnabled?: boolean;
   serviceCharge?: number;
+  takeawayCharge?: number;
   /** e.g. 0.16 */
   gstRate?: number;
   /** e.g. 0.05 */
   serviceChargeRate?: number;
+  /** e.g. 0.05 */
+  takeawayChargeRate?: number;
 
   tax?: number;
   total?: number;
@@ -65,15 +68,19 @@ export function printReceipt(data: ReceiptData) {
   const fbrRef = `FBR-${data.orderId}-${printedAt.getTime().toString().slice(-6)}`;
 
   const discountAmt = data.discountPercent > 0 ? Math.round((data.subtotal * data.discountPercent) / 100) : Math.round(data.discount);
-  const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, serviceCharge, grandTotal } = computePakistanTaxTotals(
+  const { taxableAmount, gstAmount, furtherTaxAmount, totalTaxAmount, serviceCharge, takeawayCharge, grandTotal } = computePakistanTaxTotals(
     data.subtotal,
     discountAmt,
     data.gstEnabled ?? true,
     {
       gstRate: data.gstRate ?? PKR_GST_RATE,
       serviceChargeRate: data.serviceChargeRate,
+      takeawayChargeRate: data.takeawayChargeRate,
     },
-    { applyServiceCharge: String(data.orderType || '').toLowerCase() === 'dine-in' }
+    { 
+      applyServiceCharge: String(data.orderType || '').toLowerCase() === 'dine-in',
+      applyTakeawayCharge: String(data.orderType || '').toLowerCase() === 'takeaway'
+    }
   );
 
   const gstPct = Math.round(((data.gstRate ?? PKR_GST_RATE) || 0) * 100);
@@ -255,6 +262,11 @@ export function printReceipt(data: ReceiptData) {
         ? `<tr class="sub"><td>Service charge @ ${Math.round(((data.serviceChargeRate ?? 0.05) || 0) * 100)}%</td><td>${fmtPKR(serviceCharge)}</td></tr>`
         : ''
     }
+    ${
+      String(data.orderType || '').toLowerCase() === 'takeaway' && takeawayCharge > 0
+        ? `<tr class="sub"><td>Takeaway charge @ ${Math.round(((data.takeawayChargeRate ?? 0.05) || 0) * 100)}%</td><td>${fmtPKR(takeawayCharge)}</td></tr>`
+        : ''
+    }
     ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
     <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
@@ -309,4 +321,3 @@ export function printReceipt(data: ReceiptData) {
     }
   }, 150);
 }
-

@@ -8,7 +8,7 @@ const expenseSchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     paymentStatus: { type: String, enum: ["paid", "unpaid", "half"], default: "paid" },
     paidAmount: { type: Number, default: 0 },
-    paymentMethod: { type: String, enum: ["cash", "bank", "others"], default: "cash" },
+    paymentMethod: { type: String, enum: ["cash", "online", "others"], default: "cash" },
     paymentDate: { type: Date, required: true },
     notes: String,
     vendor: String,

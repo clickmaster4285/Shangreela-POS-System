@@ -14,7 +14,7 @@ import { TablePicker } from '@/components/pos/TablePicker';
 interface BillPaymentPanelProps {
   order: (Order & { dbId?: string; printed?: boolean }) | null;
   tableMap: Map<number, TableInfo>;
-  taxRates: { gstRate: number; serviceChargeRate: number };
+  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number };
   currentUser: any;
   hasAction: (action: string) => boolean;
   onPaymentComplete: () => Promise<void>;
@@ -96,11 +96,14 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       discountAmt,
       gstEnabled,
       taxRates,
-      { applyServiceCharge: order?.type === 'dine-in' }
+      { 
+        applyServiceCharge: order?.type === 'dine-in',
+        applyTakeawayCharge: order?.type === 'takeaway' && order?.takeawayChargeEnabled !== false
+      }
     );
-  }, [subtotal, discountAmt, gstEnabled, taxRates, order?.type]);
+  }, [subtotal, discountAmt, gstEnabled, taxRates, order?.type, order?.takeawayChargeEnabled]);
 
-  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge = 0 } = taxTotals;
+  const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge = 0, takeawayCharge = 0 } = taxTotals;
 
   // Create a stable string of current values to compare
   const currentSyncValues = useMemo(() => {
@@ -112,8 +115,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       totalTaxAmount,
       gstAmount,
       serviceCharge,
+      takeawayCharge,
     });
-  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge]);
+  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge, takeawayCharge]);
 
   // Sync billing totals with backend - ONLY when values actually change
   useEffect(() => {
@@ -142,6 +146,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           tax: totalTaxAmount,
           gstAmount,
           serviceCharge,
+          takeawayCharge,
         }),
       }).catch((err) => {
         console.error('Failed to sync billing totals:', err);
@@ -176,7 +181,10 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       orderDiscount,
       orderGst,
       taxRates,
-      { applyServiceCharge: targetOrder.type === 'dine-in' }
+      { 
+        applyServiceCharge: targetOrder.type === 'dine-in',
+        applyTakeawayCharge: targetOrder.type === 'takeaway' && (targetOrder as any).takeawayChargeEnabled !== false
+      }
     );
 
     const orderGrandTotal = targetOrder.status === 'completed' && Number.isFinite(Number(targetOrder.total))
@@ -198,6 +206,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       gstEnabled: orderGst,
       gstRate: taxRates.gstRate,
       serviceChargeRate: taxRates.serviceChargeRate,
+      takeawayChargeRate: taxRates.takeawayChargeRate,
       paymentMethod: targetOrder.status === 'completed'
         ? String(overridePaymentMethod || (targetOrder as any).paymentMethod || paymentLabel)
         : paymentLabel,
@@ -207,6 +216,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       timestamp: new Date().toISOString(),
       gstAmount: breakdown.gstAmount,
       serviceCharge: breakdown.serviceCharge,
+      takeawayCharge: breakdown.takeawayCharge,
       fbrInvoiceNumber: '',
       customerName: targetOrder.customerName,
       orderCreatedAt: targetOrder.createdAt,
@@ -291,6 +301,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             tax: totalTaxAmount,
             gstAmount,
             serviceCharge,
+            takeawayCharge,
             amountPaid: amountPaidNum,
             changeDue: changeDueNum,
           }),
@@ -473,6 +484,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
               <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
               {order.type === 'dine-in' && (
                 <div className="flex justify-between text-muted-foreground"><span>Service charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>{fmt(serviceCharge)}</span></div>
+              )}
+              {order.type === 'takeaway' && takeawayCharge > 0 && (
+                <div className="flex justify-between text-muted-foreground"><span>Takeaway charge ({Math.round(taxRates.takeawayChargeRate * 100)}%)</span><span>{fmt(takeawayCharge)}</span></div>
               )}
               <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
               <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>

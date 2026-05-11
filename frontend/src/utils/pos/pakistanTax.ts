@@ -4,16 +4,23 @@ export const PKR_GST_RATE = 0.16;
 /** Service charge rate */
 export const SERVICE_CHARGE_RATE = 0.05;
 
+/** Takeaway charge rate */
+export const TAKEAWAY_CHARGE_RATE = 0.05;
+
 export type PakistanTaxRates = {
   /** e.g. 0.16 for 16% */
   gstRate: number;
   /** e.g. 0.05 for 5% */
   serviceChargeRate: number;
+  /** e.g. 0.05 for 5% */
+  takeawayChargeRate: number;
 };
 
 export type PakistanTaxOptions = {
   /** If false, service charge will be zero (e.g. takeaway/delivery) */
   applyServiceCharge?: boolean;
+  /** If true, takeaway charge will be applied */
+  applyTakeawayCharge?: boolean;
 };
 
 export type PakistanTaxBreakdown = {
@@ -23,6 +30,7 @@ export type PakistanTaxBreakdown = {
   furtherTaxAmount: number;
   totalTaxAmount: number;
   serviceCharge: number;
+  takeawayCharge: number;
   grandTotal: number;
 };
 
@@ -40,14 +48,22 @@ export function computePakistanTaxTotals(
 ): PakistanTaxBreakdown {
   const gstRate = Number.isFinite(rates.gstRate as number) ? Number(rates.gstRate) : PKR_GST_RATE;
   const serviceChargeRate = Number.isFinite(rates.serviceChargeRate as number) ? Number(rates.serviceChargeRate) : SERVICE_CHARGE_RATE;
+  const takeawayChargeRate = Number.isFinite(rates.takeawayChargeRate as number) ? Number(rates.takeawayChargeRate) : TAKEAWAY_CHARGE_RATE;
+
   const taxableAmount = Math.max(0, Math.round(subtotal) - Math.round(discountAmount));
+
   const applyServiceCharge = options.applyServiceCharge !== false;
   const serviceCharge = applyServiceCharge ? Math.round(taxableAmount * serviceChargeRate) : 0;
-  const subtotalAfterService = taxableAmount + serviceCharge;
-  const gstAmount = gstEnabled ? Math.round(subtotalAfterService * gstRate) : 0;
+
+  const applyTakeawayCharge = !!options.applyTakeawayCharge;
+  const takeawayCharge = applyTakeawayCharge ? Math.round(taxableAmount * takeawayChargeRate) : 0;
+
+  const subtotalAfterCharges = taxableAmount + serviceCharge + takeawayCharge;
+  const gstAmount = gstEnabled ? Math.round(subtotalAfterCharges * gstRate) : 0;
   const furtherTaxAmount = 0;
   const totalTaxAmount = gstAmount;
-  const grandTotal = subtotalAfterService + totalTaxAmount;
+  const grandTotal = subtotalAfterCharges + totalTaxAmount;
+
   return {
     taxableAmount,
     discountAmount: Math.round(discountAmount),
@@ -55,6 +71,7 @@ export function computePakistanTaxTotals(
     furtherTaxAmount,
     totalTaxAmount,
     serviceCharge,
+    takeawayCharge,
     grandTotal,
   };
 }
@@ -66,6 +83,7 @@ export function billBreakdownForOrder(
     discount?: number;
     gstEnabled?: boolean;
     type: string;
+    takeawayChargeEnabled?: boolean;
   },
   rates: Partial<PakistanTaxRates> = {}
 ): PakistanTaxBreakdown {
@@ -75,6 +93,9 @@ export function billBreakdownForOrder(
     Number(order.discount || 0),
     order.gstEnabled !== false,
     rates,
-    { applyServiceCharge: order.type === 'dine-in' }
+    { 
+      applyServiceCharge: order.type === 'dine-in',
+      applyTakeawayCharge: order.type === 'takeaway' && order.takeawayChargeEnabled !== false
+    }
   );
 }

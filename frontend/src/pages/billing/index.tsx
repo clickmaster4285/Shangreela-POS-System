@@ -30,7 +30,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05 });
+  const [taxRates, setTaxRates] = useState({ gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05 });
   const [printedOrderIds, setPrintedOrderIds] = useState<Set<string>>(new Set());
 
   // Filter State
@@ -174,12 +174,14 @@ export default function Billing() {
   };
 
   const loadTaxRates = useCallback(() => {
-    api<{ salesTaxRate: number; serviceChargeRate: number }>('/settings/tax').then(r => {
+    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number }>('/settings/tax').then(r => {
       const gst = Number(r.salesTaxRate ?? 16) / 100;
       const sc = Number(r.serviceChargeRate ?? 5) / 100;
+      const tc = Number(r.takeawayChargeRate ?? 5) / 100;
       setTaxRates({
         gstRate: Number.isFinite(gst) ? gst : 0.16,
         serviceChargeRate: Number.isFinite(sc) ? sc : 0.05,
+        takeawayChargeRate: Number.isFinite(tc) ? tc : 0.05,
       });
     }).catch(() => { });
   }, []);

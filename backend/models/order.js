@@ -14,6 +14,8 @@ const orderSchema = new mongoose.Schema(
     discount: Number,
     gstAmount: Number,
     serviceCharge: Number,
+    takeawayCharge: Number,
+    takeawayChargeEnabled: { type: Boolean, default: true },
     gstEnabled: { type: Boolean, default: true },
     paymentMethod: { type: String, enum: ["cash", "card", "easypesa"], default: "cash" },
     amountPaid: Number,
