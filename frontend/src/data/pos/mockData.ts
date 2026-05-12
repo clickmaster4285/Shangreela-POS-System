@@ -7,6 +7,7 @@ export interface MenuItem {
   image: string;
   description: string;
   available: boolean;
+  isFavorite?: boolean;
   perishable: boolean;
   kitchenRequired?: boolean;
   expiryDays?: number;

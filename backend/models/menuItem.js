@@ -8,6 +8,7 @@ const menuItemSchema = new mongoose.Schema(
     description: String,
     image: String,
     available: { type: Boolean, default: true },
+    isFavorite: { type: Boolean, default: false },
     perishable: { type: Boolean, default: false },
     kitchenRequired: { type: Boolean, default: true },
     recipe: {
