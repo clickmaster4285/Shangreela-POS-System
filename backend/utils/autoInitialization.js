@@ -2,27 +2,73 @@ const bcrypt = require("bcryptjs");
 const { MenuItem, User, Permission } = require("../models");
 const { MENU_ITEMS } = require("./menuSeedData");
 
-function menuDocsForInsert() {
-  return MENU_ITEMS.map(({ name, price, category, image, description, available, perishable, kitchenRequired }) => ({
-    name,
-    price,
-    category,
-    image,
-    description,
-    available: available !== false,
-    perishable: Boolean(perishable),
-    kitchenRequired: kitchenRequired !== false,
-  }));
-}
-
 async function seedMenuIfEmpty() {
-  if (!MENU_ITEMS.length) return;
-  const existing = await MenuItem.find({}, { name: 1 }).lean();
-  const existingNames = new Set(existing.map((x) => String(x.name || "").trim()));
-  const toInsert = menuDocsForInsert().filter((item) => !existingNames.has(String(item.name || "").trim()));
-  if (!toInsert.length) return;
-  await MenuItem.insertMany(toInsert);
-  console.log(`✓ Added ${toInsert.length} new menu item(s) from seed data`);
+  const existing = await MenuItem.find({}, { name: 1, bundleItems: 1 }).lean();
+  const existingMap = new Map(existing.map((x) => [String(x.name || "").trim(), x]));
+
+  const toInsert = [];
+  const toUpdate = [];
+
+  for (const item of MENU_ITEMS) {
+    const trimmedName = String(item.name || "").trim();
+    if (!existingMap.has(trimmedName)) {
+      toInsert.push(item);
+    } else {
+      // Check if it's a platter/deal and needs bundles updated
+      const existingDoc = existingMap.get(trimmedName);
+      if ((item.category === "Platters" || item.category === "Deals") && item.bundleItems) {
+        if (!existingDoc.bundleItems || existingDoc.bundleItems.length === 0) {
+          toUpdate.push(item);
+        }
+      }
+    }
+  }
+
+  // First insert new items
+  if (toInsert.length > 0) {
+    const docs = toInsert.map(({ name, price, category, image, description, available, perishable, kitchenRequired }) => ({
+      name,
+      price,
+      category,
+      image,
+      description,
+      available: available !== false,
+      perishable: Boolean(perishable),
+      kitchenRequired: kitchenRequired !== false,
+    }));
+    await MenuItem.insertMany(docs);
+    console.log(`✓ Added ${toInsert.length} new menu item(s) from seed data`);
+
+    // Refresh existing map after insertion so we can resolve bundles
+    const refreshed = await MenuItem.find({}, { name: 1 }).lean();
+    refreshed.forEach(x => existingMap.set(String(x.name || "").trim(), x));
+  }
+
+  // Now resolve and update bundles for both new and existing items
+  const itemsWithBundles = MENU_ITEMS.filter(item => item.bundleItems && item.bundleItems.length > 0);
+  for (const item of itemsWithBundles) {
+    const existingDoc = existingMap.get(String(item.name || "").trim());
+    if (!existingDoc) continue;
+
+    const resolvedBundles = [];
+    for (const bi of item.bundleItems) {
+      const target = existingMap.get(String(bi.menuItemName || "").trim());
+      if (target) {
+        resolvedBundles.push({
+          menuItem: target._id,
+          quantity: bi.quantity || 1
+        });
+      }
+    }
+
+    if (resolvedBundles.length > 0) {
+      await MenuItem.findByIdAndUpdate(existingDoc._id, { $set: { bundleItems: resolvedBundles } });
+    }
+  }
+
+  if (itemsWithBundles.length > 0) {
+    console.log(`✓ Processed bundles for ${itemsWithBundles.length} platter(s)/deal(s)`);
+  }
 }
 
 const ALL_PAGES = [
