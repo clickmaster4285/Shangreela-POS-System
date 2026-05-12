@@ -37,6 +37,15 @@ export interface Order {
   customerName?: string;
   orderTaker?: string;
   gstEnabled?: boolean;
+  takeawayChargeEnabled?: boolean;
+  advanceAmount?: number;
+  amountPaid?: number;
+  changeDue?: number;
+  paymentMethod?: string;
+  cashierName?: string;
+  takeawayCharge?: number;
+  serviceCharge?: number;
+  gstAmount?: number;
 }
 
 export interface FloorInfo {

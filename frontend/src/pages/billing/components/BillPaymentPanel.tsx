@@ -223,6 +223,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       gstRate: taxRates.gstRate,
       serviceChargeRate: taxRates.serviceChargeRate,
       takeawayChargeRate: taxRates.takeawayChargeRate,
+      takeawayChargeEnabled: isCurrentOrder ? takeawayChargeEnabled : targetOrder.takeawayChargeEnabled !== false,
       paymentMethod: targetOrder.status === 'completed'
         ? String(overridePaymentMethod || (targetOrder as any).paymentMethod || paymentLabel)
         : paymentLabel,
