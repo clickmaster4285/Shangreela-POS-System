@@ -269,10 +269,16 @@ export function printReceipt(data: ReceiptData) {
     }
     ${(data.gstEnabled ?? true) ? `<tr class="sub"><td>Sales tax (GST) @ ${gstPct}%</td><td>${fmtPKR(gstAmount)}</td></tr>` : ''}
     <tr class="sub"><td>Total taxes</td><td>${fmtPKR(totalTaxAmount)}</td></tr>
-    <tr class="bold"><td>Total payable</td><td>${fmtPKR(grandTotal)}</td></tr>
+    <tr class="bold"><td>Total (PKR)</td><td>${fmtPKR(grandTotal)}</td></tr>
+    ${
+      data.advanceAmount 
+        ? `<tr class="sub"><td>Advance Paid</td><td>${fmtPKR(data.advanceAmount)}</td></tr>
+           <tr class="bold"><td>Balance Payable</td><td>${fmtPKR(data.remainingAmount ?? (grandTotal - data.advanceAmount))}</td></tr>` 
+        : ''
+    }
     ${
       data.amountPaid !== undefined
-        ? `<tr class="sub"><td style="padding-top:4px">Amount Received</td><td style="padding-top:4px">${fmtPKR(data.amountPaid)}</td></tr>`
+        ? `<tr class="sub"><td style="padding-top:4px">Receiving Amount</td><td style="padding-top:4px">${fmtPKR(data.amountPaid)}</td></tr>`
         : ''
     }
     ${

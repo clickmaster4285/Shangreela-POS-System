@@ -8,7 +8,7 @@ const {
 const { getEffectiveTaxRates } = require("../utils/orderTotals");
 
 const PAID_ORDER_LIST_PROJECTION =
-  "total subtotal discount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name items.menuItem.category items.menuItem.description items.menuItem.bundleItems createdAt";
+  "total subtotal discount advanceAmount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name items.menuItem.category items.menuItem.description items.menuItem.bundleItems createdAt";
 
 const getTableNames = async (floorKey) => {
   if (!floorKey || floorKey === "all") return null;
@@ -276,6 +276,7 @@ function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelle
   const expenseCount = expenseStats[0]?.count || 0;
   const revenue = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).total, 0);
   const totalServiceCharges = orders.reduce((sum, o) => sum + normalizeOrderFinancials(o, rates).serviceCharge, 0);
+  const totalAdvanceReceived = orders.reduce((sum, o) => sum + Number(o.advanceAmount || 0), 0);
   const paymentBreakdown = orders.reduce(
     (acc, o) => {
       const amount = normalizeOrderFinancials(o, rates).total;
@@ -297,6 +298,7 @@ function buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelle
     profit,
     totalServiceCharges,
     totalDiscount,
+    totalAdvanceReceived,
     paymentBreakdown,
     totalOrders: orders.length,
     openOrders,

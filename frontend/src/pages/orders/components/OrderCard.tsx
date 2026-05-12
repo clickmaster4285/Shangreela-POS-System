@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '@/contexts/auth/AuthContext';
 import { 
   ShoppingBag, 
   Clock, 
@@ -25,6 +26,8 @@ interface OrderCardProps {
 }
 
 export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCardProps) => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin';
   const { setEditingOrder, setCancellingOrderId, setSwitchingTypeOrder } = useOrderStore();
 
   const getStatusColor = (status: string) => {
@@ -107,6 +110,14 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
                >
                  <Trash2 className="w-3.5 h-3.5" /> Cancel Order
                </button>
+               {isSuperAdmin && (order.status === 'completed' || order.status === 'cancelled') && (
+                 <button 
+                  onClick={() => onUpdateStatus(order.dbId, 'pending')}
+                  className="w-full px-4 py-2.5 text-xs text-left hover:bg-amber-500/10 text-amber-500 flex items-center gap-2 font-bold"
+                 >
+                   <Repeat className="w-3.5 h-3.5" /> Revert to Pending
+                 </button>
+               )}
             </div>
           </div>
         </div>

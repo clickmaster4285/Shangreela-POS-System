@@ -19,6 +19,7 @@ const orderSchema = new mongoose.Schema(
     gstEnabled: { type: Boolean, default: true },
     paymentMethod: { type: String, enum: ["cash", "card", "easypesa"], default: "cash" },
     amountPaid: Number,
+    advanceAmount: { type: Number, default: 0 },
     changeDue: Number,
     cashierName: String,
     total: Number,

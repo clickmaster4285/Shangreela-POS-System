@@ -27,7 +27,7 @@ const applyBillingFieldsFromBody = (body, patch) => {
   if (body.gstEnabled !== undefined) {
     patch.gstEnabled = body.gstEnabled === true || body.gstEnabled === "true";
   }
-  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge", "takeawayCharge", "amountPaid", "changeDue"];
+  const numericFields = ["total", "subtotal", "discount", "tax", "gstAmount", "serviceCharge", "takeawayCharge", "amountPaid", "advanceAmount", "changeDue"];
   for (const f of numericFields) {
     if (body[f] !== undefined && body[f] !== null && body[f] !== "") {
       const n = Number(body[f]);
@@ -149,6 +149,7 @@ exports.list = async (req, res) => {
           orderTaker: o.orderTaker || "",
           cashierName: o.cashierName || "",
           amountPaid: o.amountPaid,
+          advanceAmount: o.advanceAmount || 0,
           changeDue: o.changeDue,
           paymentMethod: o.paymentMethod
         };
@@ -166,15 +167,45 @@ exports.list = async (req, res) => {
 exports.patchStatus = async (req, res) => {
   try {
     const newStatus = String(req.body.status || "");
-    if (newStatus === "completed") {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const isSuperAdmin = req.user && req.user.role === "superadmin";
+
+    // Restriction on completing order via patch (must go through payment)
+    if (newStatus === "completed" && !isSuperAdmin) {
       return res.status(400).json({ message: "Order completion must be processed via payment on the billing panel." });
     }
-    const order = await Order.findByIdAndUpdate(req.params.id, { status: newStatus }, { new: true });
-    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Special logic for reverting status or modifying completed/cancelled orders
+    if ((order.status === "completed" || order.status === "cancelled") && newStatus !== order.status) {
+      if (!isSuperAdmin) {
+        return res.status(403).json({ message: "Only superadmin can modify a completed or cancelled order." });
+      }
+
+      // If reverting to an active status, handle table re-occupation
+      const activeStatuses = ["pending", "preparing", "ready", "served"];
+      if (activeStatuses.includes(newStatus) && order.type === "dine-in" && order.table) {
+        // Try to re-occupy the table if it's currently free
+        const targetTable = await Table.findOne({ name: order.table });
+        if (targetTable && (targetTable.status === "available" || targetTable.currentOrder === order.code)) {
+          await Table.findOneAndUpdate(
+            { name: order.table }, 
+            { status: "occupied", currentOrder: order.code }
+          );
+        }
+      }
+    }
+
+    order.status = newStatus;
+    await order.save();
 
     // Safety: if status is changed to cancelled via patch, free the table
     if (newStatus === "cancelled" && order.type === "dine-in" && order.table) {
-      await Table.findOneAndUpdate({ name: order.table }, { status: "available", currentOrder: "" });
+      await Table.findOneAndUpdate(
+        { name: order.table, currentOrder: order.code }, 
+        { status: "available", currentOrder: "" }
+      );
     }
 
     broadcastOrderDomain();
@@ -270,6 +301,7 @@ exports.create = async (req, res) => {
       gstEnabled: payload.gstEnabled ?? true,
       paymentMethod: payload.paymentMethod || "cash",
       total: totals.grandTotal,
+      advanceAmount: Number(payload.advanceAmount || 0),
       items,
     });
     
@@ -355,6 +387,7 @@ exports.openByTable = async (req, res) => {
         customerName: row.customerName || "",
         orderTaker: row.orderTaker || "",
         amountPaid: row.amountPaid,
+        advanceAmount: row.advanceAmount || 0,
         changeDue: row.changeDue,
         paymentMethod: row.paymentMethod,
         cashierName: row.cashierName || "",
@@ -371,6 +404,11 @@ exports.addItems = async (req, res) => {
     const row = await Order.findById(req.params.id);
     if (!row) return res.status(404).json({ message: "Order not found" });
     const wasCompleted = row.status === "completed";
+    const isSuperAdmin = req.user && req.user.role === "superadmin";
+
+    if (wasCompleted && !isSuperAdmin) {
+      return res.status(403).json({ message: "Only superadmin can add items to a completed order." });
+    }
     const incoming = Array.isArray(req.body.items) ? req.body.items : [];
     const requestNo = (row.items || []).reduce((max, item) => {
       const match = String(item.requestId || "").match(/-R(\d+)$/);
@@ -387,6 +425,7 @@ exports.addItems = async (req, res) => {
     row.gstAmount = totals.gstAmount;
     row.serviceCharge = totals.serviceCharge;
     row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
+    row.advanceAmount = Number(req.body.advanceAmount ?? row.advanceAmount ?? 0);
     row.total = totals.grandTotal;
     row.notes = req.body.notes ?? row.notes;
     row.table = req.body.table ?? row.table;
@@ -441,6 +480,7 @@ exports.editItems = async (req, res) => {
     row.gstAmount = totals.gstAmount;
     row.serviceCharge = totals.serviceCharge;
     row.gstEnabled = req.body.gstEnabled ?? row.gstEnabled;
+    row.advanceAmount = Number(req.body.advanceAmount ?? row.advanceAmount ?? 0);
     row.total = totals.grandTotal;
     row.notes = req.body.notes ?? row.notes;
     row.table = req.body.table ?? row.table;

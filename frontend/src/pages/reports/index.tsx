@@ -125,6 +125,7 @@ export default function Reports() {
           totalUnpaidExpenses: number;
           totalServiceCharges: number;
           totalDiscount: number;
+          totalAdvanceReceived: number;
           paymentBreakdown: { cash: number; card: number; easypesa: number; other: number };
           totalMenuOut: number;
         }>(`/dashboard/summary?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`),
@@ -144,6 +145,7 @@ export default function Reports() {
     totalUnpaidExpenses: 0,
     totalServiceCharges: 0,
     totalDiscount: 0,
+    totalAdvanceReceived: 0,
     paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 },
     totalMenuOut: 0,
   };
@@ -398,6 +400,7 @@ export default function Reports() {
           {[
             { label: 'Total Revenue', value: formatPKR(totalRevenue), icon: DollarSign },
             { label: 'Profit', value: formatPKR(summary.profit), icon: TrendingUp },
+            { label: 'Advance Received', value: formatPKR(summary.totalAdvanceReceived ?? 0), icon: Wallet },
             { label: 'Service Charges', value: formatPKR(summary.totalServiceCharges), icon: Percent },
             { label: 'Discounts given', value: formatPKR(summary.totalDiscount ?? 0), icon: Tag },
             { label: 'Total Expenses', value: formatPKR(summary.totalExpenses), icon: Wallet },
@@ -439,6 +442,10 @@ export default function Reports() {
               <tr>
                 <td>Profit</td>
                 <td>{formatPKR(summary.profit)}</td>
+              </tr>
+              <tr>
+                <td>Advance Received</td>
+                <td>{formatPKR(summary.totalAdvanceReceived ?? 0)}</td>
               </tr>
               <tr>
                 <td>Service Charges</td>

@@ -46,6 +46,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const [discountValue, setDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
+  const [advanceAmount, setAdvanceAmount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [paidAmount, setPaidAmount] = useState<number | string>('');
   
   // Switch type UI state
@@ -71,6 +73,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       setDiscountValue(0);
     }
     setPaidAmount('');
+    setAdvanceAmount(Number(order.advanceAmount || 0));
     setPaymentMethod('cash');
     setIsSwitchingType(false);
     setShowSwitchTablePicker(false);
@@ -116,8 +119,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       gstAmount,
       serviceCharge,
       takeawayCharge,
+      advanceAmount,
     });
-  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge, takeawayCharge]);
+  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge, takeawayCharge, advanceAmount]);
 
   // Sync billing totals with backend - ONLY when values actually change
   useEffect(() => {
@@ -135,6 +139,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     syncTimeoutRef.current = setTimeout(() => {
       // Update last synced values before making the call
       lastSyncedValues.current = currentSyncValues;
+      setIsSyncing(true);
 
       api(`/orders/${order.dbId}/billing-totals`, {
         method: 'PATCH',
@@ -147,7 +152,10 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           gstAmount,
           serviceCharge,
           takeawayCharge,
+          advanceAmount,
         }),
+      }).then(() => {
+        setIsSyncing(false);
       }).catch((err) => {
         console.error('Failed to sync billing totals:', err);
         // On error, reset so we can retry
@@ -191,6 +199,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       ? Number(targetOrder.total)
       : breakdown.grandTotal;
 
+    const orderAdvance = isCurrentOrder ? advanceAmount : Number(targetOrder.advanceAmount || 0);
+    const orderRemaining = Math.max(0, orderGrandTotal - orderAdvance);
+
     const paymentLabel = paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : 'EasyPaisa';
     const tableInfo = targetOrder.table ? tableMap.get(Number(targetOrder.table)) : null;
 
@@ -211,6 +222,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
         ? String(overridePaymentMethod || (targetOrder as any).paymentMethod || paymentLabel)
         : paymentLabel,
       grandTotal: orderGrandTotal,
+      advanceAmount: orderAdvance,
+      remainingAmount: orderRemaining,
       paidStamp,
       user: currentUser?.name || 'Cashier',
       timestamp: new Date().toISOString(),
@@ -221,14 +234,14 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       customerName: targetOrder.customerName,
       orderCreatedAt: targetOrder.createdAt,
       amountPaid: targetOrder.status === 'completed'
-        ? (targetOrder as any).amountPaid || orderGrandTotal
+        ? (targetOrder as any).amountPaid || orderRemaining
         : paymentMethod === 'cash'
-          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) : orderGrandTotal)
-          : orderGrandTotal,
+          ? (Number(paidAmount) >= orderRemaining ? Number(paidAmount) : orderRemaining)
+          : orderRemaining,
       changeDue: targetOrder.status === 'completed'
         ? (targetOrder as any).changeDue || 0
         : paymentMethod === 'cash'
-          ? (Number(paidAmount) >= orderGrandTotal ? Number(paidAmount) - orderGrandTotal : 0)
+          ? (Number(paidAmount) >= orderRemaining ? Number(paidAmount) - orderRemaining : 0)
           : 0,
       isPaid: paidStamp || targetOrder.status === 'completed',
       cashierName: (targetOrder as any).cashierName || currentUser?.name || currentUser?.email,
@@ -283,11 +296,12 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       }
 
       if (order.dbId) {
+        const remaining = Math.max(0, grandTotal - advanceAmount);
         const amountPaidNum = paymentMethod === 'cash'
-          ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) : grandTotal)
-          : grandTotal;
+          ? (Number(paidAmount) >= remaining ? Number(paidAmount) : remaining)
+          : remaining;
         const changeDueNum = paymentMethod === 'cash'
-          ? (Number(paidAmount) >= grandTotal ? Number(paidAmount) - grandTotal : 0)
+          ? (Number(paidAmount) >= remaining ? Number(paidAmount) - remaining : 0)
           : 0;
 
         await api(`/orders/${order.dbId}/payment`, {
@@ -302,6 +316,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             gstAmount,
             serviceCharge,
             takeawayCharge,
+            advanceAmount,
             amountPaid: amountPaidNum,
             changeDue: changeDueNum,
           }),
@@ -382,6 +397,22 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
               </div>
             </div>
           )}
+
+          <div className="absolute top-4 right-4 z-10">
+            <AnimatePresence>
+              {isSyncing && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest shadow-sm"
+                >
+                  <Repeat className="w-2.5 h-2.5 animate-spin" />
+                  Saving...
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="mb-5 shrink-0 border-b border-border pb-4 flex justify-between items-start">
             <div>
@@ -473,25 +504,63 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
               ))}
             </div>
 
-            <div className="rounded-xl border border-border/70 p-3 space-y-2 text-sm mb-4 bg-card/60">
-              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
-              {discountAmt > 0 && (
-                <div className="flex justify-between text-success">
-                  <span>Discount{discountMode === 'percent' ? ` (${discountValue}%)` : ''}</span>
-                  <span>-{fmt(discountAmt)}</span>
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 space-y-3 mb-4">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span>Subtotal</span>
+                  <span>{fmt(subtotal)}</span>
                 </div>
-              )}
-              <div className="flex justify-between text-muted-foreground"><span>Taxable value</span><span>{fmt(taxableAmount)}</span></div>
-              {order.type === 'dine-in' && (
-                <div className="flex justify-between text-muted-foreground"><span>Service charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span><span>{fmt(serviceCharge)}</span></div>
-              )}
-              {order.type === 'takeaway' && takeawayCharge > 0 && (
-                <div className="flex justify-between text-muted-foreground"><span>Takeaway charge ({Math.round(taxRates.takeawayChargeRate * 100)}%)</span><span>{fmt(takeawayCharge)}</span></div>
-              )}
-              <div className="flex justify-between text-muted-foreground"><span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span><span>{fmt(gstAmount)}</span></div>
-              <div className="flex justify-between text-xs text-muted-foreground"><span>Total taxes</span><span>{fmt(totalTaxAmount)}</span></div>
-              <div className="flex justify-between text-xl font-bold text-foreground pt-3 border-t border-border">
-                <span>Total</span><span>{fmt(grandTotal)}</span>
+                
+                {discountAmt > 0 && (
+                  <div className="flex justify-between text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+                    <span>Discount {discountMode === 'percent' ? `(${discountValue}%)` : ''}</span>
+                    <span>-{fmt(discountAmt)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between text-[11px] font-bold text-muted-foreground uppercase tracking-wider border-t border-border/50 pt-1.5">
+                  <span>Taxable Amount</span>
+                  <span>{fmt(taxableAmount)}</span>
+                </div>
+
+                <div className="space-y-1 mt-1">
+                  {order.type === 'dine-in' && (
+                    <div className="flex justify-between text-[10px] text-muted-foreground/70 font-medium">
+                      <span>Service Charge ({Math.round(taxRates.serviceChargeRate * 100)}%)</span>
+                      <span>{fmt(serviceCharge)}</span>
+                    </div>
+                  )}
+                  {order.type === 'takeaway' && takeawayCharge > 0 && (
+                    <div className="flex justify-between text-[10px] text-muted-foreground/70 font-medium">
+                      <span>Takeaway Charge ({Math.round(taxRates.takeawayChargeRate * 100)}%)</span>
+                      <span>{fmt(takeawayCharge)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-[10px] text-muted-foreground/70 font-medium">
+                    <span>GST ({gstEnabled ? Math.round(taxRates.gstRate * 100) : 0}%)</span>
+                    <span>{fmt(gstAmount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-border flex flex-col gap-1">
+                <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Total Bill</span>
+                  <span className="text-2xl font-black text-foreground tracking-tighter leading-none">{fmt(grandTotal)}</span>
+                </div>
+                
+                {advanceAmount > 0 && (
+                  <>
+                    <div className="flex justify-between items-center text-[11px] font-bold text-primary uppercase tracking-wider mt-1">
+                      <span>Advance Received</span>
+                      <span>-{fmt(advanceAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-border/50">
+                      <span className="text-[11px] font-black text-foreground uppercase tracking-widest">Balance Payable</span>
+                      <span className="text-lg font-black text-primary tracking-tight">{fmt(Math.max(0, grandTotal - advanceAmount))}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -585,6 +654,25 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                     />
                     Include GST Summary ({Math.round(taxRates.gstRate * 100)}%)
                   </label>
+                </div>
+
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 animate-in fade-in slide-in-from-top-1">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <label className="text-[10px] uppercase font-bold text-primary mb-1 block tracking-[0.15em]">Advance Received (PKR)</label>
+                      <p className="text-[10px] text-muted-foreground/60 italic leading-none">Amount received before final billing</p>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        value={advanceAmount || ''}
+                        onChange={(e) => setAdvanceAmount(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-32 bg-background border border-primary/20 rounded-xl px-3 py-2.5 text-sm font-black focus:ring-4 focus:ring-primary/10 outline-none transition-all text-right placeholder:text-muted-foreground/20"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-border/70 p-3 bg-muted/20">
