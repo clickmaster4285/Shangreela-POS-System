@@ -20,6 +20,8 @@ const loyaltyRoutes = require("./loyalty.routes");
 const integrationsRoutes = require("./integrations.routes");
 const mobileRoutes = require("./mobile.routes");
 const expensesRoutes = require("./expenses.routes");
+const initDataRoutes = require("./initData.routes");
+const recipeRoutes = require("./recipe.routes");
 
 const router = express.Router();
 
@@ -43,5 +45,7 @@ router.use("/loyalty", loyaltyRoutes);
 router.use("/integrations", integrationsRoutes);
 router.use("/mobile", mobileRoutes);
 router.use("/expenses", expensesRoutes);
+router.use("/init-data", initDataRoutes);
+router.use("/recipes", recipeRoutes);
 
 module.exports = router;

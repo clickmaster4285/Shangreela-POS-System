@@ -4,19 +4,22 @@ import { PAKISTANI_SUBFOLDERS, type PakistaniSubfolder } from './categoryFilter'
 type Props = {
   itemCount: (categoryLabel: string) => number;
   onOpenSubfolder: (sub: PakistaniSubfolder) => void;
+  /** If set, only these subfolders are shown (e.g. after search). */
+  subfolders?: readonly PakistaniSubfolder[];
 };
 
 /**
  * Second level inside **Pakistani**: Karahi and Handi folders with item counts.
  */
-export function POSPakistaniSubGrid({ itemCount, onOpenSubfolder }: Props) {
-  const sortedSubfolders = [...PAKISTANI_SUBFOLDERS].sort((a, b) => a.localeCompare(b));
+export function POSPakistaniSubGrid({ itemCount, onOpenSubfolder, subfolders }: Props) {
+  const source = subfolders ?? PAKISTANI_SUBFOLDERS;
+  const sortedSubfolders = [...source].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <p className="text-sm text-muted-foreground mb-3 shrink-0">Open Karahi or Handi</p>
       <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 max-w-xl">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-2">
           {sortedSubfolders.map(sub => {
             const count = itemCount(sub);
             return (

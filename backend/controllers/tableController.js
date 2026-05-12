@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { Table } = require("../models");
 
 exports.list = async (req, res) => {
@@ -27,16 +28,19 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const row = await Table.create(req.body || {});
+  emitPosChange(["tables", "floors", "orders", "dashboard"]);
   res.status(201).json({ id: String(row._id) });
 };
 
 exports.update = async (req, res) => {
   const row = await Table.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+  emitPosChange(["tables", "floors", "orders", "dashboard"]);
   res.json({ id: String(row._id) });
 };
 
 exports.remove = async (req, res) => {
   await Table.findByIdAndDelete(req.params.id);
+  emitPosChange(["tables", "floors", "orders", "dashboard"]);
   res.json({ ok: true });
 };
 
@@ -60,6 +64,7 @@ exports.createBulk = async (req, res) => {
     created.push({ id: String(newTable._id), number, name });
   }
 
+  emitPosChange(["tables", "floors", "orders", "dashboard"]);
   res.status(201).json({ created });
 };
 
@@ -69,5 +74,6 @@ exports.removeBulk = async (req, res) => {
     return res.status(400).json({ error: "IDs array is required" });
   }
   const result = await Table.deleteMany({ _id: { $in: ids } });
+  emitPosChange(["tables", "floors", "orders", "dashboard"]);
   res.json({ deleted: result.deletedCount });
 };

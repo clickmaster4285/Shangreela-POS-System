@@ -15,4 +15,8 @@ const salaryRecordSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+salaryRecordSchema.index({ employeeId: 1, month: -1 });
+salaryRecordSchema.index({ month: -1 });
+
 module.exports = mongoose.model("SalaryRecord", salaryRecordSchema);

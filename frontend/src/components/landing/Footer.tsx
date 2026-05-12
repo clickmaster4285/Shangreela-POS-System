@@ -41,7 +41,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-cream/10 pt-6 text-center text-xs">
-          © {new Date().getFullYear()} Shiraz Restaurant. All rights reserved.
+          © {new Date().getFullYear()} Shangreela Heights. All rights reserved.
         </div>
       </div>
     </footer>

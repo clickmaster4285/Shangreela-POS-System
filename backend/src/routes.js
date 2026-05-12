@@ -1,8 +1,16 @@
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
+
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { jwtSecret } = require("./config");
 const { parsePagination, buildPaginatedResponse } = require("./utils/pagination");
+
+const isProd = process.env.NODE_ENV === "production";
+const jwtSecret =
+  process.env.JWT_SECRET || (isProd ? null : "development_secret");
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET must be set in the environment for production.");
+}
 const { authRequired, attachPermissions } = require("./middleware");
 const {
   User,
@@ -147,6 +155,29 @@ router.get("/orders", authRequired, async (req, res) => {
   const where = {};
   if (req.query.status && req.query.status !== "all") where.status = String(req.query.status);
   if (req.query.type && req.query.type !== "all") where.type = String(req.query.type);
+
+  if (req.query.floorKey && req.query.floorKey !== "all") {
+    const tables = await Table.find({ floorKey: String(req.query.floorKey) }).select("name").lean();
+    const names = tables.map((t) => t.name).filter(Boolean);
+    where.table = { $in: names };
+  }
+
+  if (req.query.today === "true") {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    where.createdAt = { $gte: start, $lte: end };
+  }
+
+  if (req.query.search) {
+    const term = String(req.query.search).trim();
+    where.$or = [
+      { code: { $regex: term, $options: "i" } },
+      { table: { $regex: term, $options: "i" } }
+    ];
+  }
+
   const [items, total] = await Promise.all([Order.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Order.countDocuments(where)]);
   res.json(
     buildPaginatedResponse({
@@ -176,6 +207,45 @@ router.get("/orders", authRequired, async (req, res) => {
 router.patch("/orders/:id/status", authRequired, async (req, res) => {
   const order = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
   res.json({ ok: true, id: String(order._id), status: order.status });
+});
+
+router.patch("/orders/:id/table", authRequired, async (req, res) => {
+  const row = await Order.findById(req.params.id);
+  if (!row) return res.status(404).json({ message: "Order not found" });
+
+  const oldTable = row.table;
+  const newTable = req.body.table || null;
+
+  row.table = newTable;
+  await row.save();
+
+  if (oldTable) {
+    await Table.findOneAndUpdate(
+      { name: oldTable },
+      { status: "available", currentOrder: "" }
+    );
+    if (!isNaN(Number(oldTable))) {
+      await Table.findOneAndUpdate(
+        { number: Number(oldTable) },
+        { status: "available", currentOrder: "" }
+      );
+    }
+  }
+
+  if (newTable) {
+    await Table.findOneAndUpdate(
+      { name: newTable },
+      { status: "occupied", currentOrder: row.code }
+    );
+    if (!isNaN(Number(newTable))) {
+      await Table.findOneAndUpdate(
+        { number: Number(newTable) },
+        { status: "occupied", currentOrder: row.code }
+      );
+    }
+  }
+
+  res.json({ ok: true, id: row.code, dbId: String(row._id) });
 });
 
 router.get("/inventory/items", authRequired, async (req, res) => {
@@ -348,14 +418,23 @@ router.get("/dashboard/top-items", authRequired, async (_req, res) => {
   }
   const items = [...map.entries()]
     .map(([name, value]) => ({ name, ...value }))
-    .sort((a, b) => b.sold - a.sold)
-    .slice(0, 10);
+    .sort((a, b) => b.sold - a.sold);
   res.json({ items });
 });
 
 router.get("/dashboard/recent-orders", authRequired, async (_req, res) => {
   const items = await Order.find({}).sort({ createdAt: -1 }).limit(10).lean();
-  res.json({ items: items.map((o) => ({ id: o.code, type: o.type, status: o.status, total: o.total, table: o.table, items: o.items || [] })) });
+  res.json({
+    items: items.map((o) => ({
+      id: o.code,
+      type: o.type,
+      status: o.status,
+      total: o.total,
+      table: o.table,
+      items: o.items || [],
+      createdAt: o.createdAt,
+    })),
+  });
 });
 
 router.post("/orders", authRequired, async (req, res) => {
@@ -379,9 +458,15 @@ router.post("/orders", authRequired, async (req, res) => {
   });
   if (payload.type === "dine-in" && payload.table) {
     await Table.findOneAndUpdate(
-      { number: Number(payload.table) },
+      { name: payload.table },
       { status: "occupied", currentOrder: code }
     );
+    if (!isNaN(Number(payload.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(payload.table) },
+        { status: "occupied", currentOrder: code }
+      );
+    }
   }
   if (payload.type === "delivery") {
     await Delivery.create({
@@ -400,16 +485,20 @@ router.post("/orders", authRequired, async (req, res) => {
 });
 
 router.get("/orders/open-by-table/:tableNumber", authRequired, async (req, res) => {
-  const tableNumber = Number(req.params.tableNumber);
+  const tableIdentifier = req.params.tableNumber;
   const includeCompleted = String(req.query.includeCompleted || "") === "true";
   const where = {
-    table: tableNumber,
+    table: tableIdentifier,
     type: "dine-in",
   };
   if (!includeCompleted) where.status = { $ne: "completed" };
-  const row = await Order.findOne(where)
-    .sort({ createdAt: -1 })
-    .lean();
+  let row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+
+  if (!row && !isNaN(Number(tableIdentifier))) {
+    where.table = Number(tableIdentifier);
+    row = await Order.findOne(where).sort({ createdAt: -1 }).lean();
+  }
+
   if (!row) return res.json({ item: null });
   return res.json({
     item: {
@@ -451,9 +540,15 @@ router.patch("/orders/:id/add-items", authRequired, async (req, res) => {
   await row.save();
   if (wasCompleted && row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "occupied", currentOrder: row.code }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "occupied", currentOrder: row.code }
+      );
+    }
   }
   res.json({ ok: true, id: row.code, dbId: String(row._id) });
 });
@@ -467,9 +562,15 @@ router.post("/orders/:id/payment", authRequired, async (req, res) => {
   if (!row) return res.status(404).json({ message: "Order not found" });
   if (row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "available", currentOrder: "" }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "available", currentOrder: "" }
+      );
+    }
   }
   res.json({ ok: true });
 });
@@ -480,9 +581,15 @@ router.delete("/orders/:id", authRequired, async (req, res) => {
 
   if (row.type === "dine-in" && row.table) {
     await Table.findOneAndUpdate(
-      { number: Number(row.table) },
+      { name: row.table },
       { status: "available", currentOrder: "" }
     );
+    if (!isNaN(Number(row.table))) {
+      await Table.findOneAndUpdate(
+        { number: Number(row.table) },
+        { status: "available", currentOrder: "" }
+      );
+    }
   }
 
   await Order.findByIdAndDelete(req.params.id);
@@ -672,7 +779,7 @@ router.get("/reports/top-items", authRequired, async (_req, res) => {
       map.set(key, prev);
     }
   }
-  res.json({ items: [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sold - a.sold).slice(0, 10) });
+  res.json({ items: [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sold - a.sold) });
 });
 
 router.get("/reports/outdoor-delivery", authRequired, async (_req, res) => {

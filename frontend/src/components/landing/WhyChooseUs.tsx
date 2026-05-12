@@ -13,7 +13,7 @@ export default function WhyChooseUs() {
     <section className="section-padding bg-background">
       <div className="max-w-7xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-14">
-          <p className="text-primary font-sans text-sm tracking-[0.2em] uppercase mb-3">Why Shiraz Restaurant</p>
+          <p className="text-primary font-sans text-sm tracking-[0.2em] uppercase mb-3">Why Shangreela Heights</p>
           <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground">The Royal Difference</h2>
         </motion.div>
 

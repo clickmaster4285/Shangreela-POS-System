@@ -1,6 +1,12 @@
 const jwt = require("jsonwebtoken");
-const { jwtSecret } = require("../config/config");
 const { User, Permission } = require("../models");
+
+const isProd = process.env.NODE_ENV === "production";
+const jwtSecret =
+  process.env.JWT_SECRET || (isProd ? null : "development_secret");
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET must be set in the environment for production.");
+}
 
 async function authRequired(req, res, next) {
   try {
@@ -21,7 +27,7 @@ async function attachPermissions(req, res, next) {
   if (!req.user?.role) return next();
   const p = await Permission.findOne({ role: req.user.role }).lean();
   req.currentPermissions = p || null;
-  req.isSuperAdmin = req.user.role === "super-admin";
+  req.isSuperAdmin = req.user.role === "superadmin";
   next();
 }
 

@@ -25,9 +25,11 @@ import {
   Smartphone,
   MapPinned,
   DollarSign,
+  BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth, ROLE_LABELS, type PageKey } from '@/contexts/AuthContext';
+import { usePOSStore } from '@/stores/pos/posStore';
+import { useAuth, ROLE_LABELS } from '@/contexts/auth/AuthContext';
 import { BrandHeader } from '@/components/branding/BrandHeader';
 import Logo from '@/components/branding/Logo';
 
@@ -40,6 +42,7 @@ const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page:
   { to: '/pos/kitchen', icon: ChefHat, label: 'Kitchen', page: 'kitchen' },
   { to: '/pos/billing', icon: Receipt, label: 'Billing', page: 'billing' },
   { to: '/pos/menu', icon: UtensilsCrossed, label: 'Menu', page: 'menu' },
+  { to: '/pos/recipes', icon: BookOpen, label: 'Recipes', page: 'recipes' },
   { to: '/pos/inventory', icon: Package, label: 'Inventory', page: 'inventory' },
   { to: '/pos/delivery', icon: Truck, label: 'Delivery', page: 'delivery' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports', page: 'reports' },
@@ -65,6 +68,19 @@ const roleBadge: Record<string, string> = {
 export default function POSLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, loading, logout, hasPageAccess } = useAuth();
+  const { cart, setShowDiscardPopup, setPendingNavigation } = usePOSStore();
+
+  const handleNavigation = (to: string) => {
+    // Check if we're currently on the terminal page and have items in cart
+    const isOnTerminal = window.location.pathname === '/pos/terminal';
+    if (isOnTerminal && cart.length > 0) {
+      setPendingNavigation(to);
+      setShowDiscardPopup(true);
+      return false; // Prevent navigation
+    }
+    setSidebarOpen(false);
+    return true; // Allow navigation
+  };
 
   if (loading) {
     return (
@@ -107,12 +123,15 @@ export default function POSLayout() {
               key={link.to}
               to={link.to}
               end={link.end}
-              onClick={() => setSidebarOpen(false)}
+              onClick={(e) => {
+                if (!handleNavigation(link.to)) {
+                  e.preventDefault();
+                }
+              }}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
                 }`
               }
             >
@@ -123,7 +142,11 @@ export default function POSLayout() {
         </nav>
 
         <div className="p-3 space-y-0.5 border-t border-sidebar-border">
-          <Link to="/" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all">
+          <Link to="/" onClick={(e) => {
+            if (!handleNavigation('/')) {
+              e.preventDefault();
+            }
+          }} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all">
             <ArrowLeft className="w-4 h-4" /> Back to Website
           </Link>
           <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-destructive hover:bg-destructive/10 transition-all">
@@ -156,7 +179,7 @@ export default function POSLayout() {
             </span>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4">
           <Outlet />
         </div>
       </main>

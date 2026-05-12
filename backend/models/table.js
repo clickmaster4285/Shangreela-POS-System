@@ -12,4 +12,8 @@ const tableSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+tableSchema.index({ number: 1 }, { unique: true });
+tableSchema.index({ floorKey: 1 });
+
 module.exports = mongoose.model("Table", tableSchema);

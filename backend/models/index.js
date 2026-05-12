@@ -6,6 +6,7 @@ module.exports = {
   Order: require("./order"),
   InventoryItem: require("./inventoryItem"),
   InventoryLog: require("./inventoryLog"),
+  StockTransfer: require("./stockTransfer"),
   Supplier: require("./supplier"),
   Employee: require("./employee"),
   Attendance: require("./attendance"),
@@ -24,4 +25,5 @@ module.exports = {
   TaxConfig: require("./taxConfig"),
   MobileConfig: require("./mobileConfig"),
   Expense: require("./expense"),
+  Recipe: require("./recipe"),
 };

@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { Employee, Attendance, LeaveRequest, LeaveBalance, SalaryRecord, Shift } = require("../models");
 
 exports.listEmployees = async (req, res) => {
@@ -28,6 +29,7 @@ exports.createEmployee = async (req, res) => {
     netSalary: row.salary || 0,
     status: "pending",
   });
+  emitPosChange(["hr", "dashboard"]);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
@@ -41,6 +43,7 @@ exports.updateEmployee = async (req, res) => {
   }
   const row = await Employee.findByIdAndUpdate(req.params.id, updateData, { new: true }).lean();
   if (!row) return res.status(404).json({ message: 'Employee not found' });
+  emitPosChange(["hr", "dashboard"]);
   res.json({ ...row, id: String(row._id) });
 };
 
@@ -50,13 +53,18 @@ exports.getAttendanceByDate = async (req, res) => {
   res.json({ items: items.map((i) => ({ ...i, id: String(i._id) })) });
 };
 
-exports.listLeaves = async (_req, res) => {
-  const rows = await LeaveRequest.find({}).sort({ createdAt: -1 }).lean();
-  res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
+exports.listLeaves = async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const [rows, total] = await Promise.all([
+    LeaveRequest.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    LeaveRequest.countDocuments({})
+  ]);
+  res.json(buildPaginatedResponse({ items: rows.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };
 
 exports.patchLeaveStatus = async (req, res) => {
   await LeaveRequest.findByIdAndUpdate(req.params.id, { status: req.body.status });
+  emitPosChange(["hr"]);
   res.json({ ok: true });
 };
 
@@ -65,9 +73,13 @@ exports.listLeaveBalances = async (_req, res) => {
   res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
 };
 
-exports.listSalary = async (_req, res) => {
-  const rows = await SalaryRecord.find({}).lean();
-  res.json({ items: rows.map((i) => ({ ...i, id: String(i._id) })) });
+exports.listSalary = async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const [rows, total] = await Promise.all([
+    SalaryRecord.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    SalaryRecord.countDocuments({})
+  ]);
+  res.json(buildPaginatedResponse({ items: rows.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
 };
 
 exports.patchSalary = async (req, res) => {
@@ -78,11 +90,13 @@ exports.patchSalary = async (req, res) => {
   row.lateFines = Number(req.body.lateFines || 0);
   row.netSalary = row.baseSalary + row.bonus - row.deductions - row.lateFines;
   await row.save();
+  emitPosChange(["hr"]);
   res.json({ ok: true });
 };
 
 exports.markSalaryPaid = async (req, res) => {
   await SalaryRecord.findOneAndUpdate({ employeeId: req.params.employeeId }, { status: "paid", paidOn: new Date().toISOString().slice(0, 10) });
+  emitPosChange(["hr"]);
   res.json({ ok: true });
 };
 

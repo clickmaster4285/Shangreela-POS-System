@@ -1,4 +1,5 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
+const { emitPosChange } = require("../utils/realtime");
 const { LoyaltyMember } = require("../models");
 
 exports.listMembers = async (req, res) => {
@@ -12,6 +13,7 @@ exports.listMembers = async (req, res) => {
 
 exports.createMember = async (req, res) => {
   const row = await LoyaltyMember.create(req.body || {});
+  emitPosChange(["loyalty"]);
   res.status(201).json({ ...row.toObject(), id: String(row._id) });
 };
 
@@ -20,5 +22,6 @@ exports.patchPoints = async (req, res) => {
   if (!row) return res.status(404).json({ message: "Member not found" });
   row.points = Number(req.body.points || row.points || 0);
   await row.save();
+  emitPosChange(["loyalty"]);
   res.json({ ok: true });
 };

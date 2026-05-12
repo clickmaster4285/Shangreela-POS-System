@@ -5,9 +5,11 @@
 /backend/node_modules/
 /frontend/node_modules/
 
-# Environment files
-**/.env
-**/.env.*
+# Environment files (secrets). Templates stay tracked.
+.env
+.env.*
+!.env.example
+!**/.env.example
 
 # Build output
 /frontend/dist/

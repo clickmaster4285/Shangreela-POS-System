@@ -1,3 +1,4 @@
+const { emitPosChange } = require("../utils/realtime");
 const { MobileConfig } = require("../models");
 
 exports.getConfig = async (_req, res) => {
@@ -14,5 +15,6 @@ exports.newPairingToken = async (_req, res) => {
     row.pairingToken = token;
     await row.save();
   }
+  emitPosChange(["mobile"]);
   res.json({ pairingToken: token });
 };

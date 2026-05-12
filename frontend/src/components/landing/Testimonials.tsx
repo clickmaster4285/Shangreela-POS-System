@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Star } from 'lucide-react';
-import { testimonials } from '@/data/mockData';
+import { testimonials } from '@/data/pos/mockData';
 
 export default function Testimonials() {
   return (
@@ -40,3 +40,4 @@ export default function Testimonials() {
     </section>
   );
 }
+

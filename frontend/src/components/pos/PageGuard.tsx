@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth, MANAGER_ROLES, type PageKey } from '@/contexts/AuthContext';
+import { useAuth, MANAGER_ROLES, type PageKey } from '@/contexts/auth/AuthContext';
 import { ShieldX } from 'lucide-react';
 
 interface Props {
@@ -15,6 +15,7 @@ const pageToRoute: Record<PageKey, string> = {
   kitchen: '/pos/kitchen',
   billing: '/pos/billing',
   menu: '/pos/menu',
+  recipes: '/pos/recipes',
   reports: '/pos/reports',
   users: '/pos/users',
   inventory: '/pos/inventory',
@@ -38,6 +39,7 @@ const allPages: PageKey[] = [
   'kitchen',
   'billing',
   'menu',
+  'recipes',
   'reports',
   'users',
   'inventory',
@@ -52,6 +54,8 @@ const allPages: PageKey[] = [
   'mobileapp',
   'outdoordelivery',
 ];
+
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function PageGuard({ page, children }: Props) {
   const { user, loading, hasPageAccess, permissions } = useAuth();
@@ -92,5 +96,10 @@ export default function PageGuard({ page, children }: Props) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <ErrorBoundary>
+      {children}
+    </ErrorBoundary>
+  );
 }
+

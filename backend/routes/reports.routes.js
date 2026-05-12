@@ -6,5 +6,6 @@ const router = express.Router();
 router.get("/weekly-sales", authRequired, reportsController.weeklySales);
 router.get("/top-items", authRequired, reportsController.topItems);
 router.get("/outdoor-delivery", authRequired, reportsController.outdoorDelivery);
+router.get("/inventory-usage", authRequired, reportsController.inventoryUsageReport);
 
 module.exports = router;
