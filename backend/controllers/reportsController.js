@@ -125,15 +125,38 @@ exports.weeklySales = async (req, res) => {
 
 exports.topItems = async (req, res) => {
   const tableNames = await getTableNames(req.query.floorKey);
-  const [orders] = await Promise.all([
-    Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNames, req.query.orderTaker)).lean(),
-  ]);
+  const orders = await Order.find(buildPaidOrdersQuery(req.query.range, req.query.from, req.query.to, tableNames, req.query.orderTaker)).lean();
+
+  const menuItems = await MenuItem.find({ category: { $in: ["Deals", "Platters"] } }).select("name bundleItems").populate("bundleItems.menuItem", "name").lean();
+  const menuMap = new Map(menuItems.map(m => [m.name, m.bundleItems]));
 
   const map = new Map();
   for (const o of orders) {
     for (const i of o.items || []) {
-      const key = i.menuItem?.name || "Unknown";
-      const prev = map.get(key) || { sold: 0, revenue: 0 };
+      const name = i.menuItem?.name || "Unknown";
+      const key = name;
+      const prev = map.get(key) || { 
+        sold: 0, 
+        revenue: 0, 
+        description: i.menuItem?.description || "", 
+        category: i.menuItem?.category || "",
+        bundleItems: i.menuItem?.bundleItems || []
+      };
+
+      const isBundle = (prev.category === "Deals" || prev.category === "Platters");
+      const hasIncompleteBundles = prev.bundleItems && prev.bundleItems.length > 0 && prev.bundleItems.some(bi => !bi.name || bi.name === String(bi.menuItem));
+
+      if (isBundle && (!prev.bundleItems || prev.bundleItems.length === 0 || hasIncompleteBundles)) {
+        const currentBundle = menuMap.get(name);
+        if (currentBundle) {
+          prev.bundleItems = currentBundle.map(bi => ({
+            menuItem: typeof bi.menuItem === 'object' ? (bi.menuItem._id || bi.menuItem.id) : bi.menuItem,
+            name: typeof bi.menuItem === 'object' ? bi.menuItem.name : (bi.name || ''),
+            quantity: bi.quantity
+          }));
+        }
+      }
+
       prev.sold += Number(i.quantity || 0);
       prev.revenue += Number(i.quantity || 0) * Number(i.menuItem?.price || 0);
       map.set(key, prev);

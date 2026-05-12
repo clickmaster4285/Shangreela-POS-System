@@ -39,15 +39,27 @@ const applyBillingFieldsFromBody = (body, patch) => {
 
 const stampItemsForKitchen = (items, requestId, requestAt = new Date()) => {
   const list = Array.isArray(items) ? items : [];
-  return list.map((item) => ({
-    ...item,
-    menuItem: {
-      ...(item.menuItem || {}),
-      kitchenRequired: item.menuItem?.kitchenRequired !== false,
-    },
-    requestId,
-    requestAt,
-  }));
+  return list.map((item) => {
+    // Correctly snapshot bundleItems if they exist
+    const bundleItems = Array.isArray(item.menuItem?.bundleItems) 
+      ? item.menuItem.bundleItems.map(bi => ({
+          menuItem: typeof bi.menuItem === 'object' ? (bi.menuItem._id || bi.menuItem.id) : bi.menuItem,
+          name: typeof bi.menuItem === 'object' ? bi.menuItem.name : (bi.name || ''),
+          quantity: bi.quantity
+        }))
+      : [];
+
+    return {
+      ...item,
+      menuItem: {
+        ...(item.menuItem || {}),
+        kitchenRequired: item.menuItem?.kitchenRequired !== false,
+        bundleItems
+      },
+      requestId,
+      requestAt,
+    };
+  });
 };
 
 exports.list = async (req, res) => {

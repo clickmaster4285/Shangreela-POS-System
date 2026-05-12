@@ -8,6 +8,16 @@ import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/common/fo
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
 
 type RecentOrderRow = { id: string; type: string; status: string; items: unknown[]; total: number; createdAt: string };
+type TopSellingItem = {
+  name: string;
+  sold: number;
+  revenue: number;
+  category?: string;
+  bundleItems?: Array<{
+    menuItem: string | { name: string };
+    quantity: number;
+  }>;
+};
 
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
 
@@ -18,6 +28,7 @@ export default function POSDashboard() {
   const [selectedFloor, setSelectedFloor] = useState('all');
   const [selectedCashier, setSelectedCashier] = useState('all');
   const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
+  const [expandBundles, setExpandBundles] = useState(false);
 
   const floorsQuery = useQuery({
     queryKey: ['floors-list'],
@@ -64,7 +75,7 @@ export default function POSDashboard() {
         };
         salesDaily: { items: { hour: string; sales: number }[] };
         revenueWeekly: { items: { day: string; revenue: number }[] };
-        topItems: { items: { name: string; sold: number; revenue: number }[] };
+        topItems: { items: TopSellingItem[] };
         recentOrders: { items: RecentOrderRow[] };
       }>(`/dashboard/bundle?from=${startDate}&to=${endDate}${floorParam}${cashierParam}`);
       return {
@@ -99,6 +110,39 @@ export default function POSDashboard() {
   const weeklySalesData = dashboardQuery.data?.weeklySalesData ?? [];
   const topSellingItems = dashboardQuery.data?.topSellingItems ?? [];
   const sampleOrders = dashboardQuery.data?.sampleOrders ?? [];
+
+  const expandedTopItems = useMemo(() => {
+    if (!expandBundles) return topSellingItems;
+
+    const map = new Map<string, { sold: number; revenue: number }>();
+    topSellingItems.forEach((item) => {
+      if ((item.category === 'Platters' || item.category === 'Deals') && item.bundleItems?.length) {
+        const bundleCount = item.bundleItems.length;
+        item.bundleItems.forEach((bi: any) => {
+          const subName = (bi.name && bi.name !== String(bi.menuItem)) 
+            ? bi.name 
+            : (typeof bi.menuItem === 'object' ? bi.menuItem?.name : bi.menuItem);
+          if (!subName) return;
+          const subQty = (bi.quantity || 1) * item.sold;
+          const existing = map.get(subName) || { sold: 0, revenue: 0 };
+          map.set(subName, {
+            sold: existing.sold + subQty,
+            revenue: existing.revenue + (item.revenue / bundleCount), // Distribute revenue equally among bundle items
+          });
+        });
+      } else {
+        const existing = map.get(item.name) || { sold: 0, revenue: 0 };
+        map.set(item.name, {
+          sold: existing.sold + item.sold,
+          revenue: existing.revenue + item.revenue,
+        });
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.sold - a.sold);
+  }, [topSellingItems, expandBundles]);
 
   const { dineIn, delivery, takeaway } = useMemo(
     () => ({
@@ -259,9 +303,21 @@ export default function POSDashboard() {
         {/* Top selling & Recent orders */}
         <div className="grid items-stretch lg:grid-cols-2 gap-4">
           <div className="pos-card flex min-h-0 flex-col">
-            <h3 className="font-semibold text-foreground text-sm mb-4 shrink-0">Menu Items Sales</h3>
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 className="font-semibold text-foreground text-sm">Menu Items Sales</h3>
+              <button
+                onClick={() => setExpandBundles(!expandBundles)}
+                className={`text-[10px] px-2 py-1 rounded-md border transition-colors ${
+                  expandBundles 
+                    ? 'bg-primary text-white border-primary' 
+                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                }`}
+              >
+                {expandBundles ? 'Bundles Expanded' : 'Expand Bundles'}
+              </button>
+            </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 max-h-[28rem] scrollbar-thin lg:max-h-[32rem]">
-              {topSellingItems.map((item, i) => (
+              {expandedTopItems.map((item, i) => (
                 <div key={item.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>

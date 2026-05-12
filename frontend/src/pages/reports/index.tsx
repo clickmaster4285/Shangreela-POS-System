@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag, Clock, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, DollarSign, Package, Percent, FileBarChart, CreditCard, Wallet, Download, Tag, Clock, CheckCircle2, Search } from 'lucide-react';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { MAX_LIST_LIMIT } from '@/lib/api/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { exportReportPdf } from '@/utils/common/exportReportPdf';
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
+import { Input } from '@/components/ui/input';
 
 const pieColors = ['hsl(340,70%,21%)', 'hsl(340,60%,30%)', 'hsl(15,45%,81%)', 'hsl(40,70%,55%)', 'hsl(15,25%,13%)'];
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
@@ -146,8 +147,67 @@ export default function Reports() {
     paymentBreakdown: { cash: 0, card: 0, easypesa: 0, other: 0 },
     totalMenuOut: 0,
   };
+
+  type TopSellingItem = {
+    name: string;
+    sold: number;
+    revenue: number;
+    category?: string;
+    description?: string;
+    bundleItems?: Array<{
+      menuItem: string | { name: string };
+      quantity: number;
+    }>;
+  };
   const totalRevenue = summary.revenue;
   const totalSold = useMemo(() => topSellingItems.reduce((s, i) => s + i.sold, 0), [topSellingItems]);
+
+  const [menuSearch, setMenuSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [expandBundles, setExpandBundles] = useState(false);
+
+  const parsedTopSellingItems = useMemo(() => {
+    if (!expandBundles) return topSellingItems;
+
+    const expandedMap = new Map<string, { name: string; sold: number; revenue: number }>();
+
+    (topSellingItems as TopSellingItem[]).forEach(item => {
+      const isBundle = item.category === 'Deals' || item.category === 'Platters';
+      if (isBundle && item.bundleItems?.length) {
+        const bundleCount = item.bundleItems.length;
+        item.bundleItems.forEach((bi: any) => {
+          const subName = (bi.name && bi.name !== String(bi.menuItem)) 
+            ? bi.name 
+            : (typeof bi.menuItem === 'object' ? bi.menuItem?.name : bi.menuItem);
+          if (!subName) return;
+          const totalSold = item.sold * (bi.quantity || 1);
+          const existing = expandedMap.get(subName) || { name: subName, sold: 0, revenue: 0 };
+          existing.sold += totalSold;
+          existing.revenue += (item.revenue / bundleCount);
+          expandedMap.set(subName, existing);
+        });
+      } else {
+        const existing = expandedMap.get(item.name) || { name: item.name, sold: 0, revenue: 0 };
+        existing.sold += item.sold;
+        existing.revenue += item.revenue;
+        expandedMap.set(item.name, existing);
+      }
+    });
+
+    return Array.from(expandedMap.values()).sort((a, b) => b.sold - a.sold);
+  }, [topSellingItems, expandBundles]);
+
+  const filteredTopSellingItems = useMemo(() =>
+    parsedTopSellingItems.filter(item =>
+      item.name.toLowerCase().includes(menuSearch.toLowerCase())
+    ), [parsedTopSellingItems, menuSearch]
+  );
+
+  const filteredInventoryUsage = useMemo(() =>
+    inventoryUsage.filter(item =>
+      item.inventoryItemName.toLowerCase().includes(inventorySearch.toLowerCase())
+    ), [inventoryUsage, inventorySearch]
+  );
 
   const handlePrint = () => {
     window.print();
@@ -548,7 +608,30 @@ export default function Reports() {
 
         {/* Top Selling Items Table - Visible on screen */}
         <div className="pos-card no-print">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Menu Items Sales</h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-foreground text-sm">Menu Items Sales</h3>
+              <button
+                onClick={() => setExpandBundles(!expandBundles)}
+                className={`text-[10px] uppercase font-black px-2 py-1 rounded-md transition-all ${
+                  expandBundles 
+                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {expandBundles ? 'View Consolidated' : 'Expand Platters'}
+              </button>
+            </div>
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search menu items..."
+                value={menuSearch}
+                onChange={(e) => setMenuSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -560,7 +643,7 @@ export default function Reports() {
                  </tr>
               </thead>
               <tbody>
-                {topSellingItems.map((item, i) => (
+                {filteredTopSellingItems.map((item, i) => (
                   <tr key={item.name} className="border-b border-border/50 last:border-0">
                     <td className="py-3 px-2">
                       <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
@@ -570,6 +653,11 @@ export default function Reports() {
                     <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
+                {filteredTopSellingItems.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-muted-foreground">No menu items found</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -577,7 +665,18 @@ export default function Reports() {
 
         {/* Inventory Usage Table - Visible on screen */}
         <div className="pos-card no-print">
-          <h3 className="font-semibold text-foreground text-sm mb-4">Inventory Usage</h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <h3 className="font-semibold text-foreground text-sm">Inventory Usage</h3>
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search inventory..."
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -589,7 +688,7 @@ export default function Reports() {
                  </tr>
               </thead>
               <tbody>
-                {inventoryUsage.map((item, i) => (
+                {filteredInventoryUsage.map((item, i) => (
                   <tr key={item.inventoryItemName} className="border-b border-border/50 last:border-0">
                     <td className="py-3 px-2">
                       <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
@@ -599,9 +698,9 @@ export default function Reports() {
                     <td className="py-3 px-2 font-semibold text-foreground">{item.usedQuantity.toFixed(2)} {item.unit}</td>
                   </tr>
                 ))}
-                {inventoryUsage.length === 0 && (
+                {filteredInventoryUsage.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-muted-foreground">No data available</td>
+                    <td colSpan={4} className="py-4 text-center text-muted-foreground">No inventory items found</td>
                   </tr>
                 )}
               </tbody>

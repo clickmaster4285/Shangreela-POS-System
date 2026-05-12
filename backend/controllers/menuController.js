@@ -4,6 +4,23 @@ const { MenuItem, MenuCategory, Recipe } = require("../models");
 const Fuse = require("fuse.js");
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const parseBundleItems = (value) => {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return [];
+};
+
 const parseIngredientOverrides = (value) => {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) return value;
@@ -49,7 +66,7 @@ exports.list = async (req, res) => {
     if (categoryFilter) where.category = categoryFilter;
 
     [items, total] = await Promise.all([
-      MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe"),
+      MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe").populate("bundleItems.menuItem", "name"),
       MenuItem.countDocuments(where)
     ]);
 
@@ -88,7 +105,7 @@ exports.list = async (req, res) => {
   const end = start + limit;
   const paginatedResults = results.slice(start, end);
 
-  const populated = await MenuItem.populate(paginatedResults.map(r => r.item), { path: "recipe" });
+  const populated = await MenuItem.populate(paginatedResults.map(r => r.item), [{ path: "recipe" }, { path: "bundleItems.menuItem", select: "name" }]);
 
   res.json(buildPaginatedResponse({
     items: populated.map((item) => ({
@@ -111,6 +128,7 @@ exports.create = async (req, res) => {
     recipe: req.body.recipe || null,
     scale: Number(req.body.scale || 1),
     ingredientOverrides: parseIngredientOverrides(req.body.ingredientOverrides) || [],
+    bundleItems: parseBundleItems(req.body.bundleItems) || [],
   };
   const row = await MenuItem.create(payload);
   // Invalidate cache
@@ -133,8 +151,9 @@ exports.update = async (req, res) => {
   if (req.body.recipe !== undefined) payload.recipe = req.body.recipe || null;
   if (req.body.scale !== undefined) payload.scale = Number(req.body.scale || 1);
   if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = parseIngredientOverrides(req.body.ingredientOverrides);
+  if (req.body.bundleItems !== undefined) payload.bundleItems = parseBundleItems(req.body.bundleItems);
 
-  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe");
+  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe").populate("bundleItems.menuItem", "name");
   // Invalidate cache
   cachedMenuItems = null;
   emitPosChange(["menu", "dashboard"]);

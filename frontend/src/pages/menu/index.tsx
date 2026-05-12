@@ -244,8 +244,16 @@ export default function MenuManagement() {
     setImagePreviewUrl('');
     setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' });
     if (item.category === 'Deals' || item.category === 'Platters') {
-      const sourceItems = items.filter(i => i.id !== item.id && i.category !== 'Deals' && i.category !== 'Platters');
-      setBundleItems(parseBundleItemsFromDescription(item.description || '', sourceItems));
+      if (item.bundleItems && item.bundleItems.length > 0) {
+        setBundleItems(item.bundleItems.map(bi => ({
+          id: typeof bi.menuItem === 'string' ? bi.menuItem : (bi.menuItem as any)._id || (bi.menuItem as any).id,
+          name: items.find(i => i.id === (typeof bi.menuItem === 'string' ? bi.menuItem : (bi.menuItem as any)._id || (bi.menuItem as any).id))?.name || 'Unknown',
+          quantity: bi.quantity
+        })));
+      } else {
+        const sourceItems = items.filter(i => i.id !== item.id && i.category !== 'Deals' && i.category !== 'Platters');
+        setBundleItems(parseBundleItemsFromDescription(item.description || '', sourceItems));
+      }
     } else {
       setBundleItems([]);
     }
@@ -297,6 +305,12 @@ export default function MenuManagement() {
     formData.append('recipe', selectedRecipeId || '');
     formData.append('scale', scale);
     formData.append('ingredientOverrides', JSON.stringify(ingredientOverrides));
+    if (isBundleCategory) {
+      formData.append('bundleItems', JSON.stringify(bundleItems.map(bi => ({
+        menuItem: bi.id,
+        quantity: bi.quantity
+      }))));
+    }
     if (imageFile) {
       formData.set('image', imageFile);
     }

@@ -27,6 +27,12 @@ const menuItemSchema = new mongoose.Schema(
         unit: { type: String },
       },
     ],
+    bundleItems: [
+      {
+        menuItem: { type: mongoose.Schema.Types.ObjectId, ref: "MenuItem" },
+        quantity: { type: Number, min: 1, default: 1 },
+      },
+    ],
   },
   { timestamps: true }
 );

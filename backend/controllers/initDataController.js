@@ -17,6 +17,7 @@ exports.getInitData = async (req, res) => {
   if (include.has("menu")) {
     jobs.push(
       MenuItem.find({})
+        .populate("bundleItems.menuItem", "name")
         .sort({ createdAt: -1 })
         .lean()
         .then((items) => ["menu", items.map((i) => ({ ...i, id: String(i._id) }))])

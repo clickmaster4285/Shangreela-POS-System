@@ -36,6 +36,13 @@ const orderSchema = new mongoose.Schema(
           price: Number,
           category: String,
           kitchenRequired: { type: Boolean, default: true },
+          bundleItems: [
+            {
+              menuItem: String,
+              name: String,
+              quantity: Number,
+            },
+          ],
         },
       },
     ],

@@ -10,6 +10,7 @@ export interface MenuItem {
   perishable: boolean;
   kitchenRequired?: boolean;
   expiryDays?: number;
+  bundleItems?: Array<{ menuItem: string; quantity: number }>;
 }
 
 export interface CartItem {

@@ -8,7 +8,7 @@ const {
 const { getEffectiveTaxRates } = require("../utils/orderTotals");
 
 const PAID_ORDER_LIST_PROJECTION =
-  "total subtotal discount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name createdAt";
+  "total subtotal discount serviceCharge gstAmount gstEnabled type paymentMethod items.quantity items.menuItem.price items.menuItem.name items.menuItem.category items.menuItem.description items.menuItem.bundleItems createdAt";
 
 const getTableNames = async (floorKey) => {
   if (!floorKey || floorKey === "all") return null;
@@ -81,12 +81,38 @@ const normalizeOrderFinancials = (order, rates = { gstRate: 0.16, serviceChargeR
   return { subtotal, discount, serviceCharge, gstAmount, total };
 };
 
-const buildTopMenuItems = (orders) => {
+const buildTopMenuItems = async (orders) => {
+  const menuItems = await MenuItem.find({ category: { $in: ["Deals", "Platters"] } }).select("name bundleItems").populate("bundleItems.menuItem", "name").lean();
+  const menuMap = new Map(menuItems.map(m => [m.name, m.bundleItems]));
+
   const map = new Map();
   for (const order of orders) {
     for (const it of order.items || []) {
-      const key = it.menuItem?.name || "Unknown";
-      const prev = map.get(key) || { sold: 0, revenue: 0 };
+      const name = it.menuItem?.name || "Unknown";
+      const key = name;
+      const prev = map.get(key) || { 
+        sold: 0, 
+        revenue: 0,
+        category: it.menuItem?.category || "",
+        description: it.menuItem?.description || "",
+        bundleItems: it.menuItem?.bundleItems || []
+      };
+      
+      // Fallback for old orders or missing bundleItems in snapshot
+      const isBundle = (prev.category === "Deals" || prev.category === "Platters");
+      const hasIncompleteBundles = prev.bundleItems && prev.bundleItems.length > 0 && prev.bundleItems.some(bi => !bi.name || bi.name === String(bi.menuItem));
+      
+      if (isBundle && (!prev.bundleItems || prev.bundleItems.length === 0 || hasIncompleteBundles)) {
+        const currentBundle = menuMap.get(name);
+        if (currentBundle) {
+          prev.bundleItems = currentBundle.map(bi => ({
+            menuItem: typeof bi.menuItem === 'object' ? (bi.menuItem._id || bi.menuItem.id) : bi.menuItem,
+            name: typeof bi.menuItem === 'object' ? bi.menuItem.name : (bi.name || ''),
+            quantity: bi.quantity
+          }));
+        }
+      }
+
       const quantity = Number(it.quantity || 0);
       prev.sold += quantity;
       prev.revenue += quantity * Number(it.menuItem?.price || 0);
@@ -339,7 +365,7 @@ exports.bundle = async (req, res) => {
     const summary = buildSummaryPayload(orders, rates, menuCount, lowStock, staff, cancelledOrders, openOrders, expenseStats);
     const salesDailyItems = buildSalesDailyItems(orders, rates);
     const revenueWeeklyItems = buildRevenueSeries(range, orders, from, to);
-    const topItems = buildTopMenuItems(orders);
+    const topItems = await buildTopMenuItems(orders);
     const orderTypeBreakdownItems = buildOrderTypeBreakdownItems(orders);
 
     res.json({
@@ -379,7 +405,7 @@ exports.revenueWeekly = async (req, res) => {
 exports.topItems = async (req, res) => {
   try {
     const { orders } = await loadPaidOrdersLeanForReq(req);
-    res.json({ items: buildTopMenuItems(orders) });
+    res.json({ items: await buildTopMenuItems(orders) });
   } catch (error) {
     console.error("topItems error:", error);
     res.status(500).json({ message: error.message || "Failed to load top items" });

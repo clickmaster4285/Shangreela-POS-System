@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Filter, XCircle, Package, Tag } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingCart, ArrowUpRight, Filter, XCircle, Package, Tag, Search } from 'lucide-react';
 import { api } from '@/lib/api/api';
 import { useQuery } from '@tanstack/react-query';
+import { Input } from '@/components/ui/input';
 
 const orderTypeDataDefault = [
   { name: 'Dine-in', value: 0, revenue: 0, count: 0 },
@@ -18,6 +19,8 @@ export default function SalesAnalytics() {
   const today = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [expandBundles, setExpandBundles] = useState(false);
 
   const analyticsQuery = useQuery({
     queryKey: ['analytics-dashboard', startDate, endDate],
@@ -33,7 +36,7 @@ export default function SalesAnalytics() {
           };
           salesDaily: { items: { hour: string; sales: number }[] };
           revenueWeekly: { items: { day: string; revenue: number }[] };
-          topItems: { items: { name: string; sold: number; revenue: number }[] };
+          topItems: { items: { name: string; sold: number; revenue: number; category?: string; description?: string }[] };
           orderTypeBreakdown: { items: { name: string; value: number; revenue: number; count?: number }[] };
         }>(`/dashboard/bundle?from=${startDate}&to=${endDate}`),
         api<{ items: { month: string; revenue: number }[] }>('/analytics/monthly-trend'),
@@ -70,6 +73,42 @@ export default function SalesAnalytics() {
   const dineInCount = orderTypeData.find(o => o.name === 'Dine-in')?.count ?? 0;
   const deliveryCount = orderTypeData.find(o => o.name === 'Delivery')?.count ?? 0;
   const takeawayCount = orderTypeData.find(o => o.name === 'Takeaway')?.count ?? 0;
+
+  const parsedTopSellingItems = useMemo(() => {
+    if (!expandBundles) return topSellingItems;
+
+    const expandedMap = new Map<string, { name: string; sold: number; revenue: number }>();
+
+    topSellingItems.forEach(item => {
+      const isBundle = item.category === 'Deals' || item.category === 'Platters';
+      if (isBundle && item.description) {
+        const parts = item.description.split(',').map(p => p.trim()).filter(Boolean);
+        parts.forEach(part => {
+          const match = part.match(/^(.*)\s+(\d+)$/);
+          const name = match ? match[1].trim() : part;
+          const qty = match ? Number(match[2]) : 1;
+          
+          const totalSold = item.sold * qty;
+          const existing = expandedMap.get(name) || { name, sold: 0, revenue: 0 };
+          existing.sold += totalSold;
+          expandedMap.set(name, existing);
+        });
+      } else {
+        const existing = expandedMap.get(item.name) || { name: item.name, sold: 0, revenue: item.revenue };
+        existing.sold += item.sold;
+        existing.revenue += item.revenue;
+        expandedMap.set(item.name, existing);
+      }
+    });
+
+    return Array.from(expandedMap.values()).sort((a, b) => b.sold - a.sold);
+  }, [topSellingItems, expandBundles]);
+
+  const filteredTopSellingItems = useMemo(() =>
+    parsedTopSellingItems.filter(item =>
+      item.name.toLowerCase().includes(menuSearch.toLowerCase())
+    ), [parsedTopSellingItems, menuSearch]
+  );
 
   return (
     <div className="space-y-6">
@@ -202,7 +241,30 @@ export default function SalesAnalytics() {
 
       {/* Top Selling Items */}
       <div className="pos-card">
-        <h3 className="font-semibold text-foreground text-sm mb-4">Top Selling Items</h3>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-foreground text-sm">Top Selling Items</h3>
+            <button
+              onClick={() => setExpandBundles(!expandBundles)}
+              className={`text-[10px] uppercase font-black px-2 py-1 rounded-md transition-all ${
+                expandBundles 
+                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20' 
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {expandBundles ? 'View Consolidated' : 'Expand Platters'}
+            </button>
+          </div>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search items..."
+              value={menuSearch}
+              onChange={(e) => setMenuSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -214,7 +276,7 @@ export default function SalesAnalytics() {
               </tr>
             </thead>
             <tbody>
-              {topSellingItems.map((item, i) => (
+              {filteredTopSellingItems.map((item, i) => (
                 <tr key={item.name} className="border-b border-border/50 last:border-0">
                   <td className="py-3 px-2">
                     <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
@@ -224,6 +286,11 @@ export default function SalesAnalytics() {
                   <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                 </tr>
               ))}
+              {filteredTopSellingItems.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-4 text-center text-muted-foreground">No items found</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -231,4 +298,3 @@ export default function SalesAnalytics() {
     </div>
   );
 }
-
