@@ -47,6 +47,7 @@ const parseBundleItemsFromDescription = (description: string, sourceItems: MenuI
 
 export default function MenuManagement() {
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -107,11 +108,21 @@ export default function MenuManagement() {
     }
   }, [page, pageSize, categoryFilter, debouncedSearch]);
 
+  const fetchAllMenuItems = useCallback(async () => {
+    try {
+      const response = await api<PaginatedResponse<MenuItem>>('/menu?page=1&limit=1000');
+      setAllMenuItems(response.items);
+    } catch (error) {
+      console.error('Failed to load all menu items', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCategories();
     fetchRecipes();
     fetchInventoryItems();
-  }, [fetchCategories, fetchRecipes, fetchInventoryItems]);
+    fetchAllMenuItems();
+  }, [fetchCategories, fetchRecipes, fetchInventoryItems, fetchAllMenuItems]);
 
   useEffect(() => {
     fetchItems();
@@ -120,7 +131,8 @@ export default function MenuManagement() {
   const refreshMenuAdmin = useCallback(() => {
     void fetchCategories();
     void fetchItems();
-  }, [fetchCategories, fetchItems]);
+    void fetchAllMenuItems();
+  }, [fetchCategories, fetchItems, fetchAllMenuItems]);
 
   usePosRealtimeScopes(['menu'], refreshMenuAdmin);
 
@@ -152,8 +164,10 @@ export default function MenuManagement() {
   const allCategories = Array.from(new Set([...categories, ...DEFAULT_SPECIAL_CATEGORIES]));
   const isBundleCategory = form.category === 'Deals' || form.category === 'Platters';
   const bundleSourceItems = useMemo(
-    () => items.filter(i => i.category !== 'Deals' && i.category !== 'Platters' && i.id !== editing?.id),
-    [items, editing?.id]
+    () => allMenuItems.filter(
+      (i) => i.id !== editing?.id && i.category && !['deals', 'platters'].includes(i.category.toLowerCase())
+    ),
+    [allMenuItems, editing?.id]
   );
   const selectedRecipe = useMemo(
     () => recipes.find(r => r.id === selectedRecipeId) || null,
@@ -245,13 +259,23 @@ export default function MenuManagement() {
     setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' });
     if (item.category === 'Deals' || item.category === 'Platters') {
       if (item.bundleItems && item.bundleItems.length > 0) {
-        setBundleItems(item.bundleItems.map(bi => ({
-          id: typeof bi.menuItem === 'string' ? bi.menuItem : (bi.menuItem as any)._id || (bi.menuItem as any).id,
-          name: items.find(i => i.id === (typeof bi.menuItem === 'string' ? bi.menuItem : (bi.menuItem as any)._id || (bi.menuItem as any).id))?.name || 'Unknown',
-          quantity: bi.quantity
-        })));
+        setBundleItems(item.bundleItems.map(bi => {
+          const menuItemId = typeof bi.menuItem === 'string'
+            ? bi.menuItem
+            : bi.menuItem && typeof bi.menuItem === 'object'
+              ? String((bi.menuItem as any)._id || (bi.menuItem as any).id || '')
+              : '';
+          const menuItemName = allMenuItems.find(i => i.id === menuItemId)?.name
+            || (typeof bi.menuItem === 'object' ? (bi.menuItem as any).name : undefined)
+            || String(bi.menuItem || 'Unknown');
+          return {
+            id: menuItemId,
+            name: menuItemName,
+            quantity: bi.quantity,
+          };
+        }));
       } else {
-        const sourceItems = items.filter(i => i.id !== item.id && i.category !== 'Deals' && i.category !== 'Platters');
+        const sourceItems = allMenuItems.filter(i => i.id !== item.id && i.category && !['deals', 'platters'].includes(i.category.toLowerCase()));
         setBundleItems(parseBundleItemsFromDescription(item.description || '', sourceItems));
       }
     } else {
@@ -320,6 +344,7 @@ export default function MenuManagement() {
     request.then(() => {
       toast.success(editing ? 'Item updated' : 'Item added');
       fetchItems();
+      fetchAllMenuItems();
     }).catch((error) => {
       toast.error(error instanceof Error ? error.message : 'Failed to save item');
     });
