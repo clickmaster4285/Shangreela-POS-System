@@ -46,6 +46,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const [discountValue, setDiscountValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'easypesa'>('cash');
   const [gstEnabled, setGstEnabled] = useState(true);
+  const [takeawayChargeEnabled, setTakeawayChargeEnabled] = useState(true);
   const [advanceAmount, setAdvanceAmount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [paidAmount, setPaidAmount] = useState<number | string>('');
@@ -74,12 +75,13 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     }
     setPaidAmount('');
     setAdvanceAmount(Number(order.advanceAmount || 0));
+    setTakeawayChargeEnabled(order.takeawayChargeEnabled !== false);
     setPaymentMethod('cash');
     setIsSwitchingType(false);
     setShowSwitchTablePicker(false);
     // Reset sync tracking when order changes
     lastSyncedValues.current = '';
-  }, [order?.id, order?.gstEnabled, order?.discount]);
+  }, [order?.id, order?.gstEnabled, order?.discount, order?.takeawayChargeEnabled]);
 
   const subtotal = useMemo(() => {
     if (!order) return 0;
@@ -101,12 +103,13 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       taxRates,
       { 
         applyServiceCharge: order?.type === 'dine-in',
-        applyTakeawayCharge: order?.type === 'takeaway' && order?.takeawayChargeEnabled !== false
+        applyTakeawayCharge: order?.type === 'takeaway' && takeawayChargeEnabled
       }
     );
-  }, [subtotal, discountAmt, gstEnabled, taxRates, order?.type, order?.takeawayChargeEnabled]);
+  }, [subtotal, discountAmt, gstEnabled, taxRates, order?.type, takeawayChargeEnabled]);
 
   const { gstAmount, totalTaxAmount, grandTotal, taxableAmount, serviceCharge = 0, takeawayCharge = 0 } = taxTotals;
+  const balancePayable = Math.max(0, grandTotal - advanceAmount);
 
   // Create a stable string of current values to compare
   const currentSyncValues = useMemo(() => {
@@ -120,8 +123,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       serviceCharge,
       takeawayCharge,
       advanceAmount,
+      takeawayChargeEnabled,
     });
-  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge, takeawayCharge, advanceAmount]);
+  }, [subtotal, discountAmt, gstEnabled, grandTotal, totalTaxAmount, gstAmount, serviceCharge, takeawayCharge, advanceAmount, takeawayChargeEnabled]);
 
   // Sync billing totals with backend - ONLY when values actually change
   useEffect(() => {
@@ -153,6 +157,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
           serviceCharge,
           takeawayCharge,
           advanceAmount,
+          takeawayChargeEnabled,
         }),
       }).then(() => {
         setIsSyncing(false);
@@ -218,6 +223,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       gstRate: taxRates.gstRate,
       serviceChargeRate: taxRates.serviceChargeRate,
       takeawayChargeRate: taxRates.takeawayChargeRate,
+      takeawayChargeEnabled: isCurrentOrder ? takeawayChargeEnabled : targetOrder.takeawayChargeEnabled !== false,
       paymentMethod: targetOrder.status === 'completed'
         ? String(overridePaymentMethod || (targetOrder as any).paymentMethod || paymentLabel)
         : paymentLabel,
@@ -557,7 +563,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                     </div>
                     <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-border/50">
                       <span className="text-[11px] font-black text-foreground uppercase tracking-widest">Balance Payable</span>
-                      <span className="text-lg font-black text-primary tracking-tight">{fmt(Math.max(0, grandTotal - advanceAmount))}</span>
+                      <span className="text-lg font-black text-primary tracking-tight">{fmt(balancePayable)}</span>
                     </div>
                   </>
                 )}
@@ -656,6 +662,20 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                   </label>
                 </div>
 
+                {order.type === 'takeaway' && (
+                  <div className="rounded-xl border border-border/70 p-3 bg-muted/20">
+                    <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={takeawayChargeEnabled}
+                        onChange={(e) => setTakeawayChargeEnabled(e.target.checked)}
+                        className="w-4 h-4 text-primary border-border rounded focus:ring-primary/30"
+                      />
+                      Include Takeaway Charge ({Math.round(taxRates.takeawayChargeRate * 100)}%)
+                    </label>
+                  </div>
+                )}
+
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 animate-in fade-in slide-in-from-top-1">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1">
@@ -726,8 +746,8 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                       </div>
                       <div>
                         <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1.5 block tracking-wider">Change Due</label>
-                        <div className={`w-full bg-card border border-border rounded-xl px-3 py-3 text-lg font-black flex items-center transition-all ${Number(paidAmount) >= grandTotal ? 'text-success shadow-sm' : 'text-muted-foreground/40'}`}>
-                          {Number(paidAmount) >= grandTotal ? fmt(Number(paidAmount) - grandTotal) : 'Rs. 0'}
+                        <div className={`w-full bg-card border border-border rounded-xl px-3 py-3 text-lg font-black flex items-center transition-all ${Number(paidAmount) >= balancePayable ? 'text-success shadow-sm' : 'text-muted-foreground/40'}`}>
+                          {Number(paidAmount) >= balancePayable ? fmt(Number(paidAmount) - balancePayable) : 'Rs. 0'}
                         </div>
                       </div>
                     </div>
@@ -744,7 +764,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                       ))}
                       <button
                         type="button"
-                        onClick={() => setPaidAmount(Math.ceil(grandTotal / 500) * 500)}
+                        onClick={() => setPaidAmount(Math.ceil(balancePayable / 500) * 500)}
                         className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-black text-primary hover:bg-primary hover:text-white transition-all shadow-sm ml-auto"
                       >
                         Round Up

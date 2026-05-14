@@ -204,11 +204,15 @@ export const searchItems = (
    currentCategory?: string
 ): SearchResult[] => {
    if (!searchQuery.trim()) {
-      return processedItems.map(p => ({
-         item: p.original,
-         score: p.popularity,
-         positions: []
-      }));
+      return processedItems.map(p => {
+         // Massive boost for favorites to keep them at top when no search
+         const favoriteBoost = p.original.isFavorite ? 1000000 : 0;
+         return {
+            item: p.original,
+            score: favoriteBoost + p.popularity,
+            positions: []
+         };
+      });
    }
 
    // Check cache
@@ -282,6 +286,7 @@ export const searchItems = (
       // Calculate final score: TIER * 1000 + fineScore + popularity
       const tierScore = bestTier * 1000;
       const popularityBoost = processed.popularity * 5;
+      const favoriteBoost = processed.original.isFavorite ? 2000 : 0;
 
       // Category boost (additive, not multiplicative)
       let categoryBoost = 0;
@@ -289,7 +294,7 @@ export const searchItems = (
          categoryBoost = 300;
       }
 
-      const finalScore = tierScore + totalFineScore + popularityBoost + categoryBoost;
+      const finalScore = tierScore + totalFineScore + popularityBoost + categoryBoost + favoriteBoost;
 
       results.push({
          item: processed.original,

@@ -66,7 +66,7 @@ exports.list = async (req, res) => {
     if (categoryFilter) where.category = categoryFilter;
 
     [items, total] = await Promise.all([
-      MenuItem.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe").populate("bundleItems.menuItem", "name"),
+      MenuItem.find(where).sort({ isFavorite: -1, createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe").populate("bundleItems.menuItem", "name"),
       MenuItem.countDocuments(where)
     ]);
 
@@ -124,6 +124,7 @@ exports.create = async (req, res) => {
     ...req.body,
     price: Number(req.body.price || 0),
     kitchenRequired: req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true,
+    isFavorite: req.body.isFavorite === 'true' || req.body.isFavorite === true,
     image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
     recipe: req.body.recipe || null,
     scale: Number(req.body.scale || 1),
@@ -144,6 +145,7 @@ exports.update = async (req, res) => {
   if (req.body.category !== undefined) payload.category = req.body.category;
   if (req.body.description !== undefined) payload.description = req.body.description;
   if (req.body.kitchenRequired !== undefined) payload.kitchenRequired = req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true;
+  if (req.body.isFavorite !== undefined) payload.isFavorite = req.body.isFavorite === 'true' || req.body.isFavorite === true;
   if (req.body.image !== undefined) payload.image = req.body.image;
   if (req.file) {
     payload.image = `/uploads/menu/${req.file.filename}`;
