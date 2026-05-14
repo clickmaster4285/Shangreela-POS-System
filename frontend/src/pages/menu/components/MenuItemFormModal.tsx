@@ -30,6 +30,7 @@ type FormState = {
   category: string;
   description: string;
   kitchenRequired: boolean;
+  isFavorite: boolean;
   image: string;
 };
 
@@ -160,10 +161,17 @@ export function MenuItemFormModal({
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="checkbox" checked={form.kitchenRequired} onChange={e => setForm({ ...form, kitchenRequired: e.target.checked })} className="accent-primary" />
-              Send to kitchen
-            </label>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                <input type="checkbox" checked={form.kitchenRequired} onChange={e => setForm({ ...form, kitchenRequired: e.target.checked })} className="accent-primary" />
+                Send to kitchen
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                <input type="checkbox" checked={form.isFavorite} onChange={e => setForm({ ...form, isFavorite: e.target.checked })} className="accent-primary" />
+                Mark as Favorite
+              </label>
+            </div>
 
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Item image</label>
@@ -324,7 +332,7 @@ export function MenuItemFormModal({
                   <div className="space-y-3">
                     <p className="text-xs font-medium text-muted-foreground">Ingredients</p>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="absolute left-3 top-1/2 w-4 h-4 text-muted-foreground" />
                       <input type="text" placeholder="Search inventory items..." className={`${inputClass} pl-10 text-sm`} value={ingredientSearch} onChange={e => setIngredientSearch(e.target.value)} />
                     </div>
                     <div className="border border-border rounded-xl max-h-64 overflow-y-auto bg-muted/20">

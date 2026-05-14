@@ -7,6 +7,7 @@ export interface MenuItem {
   image: string;
   description: string;
   available: boolean;
+  isFavorite?: boolean;
   perishable: boolean;
   kitchenRequired?: boolean;
   expiryDays?: number;
@@ -36,6 +37,15 @@ export interface Order {
   customerName?: string;
   orderTaker?: string;
   gstEnabled?: boolean;
+  takeawayChargeEnabled?: boolean;
+  advanceAmount?: number;
+  amountPaid?: number;
+  changeDue?: number;
+  paymentMethod?: string;
+  cashierName?: string;
+  takeawayCharge?: number;
+  serviceCharge?: number;
+  gstAmount?: number;
 }
 
 export interface FloorInfo {

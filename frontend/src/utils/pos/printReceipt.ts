@@ -28,18 +28,14 @@ export interface ReceiptData {
   gstEnabled?: boolean;
   serviceCharge?: number;
   takeawayCharge?: number;
-  /** e.g. 0.16 */
+  takeawayChargeEnabled?: boolean;
   gstRate?: number;
-  /** e.g. 0.05 */
   serviceChargeRate?: number;
-  /** e.g. 0.05 */
   takeawayChargeRate?: number;
-
   tax?: number;
   total?: number;
   paymentMethod?: string;
   customerName?: string;
-  /** ISO — order placed time shown on invoice; print time shown separately when set */
   orderCreatedAt?: string;
   amountPaid?: number;
   changeDue?: number;
@@ -79,7 +75,7 @@ export function printReceipt(data: ReceiptData) {
     },
     { 
       applyServiceCharge: String(data.orderType || '').toLowerCase() === 'dine-in',
-      applyTakeawayCharge: String(data.orderType || '').toLowerCase() === 'takeaway'
+      applyTakeawayCharge: String(data.orderType || '').toLowerCase() === 'takeaway' && data.takeawayChargeEnabled !== false
     }
   );
 

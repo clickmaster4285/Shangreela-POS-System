@@ -34,6 +34,9 @@ const applyBillingFieldsFromBody = (body, patch) => {
       if (Number.isFinite(n)) patch[f] = n;
     }
   }
+  if (body.takeawayChargeEnabled !== undefined) {
+    patch.takeawayChargeEnabled = body.takeawayChargeEnabled === true || body.takeawayChargeEnabled === "true";
+  }
   return patch;
 };
 
@@ -128,7 +131,7 @@ exports.list = async (req, res) => {
     // Format response
     res.json(buildPaginatedResponse({
       items: items.map(o => {
-        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type);
+        const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type, o.takeawayChargeEnabled !== false);
         const isPaid = o.status === "completed";
         return {
           id: o.code,
@@ -143,7 +146,9 @@ exports.list = async (req, res) => {
           discount: isPaid && Number.isFinite(o.discount) ? Number(o.discount) : totals.discount,
           gstAmount: totals.gstAmount,
           serviceCharge: totals.serviceCharge,
+          takeawayCharge: totals.takeawayCharge,
           gstEnabled: o.gstEnabled !== false,
+          takeawayChargeEnabled: o.takeawayChargeEnabled !== false,
           createdAt: o.createdAt,
           customerName: o.customerName || "",
           orderTaker: o.orderTaker || "",
@@ -284,7 +289,8 @@ exports.create = async (req, res) => {
     const requestId = `${code}-R1`;
     const items = stampItemsForKitchen(payload.items, requestId, createdAt);
     const rates = await getEffectiveTaxRates();
-    const totals = calculateGrandTotal(items, payload.tax, payload.discount, payload.gstEnabled ?? true, rates, payload.type || "dine-in");
+    const takeawayChargeEnabled = payload.takeawayChargeEnabled !== false;
+    const totals = calculateGrandTotal(items, payload.tax, payload.discount, payload.gstEnabled ?? true, rates, payload.type || "dine-in", takeawayChargeEnabled);
     const row = await Order.create({
       code,
       type: payload.type || "dine-in",
@@ -299,6 +305,7 @@ exports.create = async (req, res) => {
       gstAmount: totals.gstAmount,
       serviceCharge: totals.serviceCharge,
       gstEnabled: payload.gstEnabled ?? true,
+      takeawayChargeEnabled,
       paymentMethod: payload.paymentMethod || "cash",
       total: totals.grandTotal,
       advanceAmount: Number(payload.advanceAmount || 0),
@@ -367,7 +374,7 @@ exports.openByTable = async (req, res) => {
 
     if (!row) return res.json({ item: null });
     const rates = await getEffectiveTaxRates();
-    const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type);
+    const totals = calculateGrandTotal(row.items || [], row.tax, row.discount, row.gstEnabled, rates, row.type, row.takeawayChargeEnabled !== false);
     return res.json({
       item: {
         id: row.code,
@@ -382,6 +389,7 @@ exports.openByTable = async (req, res) => {
         gstAmount: totals.gstAmount,
         serviceCharge: totals.serviceCharge,
         gstEnabled: row.gstEnabled !== false,
+        takeawayChargeEnabled: row.takeawayChargeEnabled !== false,
         total: totals.grandTotal,
         notes: row.notes || "",
         customerName: row.customerName || "",
@@ -417,8 +425,9 @@ exports.addItems = async (req, res) => {
     }, 1);
     const requestId = `${row.code}-R${requestNo + 1}`;
     row.items = [...(row.items || []), ...stampItemsForKitchen(incoming, requestId)];
+    row.takeawayChargeEnabled = req.body.takeawayChargeEnabled !== undefined ? (req.body.takeawayChargeEnabled === true || req.body.takeawayChargeEnabled === "true") : row.takeawayChargeEnabled;
     const rates = await getEffectiveTaxRates();
-    const totals = calculateGrandTotal(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount, req.body.gstEnabled ?? row.gstEnabled, rates, row.type);
+    const totals = calculateGrandTotal(row.items, req.body.tax ?? row.tax, req.body.discount ?? row.discount, req.body.gstEnabled ?? row.gstEnabled, rates, row.type, row.takeawayChargeEnabled !== false);
     row.subtotal = totals.subtotal;
     row.tax = totals.tax;
     row.discount = totals.discount;
@@ -465,6 +474,7 @@ exports.editItems = async (req, res) => {
     }, 1);
     const requestId = `${row.code}-R${requestNo + 1}`;
     row.items = stampItemsForKitchen(incoming, requestId);
+    row.takeawayChargeEnabled = req.body.takeawayChargeEnabled !== undefined ? (req.body.takeawayChargeEnabled === true || req.body.takeawayChargeEnabled === "true") : row.takeawayChargeEnabled;
     const rates = await getEffectiveTaxRates();
     const totals = calculateGrandTotal(
       row.items,
@@ -472,7 +482,8 @@ exports.editItems = async (req, res) => {
       req.body.discount ?? row.discount,
       req.body.gstEnabled ?? row.gstEnabled,
       rates,
-      row.type
+      row.type,
+      row.takeawayChargeEnabled !== false
     );
     row.subtotal = totals.subtotal;
     row.tax = totals.tax;
@@ -621,7 +632,8 @@ exports.switchType = async (req, res) => {
       order.discount,
       order.gstEnabled,
       rates,
-      type
+      type,
+      order.takeawayChargeEnabled !== false
     );
 
     order.subtotal = totals.subtotal;

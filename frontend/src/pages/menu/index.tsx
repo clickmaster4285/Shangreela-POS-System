@@ -138,7 +138,7 @@ export default function MenuManagement() {
 
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '' });
+  const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', description: '', kitchenRequired: true, image: '', isFavorite: false });
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [scale, setScale] = useState('1');
   const [ingredientOverrides, setIngredientOverrides] = useState<IngredientOverride[]>([]);
@@ -235,7 +235,7 @@ export default function MenuManagement() {
     setImagePreviewUrl('');
     const fallbackCategory = allCategories[0] || 'Deals';
     const category = preferredCategory || fallbackCategory;
-    setForm({ name: '', price: '', category, description: '', kitchenRequired: true, image: '' });
+    setForm({ name: '', price: '', category, description: '', kitchenRequired: true, image: '', isFavorite: false });
     setBundleItems([]);
     setBundleItemId('');
     setBundleQty('1');
@@ -256,7 +256,15 @@ export default function MenuManagement() {
     cleanupImagePreview();
     setImageFile(null);
     setImagePreviewUrl('');
-    setForm({ name: item.name, price: item.price.toString(), category: item.category, description: item.description, kitchenRequired: item.kitchenRequired !== false, image: item.image || '' });
+    setForm({
+      name: item.name,
+      price: item.price.toString(),
+      category: item.category,
+      description: item.description,
+      kitchenRequired: item.kitchenRequired !== false,
+      image: item.image || '',
+      isFavorite: item.isFavorite || false
+    });
     if (item.category === 'Deals' || item.category === 'Platters') {
       if (item.bundleItems && item.bundleItems.length > 0) {
         setBundleItems(item.bundleItems.map(bi => {
@@ -325,6 +333,7 @@ export default function MenuManagement() {
     formData.append('category', form.category);
     formData.append('description', form.description);
     formData.append('kitchenRequired', String(form.kitchenRequired));
+    formData.append('isFavorite', String(form.isFavorite));
     formData.append('image', form.image || '');
     formData.append('recipe', selectedRecipeId || '');
     formData.append('scale', scale);
