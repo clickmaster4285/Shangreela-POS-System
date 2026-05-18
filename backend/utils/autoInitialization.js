@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const { MenuItem, User, Permission } = require("../models");
-const { MENU_ITEMS } = require("./menuSeedData");
+// const { MENU_ITEMS } = require("./menuSeedData");
 
 async function seedMenuIfEmpty() {
   const existing = await MenuItem.find({}, { name: 1, bundleItems: 1 }).lean();
@@ -9,20 +9,20 @@ async function seedMenuIfEmpty() {
   const toInsert = [];
   const toUpdate = [];
 
-  for (const item of MENU_ITEMS) {
-    const trimmedName = String(item.name || "").trim();
-    if (!existingMap.has(trimmedName)) {
-      toInsert.push(item);
-    } else {
-      // Check if it's a platter/deal and needs bundles updated
-      const existingDoc = existingMap.get(trimmedName);
-      if ((item.category === "Platters" || item.category === "Deals") && item.bundleItems) {
-        if (!existingDoc.bundleItems || existingDoc.bundleItems.length === 0) {
-          toUpdate.push(item);
-        }
-      }
-    }
-  }
+  // for (const item of MENU_ITEMS) {
+  //   const trimmedName = String(item.name || "").trim();
+  //   if (!existingMap.has(trimmedName)) {
+  //     toInsert.push(item);
+  //   } else {
+  //     // Check if it's a platter/deal and needs bundles updated
+  //     const existingDoc = existingMap.get(trimmedName);
+  //     if ((item.category === "Platters" || item.category === "Deals") && item.bundleItems) {
+  //       if (!existingDoc.bundleItems || existingDoc.bundleItems.length === 0) {
+  //         toUpdate.push(item);
+  //       }
+  //     }
+  //   }
+  // }
 
   // First insert new items
   if (toInsert.length > 0) {
@@ -45,30 +45,30 @@ async function seedMenuIfEmpty() {
   }
 
   // Now resolve and update bundles for both new and existing items
-  const itemsWithBundles = MENU_ITEMS.filter(item => item.bundleItems && item.bundleItems.length > 0);
-  for (const item of itemsWithBundles) {
-    const existingDoc = existingMap.get(String(item.name || "").trim());
-    if (!existingDoc) continue;
+  // const itemsWithBundles = MENU_ITEMS.filter(item => item.bundleItems && item.bundleItems.length > 0);
+  // for (const item of itemsWithBundles) {
+  //   const existingDoc = existingMap.get(String(item.name || "").trim());
+  //   if (!existingDoc) continue;
 
-    const resolvedBundles = [];
-    for (const bi of item.bundleItems) {
-      const target = existingMap.get(String(bi.menuItemName || "").trim());
-      if (target) {
-        resolvedBundles.push({
-          menuItem: target._id,
-          quantity: bi.quantity || 1
-        });
-      }
-    }
+  //   const resolvedBundles = [];
+  //   for (const bi of item.bundleItems) {
+  //     const target = existingMap.get(String(bi.menuItemName || "").trim());
+  //     if (target) {
+  //       resolvedBundles.push({
+  //         menuItem: target._id,
+  //         quantity: bi.quantity || 1
+  //       });
+  //     }
+  //   }
 
-    if (resolvedBundles.length > 0) {
-      await MenuItem.findByIdAndUpdate(existingDoc._id, { $set: { bundleItems: resolvedBundles } });
-    }
-  }
+  //   if (resolvedBundles.length > 0) {
+  //     await MenuItem.findByIdAndUpdate(existingDoc._id, { $set: { bundleItems: resolvedBundles } });
+  //   }
+  // }
 
-  if (itemsWithBundles.length > 0) {
-    console.log(`✓ Processed bundles for ${itemsWithBundles.length} platter(s)/deal(s)`);
-  }
+  // if (itemsWithBundles.length > 0) {
+  //   console.log(`✓ Processed bundles for ${itemsWithBundles.length} platter(s)/deal(s)`);
+  // }
 }
 
 const ALL_PAGES = [
