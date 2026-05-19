@@ -25,7 +25,7 @@ type Recipe = {
 };
 type RecipesResponse = PaginatedResponse<Recipe>;
 const DEFAULT_SPECIAL_CATEGORIES = ['Deals', 'Platters'] as const;
-type BundleEntry = { id: string; name: string; quantity: number };
+type BundleEntry = { id: string; name: string; price: number; quantity: number };
 type IngredientOverride = { inventoryItem: string; baseQuantity: number; unit: string };
 type MenuRecipeRef = string | { _id?: string; id?: string; name?: string } | null;
 
@@ -40,6 +40,7 @@ const parseBundleItemsFromDescription = (description: string, sourceItems: MenuI
     return {
       id: source?.id || `parsed:${idx}:${parsedName}`,
       name: source?.name || parsedName,
+      price: source?.price ?? 0,
       quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
     };
   });
@@ -273,12 +274,14 @@ export default function MenuManagement() {
             : bi.menuItem && typeof bi.menuItem === 'object'
               ? String((bi.menuItem as any)._id || (bi.menuItem as any).id || '')
               : '';
-          const menuItemName = allMenuItems.find(i => i.id === menuItemId)?.name
+          const sourceItem = allMenuItems.find(i => i.id === menuItemId);
+          const menuItemName = sourceItem?.name
             || (typeof bi.menuItem === 'object' ? (bi.menuItem as any).name : undefined)
             || String(bi.menuItem || 'Unknown');
           return {
             id: menuItemId,
             name: menuItemName,
+            price: sourceItem?.price ?? 0,
             quantity: bi.quantity,
           };
         }));
@@ -422,7 +425,7 @@ export default function MenuManagement() {
     setBundleItems(prev => {
       const existing = prev.find(x => x.id === selected.id);
       if (existing) return prev.map(x => (x.id === selected.id ? { ...x, quantity: x.quantity + qty } : x));
-      return [...prev, { id: selected.id, name: selected.name, quantity: qty }];
+      return [...prev, { id: selected.id, name: selected.name, price: selected.price, quantity: qty }];
     });
     setBundleQty('1');
   };

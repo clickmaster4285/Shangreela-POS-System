@@ -1,4 +1,5 @@
 import { X, Layers, ChevronDown, ChevronUp, Plus, Search } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { type MenuItem } from '@/data/pos/mockData';
 import { BASE_UNITS } from '@/pages/inventory/modals/AddItemModal';
 
@@ -12,7 +13,7 @@ type Recipe = {
   }>;
 };
 
-type BundleEntry = { id: string; name: string; quantity: number };
+type BundleEntry = { id: string; name: string; price: number; quantity: number };
 type IngredientOverride = { inventoryItem: string; baseQuantity: number; unit: string };
 type MergedIngredient = {
   inventoryItem: string;
@@ -98,6 +99,21 @@ export function MenuItemFormModal({
   imagePreviewUrl, handleImageChange, cleanupImagePreview, setImageFile,
   setImagePreviewUrl, save, saveRecipe, inputClass,
 }: MenuItemFormModalProps) {
+  const [bundleSearch, setBundleSearch] = useState('');
+  const [bundleSearchDebounced, setBundleSearchDebounced] = useState('');
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setBundleSearchDebounced(bundleSearch), 250);
+    return () => window.clearTimeout(t);
+  }, [bundleSearch]);
+  const filteredBundleSource = useMemo(() => {
+    const q = bundleSearchDebounced.trim().toLowerCase();
+    if (!q) return bundleSourceItems;
+    return bundleSourceItems.filter(item => item.name.toLowerCase().includes(q));
+  }, [bundleSearchDebounced, bundleSourceItems]);
+
+
+
   if (!showForm) return null;
 
   return (
@@ -127,20 +143,57 @@ export function MenuItemFormModal({
               <div className="space-y-2 rounded-xl border border-border p-3">
                 <p className="text-sm font-medium text-foreground">Select items and quantity</p>
                 <div className="grid grid-cols-[1fr_92px_auto] gap-2">
-                  <select className={inputClass} value={bundleItemId} onChange={e => setBundleItemId(e.target.value)}>
-                    <option value="">Select item</option>
-                    {bundleSourceItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <input className={inputClass} type="number" min="1" step="1" value={bundleQty} onChange={e => setBundleQty(e.target.value)} placeholder="Qty" />
-                  <button type="button" onClick={addBundleItem} className="px-3 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors">
-                    Add
-                  </button>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search items..."
+                      value={bundleSearch}
+                      onChange={e => setBundleSearch(e.target.value)}
+                      className={`${inputClass} mb-0`}
+                    />
+                    <div className="text-xs text-muted-foreground mt-1">Showing {filteredBundleSource.length} items</div>
+
+                    <div className="absolute left-0 right-0 z-10 mt-10">
+                      {bundleSearch.trim() !== '' && (
+                        <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-card shadow-md">
+                          {filteredBundleSource.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-muted-foreground">No items found.</p>
+                          ) : (
+                            filteredBundleSource.slice(0, 10).map((item) => (
+                              <button key={item.id} type="button"
+                                onClick={() => {
+                                  setBundleItems(prev => {
+                                    const existing = prev.find(p => p.id === item.id);
+                                    if (existing) {
+                                      return prev.map(p => p.id === item.id ? { ...p, quantity: p.quantity + 1 } : p);
+                                    }
+                                    return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+                                  });
+                                  setBundleSearch('');
+                                  setBundleSearchDebounced('');
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-muted/40 border-b border-border/50 last:border-0"
+                              >
+                                {item.image ? <img src={item.image} alt={item.name} className="w-8 h-8 rounded object-cover" /> : <div className="w-8 h-8 rounded bg-muted/30" />}
+                                <div className="flex-1">
+                                  <div className="font-medium text-sm truncate">{item.name}</div>
+                                  <div className="text-xs text-muted-foreground">{item.category}</div>
+                                </div>
+                                <div className="text-xs text-muted-foreground">Rs. {item.price}</div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>    
                 </div>
                 {bundleItems.length > 0 && (
                   <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
                     {bundleItems.map(entry => (
                       <div key={entry.id} className="flex items-center justify-between rounded-lg bg-muted/60 px-2 py-1.5 text-xs">
                         <span className="truncate pr-2">{entry.name}</span>
+                        <span className="truncate pr-2">Rs. {entry.price}</span>
                         <div className="flex items-center gap-2 shrink-0">
                           <input
                             type="number" min="1" step="1" value={entry.quantity}
