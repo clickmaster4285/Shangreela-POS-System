@@ -104,12 +104,14 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
                    <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Ready
                  </button>
                )}
-               <button 
-                onClick={() => setCancellingOrderId(order.dbId)}
-                className="w-full px-4 py-2.5 text-xs text-left hover:bg-red-500/10 text-red-500 flex items-center gap-2 font-bold"
-               >
-                 <Trash2 className="w-3.5 h-3.5" /> Cancel Order
-               </button>
+               {isSuperAdmin && (
+                 <button 
+                  onClick={() => setCancellingOrderId(order.dbId)}
+                  className="w-full px-4 py-2.5 text-xs text-left hover:bg-red-500/10 text-red-500 flex items-center gap-2 font-bold"
+                 >
+                   <Trash2 className="w-3.5 h-3.5" /> Cancel Order
+                 </button>
+               )}
                {isSuperAdmin && (order.status === 'completed' || order.status === 'cancelled') && (
                  <button 
                   onClick={() => onUpdateStatus(order.dbId, 'pending')}
@@ -180,3 +182,4 @@ export const OrderCard = memo(({ order, onUpdateStatus, tables = [] }: OrderCard
 
 OrderCard.displayName = 'OrderCard';
 
+export default OrderCard;
