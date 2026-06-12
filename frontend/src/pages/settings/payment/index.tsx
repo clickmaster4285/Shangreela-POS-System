@@ -1,4 +1,4 @@
-import { CreditCard, QrCode, Save, Upload } from 'lucide-react';
+import { CreditCard, QrCode, Save, Upload, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, getBackendOrigin, getToken } from '@/lib/api/api';
@@ -26,6 +26,7 @@ export default function PaymentDetailsSettings() {
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<'bank' | 'easypaisa' | null>(null);
+  const [removing, setRemoving] = useState<'bank' | 'easypaisa' | null>(null);
   const bankQrRef = useRef<HTMLInputElement>(null);
   const easypaisaQrRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +91,21 @@ export default function PaymentDetailsSettings() {
     }
   };
 
+  const removeQr = async (type: 'bank' | 'easypaisa') => {
+    setRemoving(type);
+    try {
+      const saved = await api<ReceiptPaymentDetails>(`/settings/payment/qr?type=${type}`, {
+        method: 'DELETE',
+      });
+      setConfig(saved);
+      toast.success(`${type === 'bank' ? 'Bank' : 'EasyPaisa'} QR removed`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove QR');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -134,7 +150,18 @@ export default function PaymentDetailsSettings() {
           <input value={config.iban || ''} onChange={(e) => setConfig((p) => ({ ...p, iban: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="IBAN" />
           <div className="rounded-xl border border-dashed border-border p-4 text-center space-y-3">
             {config.bankQrImageUrl ? (
-              <img src={resolveUploadUrl(config.bankQrImageUrl)} alt="Bank QR" className="mx-auto w-28 h-28 object-contain border border-border rounded-lg bg-white p-1" />
+              <div className="relative mx-auto w-28 h-28">
+                <img src={resolveUploadUrl(config.bankQrImageUrl)} alt="Bank QR" className="w-full h-full object-contain border border-border rounded-lg bg-white p-1" />
+                <button
+                  type="button"
+                  title="Remove bank QR"
+                  disabled={removing === 'bank'}
+                  onClick={() => void removeQr('bank')}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:bg-destructive/90 disabled:opacity-60"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ) : (
               <div className="mx-auto w-28 h-28 rounded-lg border border-border bg-muted/30 flex items-center justify-center">
                 <QrCode className="w-8 h-8 text-muted-foreground/40" />
@@ -177,7 +204,18 @@ export default function PaymentDetailsSettings() {
           <input value={config.easypaisaNumber || ''} onChange={(e) => setConfig((p) => ({ ...p, easypaisaNumber: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Mobile number" />
           <div className="rounded-xl border border-dashed border-border p-4 text-center space-y-3">
             {config.easypaisaQrImageUrl ? (
-              <img src={resolveUploadUrl(config.easypaisaQrImageUrl)} alt="EasyPaisa QR" className="mx-auto w-28 h-28 object-contain border border-border rounded-lg bg-white p-1" />
+              <div className="relative mx-auto w-28 h-28">
+                <img src={resolveUploadUrl(config.easypaisaQrImageUrl)} alt="EasyPaisa QR" className="w-full h-full object-contain border border-border rounded-lg bg-white p-1" />
+                <button
+                  type="button"
+                  title="Remove EasyPaisa QR"
+                  disabled={removing === 'easypaisa'}
+                  onClick={() => void removeQr('easypaisa')}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:bg-destructive/90 disabled:opacity-60"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ) : (
               <div className="mx-auto w-28 h-28 rounded-lg border border-border bg-muted/30 flex items-center justify-center">
                 <QrCode className="w-8 h-8 text-muted-foreground/40" />

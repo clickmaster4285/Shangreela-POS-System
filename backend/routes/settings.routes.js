@@ -32,5 +32,6 @@ router.put("/tax", authRequired, taxController.put);
 router.get("/payment", authRequired, paymentController.get);
 router.put("/payment", authRequired, paymentController.put);
 router.post("/payment/qr", authRequired, upload.single("qrImage"), paymentController.uploadQr);
+router.delete("/payment/qr", authRequired, paymentController.removeQr);
 
 module.exports = router;

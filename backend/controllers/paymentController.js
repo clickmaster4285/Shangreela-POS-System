@@ -1,5 +1,7 @@
 const { emitPosChange } = require("../utils/realtime");
 const { PaymentConfig } = require("../models");
+const fs = require("fs");
+const path = require("path");
 
 const DEFAULT_PAYMENT_CONFIG = {
   bankName: "",
@@ -81,6 +83,29 @@ exports.uploadQr = async (req, res) => {
     ? await PaymentConfig.findByIdAndUpdate(existing._id, { [field]: imageUrl }, { new: true })
     : await PaymentConfig.create({ ...DEFAULT_PAYMENT_CONFIG, [field]: imageUrl });
 
+  emitPosChange(["settings"]);
+  res.json(formatPaymentConfig(row));
+};
+
+exports.removeQr = async (req, res) => {
+  const type = String(req.body?.type || req.query?.type || "").toLowerCase();
+  if (!["bank", "easypaisa"].includes(type)) {
+    return res.status(400).json({ message: "Provide type as bank or easypaisa." });
+  }
+
+  const field = type === "bank" ? "bankQrImageUrl" : "easypaisaQrImageUrl";
+  const existing = await PaymentConfig.findOne({});
+  if (!existing) {
+    return res.json(formatPaymentConfig(await PaymentConfig.create(DEFAULT_PAYMENT_CONFIG)));
+  }
+
+  const currentUrl = existing[field] || "";
+  if (currentUrl.startsWith("/uploads/payment/")) {
+    const filePath = path.join(__dirname, "..", currentUrl.replace(/^\//, ""));
+    fs.unlink(filePath, () => {});
+  }
+
+  const row = await PaymentConfig.findByIdAndUpdate(existing._id, { [field]: "" }, { new: true });
   emitPosChange(["settings"]);
   res.json(formatPaymentConfig(row));
 };
