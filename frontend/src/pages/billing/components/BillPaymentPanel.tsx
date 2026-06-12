@@ -597,7 +597,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
             {/* Discount / Tax toggles - only for pending bills */}
             {order.status !== 'completed' && (
               <div className="space-y-4">
-                {hasAction('apply_discount') && (
+                {currentUser?.role === 'superadmin' && (
                   <div className="rounded-xl border border-border/70 p-3 bg-muted/20">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
                       <div className="text-xs font-semibold text-muted-foreground">Discount</div>
@@ -778,7 +778,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
 
           <div className="mt-6 flex flex-col gap-2 shrink-0 border-t border-border pt-5">
             <div className="flex gap-2">
-              {hasAction('delete_order') && order.status !== 'completed' && (
+              {currentUser?.role === 'superadmin' && order.status !== 'completed' && hasAction('delete_order') && (
                 <button
                   onClick={handleVoidOrder}
                   disabled={isLocked('void-order')}

@@ -105,11 +105,21 @@ const buildTopMenuItems = async (orders) => {
       if (isBundle && (!prev.bundleItems || prev.bundleItems.length === 0 || hasIncompleteBundles)) {
         const currentBundle = menuMap.get(name);
         if (currentBundle) {
-          prev.bundleItems = currentBundle.map(bi => ({
-            menuItem: typeof bi.menuItem === 'object' ? (bi.menuItem._id || bi.menuItem.id) : bi.menuItem,
-            name: typeof bi.menuItem === 'object' ? bi.menuItem.name : (bi.name || ''),
-            quantity: bi.quantity
-          }));
+          prev.bundleItems = currentBundle
+            .filter(bi => bi && bi.menuItem)
+            .map(bi => ({
+              menuItem:
+                typeof bi.menuItem === "object"
+                  ? (bi.menuItem._id || bi.menuItem.id)
+                  : bi.menuItem,
+
+              name:
+                typeof bi.menuItem === "object"
+                  ? bi.menuItem.name
+                  : (bi.name || ""),
+
+              quantity: bi.quantity
+            }));
         }
       }
 
