@@ -391,12 +391,63 @@ export function printReceipt(data: ReceiptData) {
   doc.write(receiptHtml);
   doc.close();
 
-  setTimeout(() => {
-    try {
-      win.focus();
-      win.print();
-    } catch {
-      /* ignore */
-    }
-  }, 150);
+  const waitForIframeImages = (frameWindow: Window, timeoutMs = 2500) => {
+    const images = Array.from(frameWindow.document.images) as HTMLImageElement[];
+    if (images.length === 0) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      let remaining = images.length;
+      let finished = false;
+
+      const cleanup = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeoutId);
+        images.forEach((img) => {
+          img.removeEventListener('load', onLoadOrError);
+          img.removeEventListener('error', onLoadOrError);
+        });
+        resolve();
+      };
+
+      const onLoadOrError = () => {
+        remaining -= 1;
+        if (remaining <= 0) cleanup();
+      };
+
+      images.forEach((img) => {
+        if (img.complete) {
+          remaining -= 1;
+        } else {
+          img.addEventListener('load', onLoadOrError);
+          img.addEventListener('error', onLoadOrError);
+        }
+      });
+
+      if (remaining <= 0) {
+        cleanup();
+        return;
+      }
+
+      const timeoutId = window.setTimeout(cleanup, timeoutMs);
+    });
+  };
+
+  waitForIframeImages(win)
+    .then(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        /* ignore */
+      }
+    })
+    .catch(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        /* ignore */
+      }
+    });
 }
