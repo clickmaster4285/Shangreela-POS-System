@@ -44,6 +44,7 @@ export type PageKey =
   | 'giftcards'
   | 'fbr'
   | 'tax'
+  | 'payment'
   | 'mobileapp'
   | 'outdoordelivery';
 
@@ -86,6 +87,7 @@ const ALL_PAGE_KEYS: PageKey[] = [
   'giftcards',
   'fbr',
   'tax',
+  'payment',
   'mobileapp',
   'outdoordelivery',
 ];

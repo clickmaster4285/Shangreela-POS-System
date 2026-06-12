@@ -1,4 +1,5 @@
 import type { CartItem } from '@/data/pos/mockData';
+import { getBackendOrigin } from '@/lib/api/api';
 import { computePakistanTaxTotals, PKR_GST_RATE } from '@/utils/pos/pakistanTax';
 
 /** Config shown on printed tax invoices (align with FBR integration / business registration). */
@@ -15,6 +16,19 @@ export const RECEIPT_BUSINESS = {
 } as const;
 
 const PRINT_FRAME_ID = 'pos-receipt-print-frame';
+
+export interface ReceiptPaymentDetails {
+  bankName?: string;
+  accountTitle?: string;
+  accountNumber?: string;
+  iban?: string;
+  easypaisaNumber?: string;
+  easypaisaAccountName?: string;
+  bankQrImageUrl?: string;
+  easypaisaQrImageUrl?: string;
+  showBankOnReceipt?: boolean;
+  showEasypaisaOnReceipt?: boolean;
+}
 
 export interface ReceiptData {
   orderId: string;
@@ -36,11 +50,16 @@ export interface ReceiptData {
   total?: number;
   paymentMethod?: string;
   customerName?: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
   orderCreatedAt?: string;
   amountPaid?: number;
+  advanceAmount?: number;
+  remainingAmount?: number;
   changeDue?: number;
   isPaid?: boolean;
   cashierName?: string;
+  paymentDetails?: ReceiptPaymentDetails;
 }
 
 const fmtPKR = (v: number) =>
@@ -48,6 +67,52 @@ const fmtPKR = (v: number) =>
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const resolveUploadUrl = (path?: string) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${getBackendOrigin()}${path.startsWith('/') ? path : `/${path}`}`;
+};
+
+const buildPaymentDetailsHtml = (details?: ReceiptPaymentDetails) => {
+  if (!details) return '';
+
+  const showBank = details.showBankOnReceipt !== false;
+  const showEasypaisa = details.showEasypaisaOnReceipt !== false;
+
+  const hasBank = showBank && Boolean(details.bankName || details.accountTitle || details.accountNumber || details.iban || details.bankQrImageUrl);
+  const hasEasypaisa = showEasypaisa && Boolean(details.easypaisaNumber || details.easypaisaAccountName || details.easypaisaQrImageUrl);
+  if (!hasBank && !hasEasypaisa) return '';
+
+  const bankRows = hasBank
+    ? `
+      <div class="pay-block">
+        <div class="pay-title">Bank transfer</div>
+        ${details.bankName ? `<div class="pay-row"><span>Bank</span><span>${esc(details.bankName)}</span></div>` : ''}
+        ${details.accountTitle ? `<div class="pay-row"><span>Account title</span><span>${esc(details.accountTitle)}</span></div>` : ''}
+        ${details.accountNumber ? `<div class="pay-row"><span>Account no.</span><span>${esc(details.accountNumber)}</span></div>` : ''}
+        ${details.iban ? `<div class="pay-row"><span>IBAN</span><span>${esc(details.iban)}</span></div>` : ''}
+        ${details.bankQrImageUrl ? `<div class="qr-wrap"><img src="${esc(resolveUploadUrl(details.bankQrImageUrl))}" alt="Bank QR" class="qr-img" /></div>` : ''}
+      </div>`
+    : '';
+
+  const easypaisaRows = hasEasypaisa
+    ? `
+      <div class="pay-block">
+        <div class="pay-title">EasyPaisa</div>
+        ${details.easypaisaAccountName ? `<div class="pay-row"><span>Account name</span><span>${esc(details.easypaisaAccountName)}</span></div>` : ''}
+        ${details.easypaisaNumber ? `<div class="pay-row"><span>Mobile no.</span><span>${esc(details.easypaisaNumber)}</span></div>` : ''}
+        ${details.easypaisaQrImageUrl ? `<div class="qr-wrap"><img src="${esc(resolveUploadUrl(details.easypaisaQrImageUrl))}" alt="EasyPaisa QR" class="qr-img" /></div>` : ''}
+      </div>`
+    : '';
+
+  return `
+    <div class="section-h">Payment details</div>
+    <div class="payment-details">
+      ${bankRows}
+      ${easypaisaRows}
+    </div>`;
+};
 
 export function printReceipt(data: ReceiptData) {
   const printedAt = new Date();
@@ -193,6 +258,14 @@ export function printReceipt(data: ReceiptData) {
     .footer { text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #000; }
     .footer .thanks { font-family: 'IBM Plex Serif', serif; font-size: 11px; font-weight: 600; color: #000; margin-bottom: 4px; }
     .footer p { font-size: 8px; color: #000; line-height: 1.5; }
+    .payment-details { margin: 8px 0; font-size: 9px; }
+    .pay-block { border: 1px dashed #000; padding: 6px 8px; margin-bottom: 6px; }
+    .pay-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; border-bottom: 1px solid #000; padding-bottom: 2px; }
+    .pay-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+    .pay-row span:first-child { color: #000; flex-shrink: 0; }
+    .pay-row span:last-child { font-weight: 600; text-align: right; word-break: break-all; }
+    .qr-wrap { text-align: center; margin-top: 6px; }
+    .qr-img { width: 88px; height: 88px; object-fit: contain; border: 1px solid #000; padding: 2px; background: #fff; }
     @media print {
       body { width: 72mm; padding: 4mm; }
       @page { margin: 0; size: 72mm auto; }
@@ -216,6 +289,8 @@ export function printReceipt(data: ReceiptData) {
     <div class="row"><span>Transaction type</span><span style="text-transform:capitalize">${esc(data.orderType)}</span></div>
     ${data.table !== undefined ? `<div class="row" style=""><span style="font-weight:700; font-size:10px;">Table</span><span style="font-weight:900; font-size:12px;">${data.tableName ?? data.table}</span></div>` : ''}
     ${data.customerName ? `<div class="row"><span>Customer</span><span>${esc(data.customerName)}</span></div>` : ''}
+    ${data.customerPhone ? `<div class="row"><span>Phone</span><span>${esc(data.customerPhone)}</span></div>` : ''}
+    ${data.deliveryAddress ? `<div class="row"><span>Address</span><span>${esc(data.deliveryAddress)}</span></div>` : ''}
     <div class="row"><span>Order placed</span><span>${esc(orderDateStr)} ${esc(orderTimeStr)}</span></div>
     ${
       orderValid
@@ -286,6 +361,8 @@ export function printReceipt(data: ReceiptData) {
 
 
   ${data.paymentMethod ? `<div class="payment">Payment: ${esc(data.paymentMethod)}</div>` : ''}
+
+  ${buildPaymentDetailsHtml(data.paymentDetails)}
 
   <div class="footer">
     <div class="thanks">Thank you for dining with us</div>

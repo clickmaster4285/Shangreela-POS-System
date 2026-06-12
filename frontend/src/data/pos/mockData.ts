@@ -35,6 +35,8 @@ export interface Order {
   notes: string;
   createdAt: string;
   customerName?: string;
+  phone?: string;
+  deliveryAddress?: string;
   orderTaker?: string;
   gstEnabled?: boolean;
   takeawayChargeEnabled?: boolean;

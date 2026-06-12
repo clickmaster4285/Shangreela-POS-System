@@ -23,6 +23,7 @@ module.exports = {
   LoyaltyMember: require("./loyaltyMember"),
   FbrConfig: require("./fbrConfig"),
   TaxConfig: require("./taxConfig"),
+  PaymentConfig: require("./paymentConfig"),
   MobileConfig: require("./mobileConfig"),
   Expense: require("./expense"),
   Recipe: require("./recipe"),

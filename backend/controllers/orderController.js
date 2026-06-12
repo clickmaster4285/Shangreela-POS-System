@@ -128,9 +128,16 @@ exports.list = async (req, res) => {
       getEffectiveTaxRates()
     ]);
 
+    const deliveryCodes = items.filter((o) => o.type === "delivery").map((o) => o.code);
+    const deliveryRows = deliveryCodes.length
+      ? await Delivery.find({ orderId: { $in: deliveryCodes } }).lean()
+      : [];
+    const deliveryByOrderId = new Map(deliveryRows.map((d) => [d.orderId, d]));
+
     // Format response
     res.json(buildPaginatedResponse({
       items: items.map(o => {
+        const deliveryRow = deliveryByOrderId.get(o.code);
         const totals = calculateGrandTotal(o.items || [], o.tax, o.discount, o.gstEnabled, rates, o.type, o.takeawayChargeEnabled !== false);
         const isPaid = o.status === "completed";
         return {
@@ -150,7 +157,9 @@ exports.list = async (req, res) => {
           gstEnabled: o.gstEnabled !== false,
           takeawayChargeEnabled: o.takeawayChargeEnabled !== false,
           createdAt: o.createdAt,
-          customerName: o.customerName || "",
+          customerName: o.customerName || deliveryRow?.customerName || "",
+          phone: o.phone || deliveryRow?.phone || "",
+          deliveryAddress: o.deliveryAddress || deliveryRow?.address || "",
           orderTaker: o.orderTaker || "",
           cashierName: o.cashierName || "",
           amountPaid: o.amountPaid,
@@ -297,6 +306,8 @@ exports.create = async (req, res) => {
       status: payload.status || "pending",
       table: payload.table,
       customerName: payload.customerName || "",
+      phone: payload.phone || "",
+      deliveryAddress: payload.deliveryAddress || "",
       orderTaker: req.user.name || req.user.email || "Unknown",
       notes: payload.notes || "",
       subtotal: totals.subtotal,
@@ -393,6 +404,8 @@ exports.openByTable = async (req, res) => {
         total: totals.grandTotal,
         notes: row.notes || "",
         customerName: row.customerName || "",
+        phone: row.phone || "",
+        deliveryAddress: row.deliveryAddress || "",
         orderTaker: row.orderTaker || "",
         amountPaid: row.amountPaid,
         advanceAmount: row.advanceAmount || 0,
@@ -586,7 +599,7 @@ exports.cancel = async (req, res) => {
 
 exports.switchType = async (req, res) => {
   try {
-    const { type, table } = req.body;
+    const { type, table, customerName, phone, deliveryAddress } = req.body;
     if (!type) return res.status(400).json({ message: "Provide a valid order type." });
 
     const order = await Order.findById(req.params.id);
@@ -625,6 +638,14 @@ exports.switchType = async (req, res) => {
 
     // 3. Update type and recalculate totals (service charges etc)
     order.type = type;
+    if (type === "delivery") {
+      if (customerName !== undefined) order.customerName = String(customerName || "").trim();
+      if (phone !== undefined) order.phone = String(phone || "").trim();
+      if (deliveryAddress !== undefined) order.deliveryAddress = String(deliveryAddress || "").trim();
+    } else {
+      order.phone = "";
+      order.deliveryAddress = "";
+    }
     const rates = await getEffectiveTaxRates();
     const totals = calculateGrandTotal(
       order.items || [],
@@ -644,6 +665,29 @@ exports.switchType = async (req, res) => {
     order.total = totals.grandTotal;
 
     await order.save();
+
+    if (type === "delivery") {
+      const deliveryPayload = {
+        customerName: order.customerName || "",
+        phone: order.phone || "",
+        address: order.deliveryAddress || "",
+        items: Array.isArray(order.items) ? order.items.map((item) => item.menuItem?.name || "Unknown") : [],
+        total: Number(order.total || 0),
+      };
+      const existingDelivery = await Delivery.findOne({ orderId: order.code });
+      if (existingDelivery) {
+        await Delivery.findByIdAndUpdate(existingDelivery._id, deliveryPayload);
+      } else {
+        await Delivery.create({
+          orderId: order.code,
+          ...deliveryPayload,
+          status: "pending",
+          estimatedTime: "30 mins",
+        });
+      }
+    } else {
+      await Delivery.deleteOne({ orderId: order.code });
+    }
 
     broadcastOrderDomain();
     res.json({ ok: true, type: order.type, table: order.table, total: order.total });
