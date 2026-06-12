@@ -35,6 +35,7 @@ const POSTabsIntegration = lazy(() => import("./pages/settings/pos-tabs/index.ts
 const GiftLoyaltyCards = lazy(() => import("./pages/settings/gift-loyalty/index.tsx"));
 const FBRIntegration = lazy(() => import("./pages/settings/fbr/index.tsx"));
 const TaxDetails = lazy(() => import("./pages/settings/tax/index.tsx"));
+const PaymentDetails = lazy(() => import("./pages/settings/payment/index.tsx"));
 const MobileApp = lazy(() => import("./pages/settings/mobile-app/index.tsx"));
 const OutdoorDeliveryReport = lazy(() => import("./pages/delivery/outdoor-report.tsx"));
 
@@ -88,6 +89,7 @@ const App = () => (
                   <Route path="gift-loyalty" element={<PageGuard page="giftcards"><GiftLoyaltyCards /></PageGuard>} />
                   <Route path="fbr" element={<PageGuard page="fbr"><FBRIntegration /></PageGuard>} />
                   <Route path="tax" element={<PageGuard page="tax"><TaxDetails /></PageGuard>} />
+                  <Route path="payment" element={<PageGuard page="payment"><PaymentDetails /></PageGuard>} />
                   <Route path="mobile-app" element={<PageGuard page="mobileapp"><MobileApp /></PageGuard>} />
                   <Route path="outdoor-delivery-report" element={<PageGuard page="outdoordelivery"><OutdoorDeliveryReport /></PageGuard>} />
                 </Route>

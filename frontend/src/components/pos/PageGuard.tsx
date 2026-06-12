@@ -27,6 +27,7 @@ const pageToRoute: Record<PageKey, string> = {
   giftcards: '/pos/gift-loyalty',
   fbr: '/pos/fbr',
   tax: '/pos/tax',
+  payment: '/pos/payment',
   mobileapp: '/pos/mobile-app',
   outdoordelivery: '/pos/outdoor-delivery-report',
 };
@@ -51,6 +52,7 @@ const allPages: PageKey[] = [
   'giftcards',
   'fbr',
   'tax',
+  'payment',
   'mobileapp',
   'outdoordelivery',
 ];

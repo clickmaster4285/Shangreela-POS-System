@@ -91,6 +91,7 @@ const ALL_PAGES = [
   "giftcards",
   "fbr",
   "tax",
+  "payment",
   "mobileapp",
   "outdoordelivery",
 ];

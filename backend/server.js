@@ -35,7 +35,7 @@ app.use(morgan("dev"));
 
 /* ================= FILE UPLOADS SETUP ================= */
 const uploadsPath = path.join(__dirname, "uploads");
-const uploadSubfolders = ["expenses", "staff", "menu"];
+const uploadSubfolders = ["expenses", "staff", "menu", "payment"];
 
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });

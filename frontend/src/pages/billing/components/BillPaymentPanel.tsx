@@ -1,12 +1,13 @@
 // In BillPaymentPanel.tsx - FIXED VERSION
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Printer, Wallet, Banknote, CreditCard, Trash2, Repeat, Check, X as XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Order, TableInfo } from '@/data/pos/mockData';
 import { api } from '@/lib/api/api';
-import { printReceipt } from '@/utils/pos/printReceipt';
+import { printReceipt, type ReceiptPaymentDetails } from '@/utils/pos/printReceipt';
+import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { computePakistanTaxTotals } from '@/utils/pos/pakistanTax';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { TablePicker } from '@/components/pos/TablePicker';
@@ -54,8 +55,25 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   // Switch type UI state
   const [isSwitchingType, setIsSwitchingType] = useState(false);
   const [showSwitchTablePicker, setShowSwitchTablePicker] = useState(false);
+  const [showDeliveryFields, setShowDeliveryFields] = useState(false);
+  const [switchDeliveryName, setSwitchDeliveryName] = useState('');
+  const [switchDeliveryPhone, setSwitchDeliveryPhone] = useState('');
+  const [switchDeliveryAddress, setSwitchDeliveryAddress] = useState('');
+  const [paymentDetails, setPaymentDetails] = useState<ReceiptPaymentDetails | null>(null);
   
   const posStore = usePOSStore();
+
+  const loadPaymentDetails = useCallback(() => {
+    api<ReceiptPaymentDetails>('/settings/payment')
+      .then(setPaymentDetails)
+      .catch(() => setPaymentDetails(null));
+  }, []);
+
+  useEffect(() => {
+    loadPaymentDetails();
+  }, [loadPaymentDetails]);
+
+  usePosRealtimeScopes(['settings'], loadPaymentDetails);
 
   // Add a ref to track if we've already synced
   const lastSyncedValues = useRef<string>('');
@@ -79,6 +97,10 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     setPaymentMethod('cash');
     setIsSwitchingType(false);
     setShowSwitchTablePicker(false);
+    setShowDeliveryFields(false);
+    setSwitchDeliveryName(order.customerName || '');
+    setSwitchDeliveryPhone(order.phone || '');
+    setSwitchDeliveryAddress(order.deliveryAddress || '');
     // Reset sync tracking when order changes
     lastSyncedValues.current = '';
   }, [order?.id, order?.gstEnabled, order?.discount, order?.takeawayChargeEnabled]);
@@ -238,6 +260,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       takeawayCharge: breakdown.takeawayCharge,
       fbrInvoiceNumber: '',
       customerName: targetOrder.customerName,
+      customerPhone: targetOrder.type === 'delivery' ? targetOrder.phone : undefined,
+      deliveryAddress: targetOrder.type === 'delivery' ? targetOrder.deliveryAddress : undefined,
+      paymentDetails: paymentDetails || undefined,
       orderCreatedAt: targetOrder.createdAt,
       amountPaid: targetOrder.status === 'completed'
         ? (targetOrder as any).amountPaid || orderRemaining
@@ -345,17 +370,28 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
     }).catch(err => toast.error(err instanceof Error ? err.message : 'Payment failed'));
   };
 
-  const performSwitchType = async (newType: 'dine-in' | 'takeaway' | 'delivery', tableName?: string) => {
+  const performSwitchType = async (
+    newType: 'dine-in' | 'takeaway' | 'delivery',
+    tableName?: string,
+    deliveryFields?: { customerName: string; phone: string; deliveryAddress: string }
+  ) => {
     if (!order?.dbId) return;
     
     await runLocked('switch-type', async () => {
       await api(`/orders/${order.dbId}/switch-type`, {
         method: 'PATCH',
-        body: JSON.stringify({ type: newType, table: tableName }),
+        body: JSON.stringify({
+          type: newType,
+          table: tableName,
+          customerName: deliveryFields?.customerName,
+          phone: deliveryFields?.phone,
+          deliveryAddress: deliveryFields?.deliveryAddress,
+        }),
       });
       toast.success(`Order switched to ${newType}`);
       setIsSwitchingType(false);
       setShowSwitchTablePicker(false);
+      setShowDeliveryFields(false);
       await onPaymentComplete();
     }).catch(err => {
       toast.error(err instanceof Error ? err.message : 'Failed to switch type');
@@ -365,9 +401,26 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const handleSwitchTypeClick = (target: 'dine-in' | 'takeaway' | 'delivery') => {
     if (target === 'dine-in') {
       setShowSwitchTablePicker(true);
+    } else if (target === 'delivery') {
+      setSwitchDeliveryName(order?.customerName || '');
+      setSwitchDeliveryPhone(order?.phone || '');
+      setSwitchDeliveryAddress(order?.deliveryAddress || '');
+      setShowDeliveryFields(true);
     } else {
       void performSwitchType(target);
     }
+  };
+
+  const handleConfirmDeliverySwitch = () => {
+    if (!switchDeliveryName.trim() || !switchDeliveryPhone.trim() || !switchDeliveryAddress.trim()) {
+      toast.error('Enter customer name, phone, and address for delivery');
+      return;
+    }
+    void performSwitchType('delivery', undefined, {
+      customerName: switchDeliveryName.trim(),
+      phone: switchDeliveryPhone.trim(),
+      deliveryAddress: switchDeliveryAddress.trim(),
+    });
   };
 
   if (!order) {
@@ -490,6 +543,56 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                 {['takeaway', 'delivery'].includes(order.type) && (
                   <p className="text-[10px] text-muted-foreground text-center italic">Switching to Dine-in will apply service charges.</p>
                 )}
+                {showDeliveryFields && (
+                  <div className="space-y-2 pt-2 border-t border-primary/20">
+                    <input
+                      value={switchDeliveryName}
+                      onChange={(e) => setSwitchDeliveryName(e.target.value)}
+                      placeholder="Customer name"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={switchDeliveryPhone}
+                      onChange={(e) => setSwitchDeliveryPhone(e.target.value)}
+                      placeholder="Phone number"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
+                    />
+                    <textarea
+                      value={switchDeliveryAddress}
+                      onChange={(e) => setSwitchDeliveryAddress(e.target.value)}
+                      placeholder="Delivery address"
+                      rows={3}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm resize-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleConfirmDeliverySwitch}
+                      className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest"
+                    >
+                      Confirm delivery switch
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {order.type === 'delivery' && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2 mb-4">
+                <h3 className="text-xs font-semibold tracking-wide text-primary uppercase">Delivery customer</h3>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Name</span>
+                    <span className="font-medium text-foreground text-right">{order.customerName || '—'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Phone</span>
+                    <span className="font-medium text-foreground text-right">{order.phone || '—'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Address</span>
+                    <span className="font-medium text-foreground text-right max-w-[65%] whitespace-pre-wrap">{order.deliveryAddress || '—'}</span>
+                  </div>
+                </div>
               </div>
             )}
 
