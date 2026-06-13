@@ -1,4 +1,4 @@
-import { Search, ChevronDown, Plus, Lightbulb } from 'lucide-react';
+import { Search, ChevronDown, Plus, Lightbulb, X } from 'lucide-react';
 import { useMemo, useEffect, useState } from 'react';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { useDebounce } from '@/hooks/common/use-debounce';
@@ -93,8 +93,16 @@ export function POSMenuArea() {
             value={folderItemSearch}
             onChange={e => setFolderItemSearch(e.target.value)}
             placeholder="Search menu... (typos supported)"
-            className="w-full bg-background border border-border rounded-lg pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full bg-background border border-border rounded-lg pl-10 pr-14 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
+          {folderItemSearch && (
+            <button
+              onClick={() => setFolderItemSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-xs font-medium text-muted-foreground hover:text-foreground hover:text-red-400 bg-muted transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
         <div className="relative w-full sm:w-44">
