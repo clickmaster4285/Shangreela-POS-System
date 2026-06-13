@@ -86,13 +86,19 @@ const buildPaymentDetailsHtml = (details?: ReceiptPaymentDetails) => {
 
    const bankRows = hasBank
       ? `
-      <div>
+      <div class="pay-block">
         <div class="pay-title">Bank transfer</div>
-        ${details.bankName ? `<div class="pay-row"><span>Bank</span><span>${esc(details.bankName)}</span></div>` : ''}
-        ${details.accountTitle ? `<div class="pay-row"><span>Account title</span><span>${esc(details.accountTitle)}</span></div>` : ''}
-        ${details.accountNumber ? `<div class="pay-row"><span>Account no.</span><span>${esc(details.accountNumber)}</span></div>` : ''}
-        ${details.iban ? `<div class="pay-row"><span>IBAN</span><span>${esc(details.iban)}</span></div>` : ''}
-        ${details.bankQrImageUrl ? `<div class="qr-wrap"><img src="${esc(resolveUploadUrl(details.bankQrImageUrl))}" alt="Bank QR" class="qr-img" /></div>` : ''}
+        <div class="pay-split">
+          <div class="pay-qr-side">
+            ${details.bankQrImageUrl ? `<img src="${esc(resolveUploadUrl(details.bankQrImageUrl))}" alt="Bank QR" class="qr-img" />` : ''}
+          </div>
+          <div class="pay-values-side">
+            ${details.bankName ? `<div class="pay-val">${esc(details.bankName)}</div>` : ''}
+            ${details.accountTitle ? `<div class="pay-val">${esc(details.accountTitle)}</div>` : ''}
+            ${details.accountNumber ? `<div class="pay-val">${esc(details.accountNumber)}</div>` : ''}
+            ${details.iban ? `<div class="pay-val">${esc(details.iban)}</div>` : ''}
+          </div>
+        </div>
       </div>`
       : '';
 
@@ -100,9 +106,15 @@ const buildPaymentDetailsHtml = (details?: ReceiptPaymentDetails) => {
       ? `
       <div class="pay-block">
         <div class="pay-title">EasyPaisa</div>
-        ${details.easypaisaAccountName ? `<div class="pay-row"><span>Account name</span><span>${esc(details.easypaisaAccountName)}</span></div>` : ''}
-        ${details.easypaisaNumber ? `<div class="pay-row"><span>Mobile no.</span><span>${esc(details.easypaisaNumber)}</span></div>` : ''}
-        ${details.easypaisaQrImageUrl ? `<div class="qr-wrap"><img src="${esc(resolveUploadUrl(details.easypaisaQrImageUrl))}" alt="EasyPaisa QR" class="qr-img" /></div>` : ''}
+        <div class="pay-split">
+          <div class="pay-qr-side">
+            ${details.easypaisaQrImageUrl ? `<img src="${esc(resolveUploadUrl(details.easypaisaQrImageUrl))}" alt="EasyPaisa QR" class="qr-img" />` : ''}
+          </div>
+          <div class="pay-values-side">
+            ${details.easypaisaAccountName ? `<div class="pay-val">${esc(details.easypaisaAccountName)}</div>` : ''}
+            ${details.easypaisaNumber ? `<div class="pay-val">${esc(details.easypaisaNumber)}</div>` : ''}
+          </div>
+        </div>
       </div>`
       : '';
 
@@ -343,10 +355,10 @@ export function printReceipt(data: ReceiptData) {
     .payment-details { margin: 4px 0 0; font-size: 8px; display: grid; gap: 4px; }
     .pay-block { border: 1px dashed #000; padding: 4px 6px; }
     .pay-title { font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; border-bottom: 1px solid #000; padding-bottom: 1px; }
-    .pay-row { display: flex; justify-content: space-between; gap: 6px; padding: 1px 0; }
-    .pay-row span:first-child { color: #000; flex-shrink: 0; }
-    .pay-row span:last-child { font-weight: 600; text-align: right; word-break: break-all; }
-    .qr-wrap { text-align: center; margin-top: 4px; }
+    .pay-split { display: flex; align-items: center; }
+    .pay-qr-side { width: 65%; flex-shrink: 0; display: flex; justify-content: center; align-items: center; }
+    .pay-values-side { width: 35%; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+    .pay-val { font-size: 7.5px; font-weight: 600; text-align: right; word-break: break-all; line-height: 1.3; }
     .qr-img { width: 74px; height: 74px; object-fit: contain; border: 1px solid #000; padding: 2px; background: #fff; }
     .footer {
       text-align: center;
