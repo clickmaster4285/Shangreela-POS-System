@@ -25,6 +25,8 @@ const orderSchema = new mongoose.Schema(
     changeDue: Number,
     cashierName: String,
     total: Number,
+    /** Set true after recipe ingredients are deducted on payment/completion. */
+    inventoryDeducted: { type: Boolean, default: false },
     items: [
       {
         quantity: Number,

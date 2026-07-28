@@ -1,4 +1,5 @@
 import { type MenuItem } from '@/data/pos/mockData';
+import { resolveUploadUrl } from '@/lib/api/api';
 import { Pencil, Trash2 } from 'lucide-react';
 
 interface MenuItemsTableProps {
@@ -49,7 +50,7 @@ export function MenuItemsTable({
                 <td className="py-3 px-2">
                   <div className="flex items-center gap-3">
                     {item.image ? (
-                      <img src={item.image} alt={item.name} className="h-12 w-12 rounded-lg object-cover border border-border" />
+                      <img src={resolveUploadUrl(item.image)} alt={item.name} className="h-12 w-12 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="h-12 w-12 rounded-lg bg-muted" />
                     )}

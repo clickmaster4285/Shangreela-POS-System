@@ -1,10 +1,19 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
 const { getEffectiveTaxRates, calculateGrandTotal } = require("../utils/orderTotals");
 const { emitPosChange } = require("../utils/realtime");
+const { deductInventoryForOrder } = require("../utils/inventoryDeduction");
 const { Order, Table, Delivery } = require("../models");
 const Fuse = require("fuse.js");
 
 const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliveries", "dashboard"]);
+
+const applyInventoryDeduction = async (order, userId) => {
+  if (!order || order.inventoryDeducted) return false;
+  await deductInventoryForOrder(order, userId);
+  order.inventoryDeducted = true;
+  emitPosChange(["inventory", "dashboard"]);
+  return true;
+};
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -212,6 +221,11 @@ exports.patchStatus = async (req, res) => {
     }
 
     order.status = newStatus;
+
+    if (newStatus === "completed") {
+      await applyInventoryDeduction(order, req.user?._id);
+    }
+
     await order.save();
 
     // Safety: if status is changed to cancelled via patch, free the table
@@ -549,16 +563,21 @@ exports.patchBillingTotals = async (req, res) => {
 
 exports.payment = async (req, res) => {
   try {
+    const row = await Order.findById(req.params.id);
+    if (!row) return res.status(404).json({ message: "Order not found" });
+
     const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
     applyBillingFieldsFromBody(req.body, patch);
-    
+
     // Explicitly set cashierName if provided
     if (req.user) {
       patch.cashierName = req.user.name || req.user.email;
     }
 
-    const row = await Order.findByIdAndUpdate(req.params.id, patch, { new: true });
-    if (!row) return res.status(404).json({ message: "Order not found" });
+    Object.assign(row, patch);
+
+    await applyInventoryDeduction(row, req.user?._id);
+    await row.save();
 
     if (row.type === "delivery" && row.code) {
       await Delivery.findOneAndUpdate({ orderId: row.code }, { total: Number(row.total || 0) });

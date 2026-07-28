@@ -1,6 +1,7 @@
 import { X, Layers, ChevronDown, ChevronUp, Plus, Search } from 'lucide-react';
 import React, { useMemo, useState, useEffect } from 'react';
 import { type MenuItem } from '@/data/pos/mockData';
+import { resolveUploadUrl } from '@/lib/api/api';
 import { BASE_UNITS } from '@/pages/inventory/modals/AddItemModal';
 
 type Recipe = {
@@ -174,7 +175,7 @@ export function MenuItemFormModal({
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-muted/40 border-b border-border/50 last:border-0"
                               >
-                                {item.image ? <img src={item.image} alt={item.name} className="w-8 h-8 rounded object-cover" /> : <div className="w-8 h-8 rounded bg-muted/30" />}
+                                {item.image ? <img src={resolveUploadUrl(item.image)} alt={item.name} className="w-8 h-8 rounded object-cover" /> : <div className="w-8 h-8 rounded bg-muted/30" />}
                                 <div className="flex-1">
                                   <div className="font-medium text-sm truncate">{item.name}</div>
                                   <div className="text-xs text-muted-foreground">{item.category}</div>
@@ -231,7 +232,7 @@ export function MenuItemFormModal({
               <input type="file" accept="image/*" onChange={handleImageChange} className={inputClass} />
               {form.image ? (
                 <div className="relative">
-                  <img src={form.image} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
+                  <img src={resolveUploadUrl(form.image)} alt="Item preview" className="h-36 w-full rounded-xl object-cover border border-border" />
                   <button
                     type="button"
                     onClick={() => { cleanupImagePreview(); setImageFile(null); setImagePreviewUrl(''); setForm(prev => ({ ...prev, image: '' })); }}
