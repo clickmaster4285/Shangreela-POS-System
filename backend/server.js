@@ -9,6 +9,7 @@ const compression = require("compression");
 const path = require("path");
 const fs = require("fs");
 
+const { frontendOrigins } = require("./config/config");
 const { connectDb } = require("./config/db");
 const routes = require("./routes");
 const { runAutoInitialization } = require("./utils/autoInitialization");
@@ -20,7 +21,15 @@ const server = http.createServer(app);
 
 /* ================= ENV VARIABLES ================= */
 const PORT = process.env.PORT || 5000;
-const FRONTEND_URL = process.env.FRONTEND_URL || "*";
+
+/* ================= PROCESS SAFETY ================= */
+/* Unhandled async errors in Express 4 can kill Node → nginx/Cloudflare 502. */
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException:", err);
+});
 
 /* ================= MIDDLEWARE ================= */
 
@@ -52,9 +61,13 @@ uploadSubfolders.forEach((sub) => {
 app.use("/uploads", express.static(uploadsPath));
 
 /* ================= CORS CONFIGURATION ================= */
+/* Honor FRONTEND_ORIGIN / Frontend_URL from env (same as Socket.IO). */
+const corsOrigin =
+  frontendOrigins.length === 1 ? frontendOrigins[0] : frontendOrigins;
+
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: corsOrigin,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -86,6 +99,15 @@ app.use("/api", (req, res, next) => {
 /* ================= ROUTES ================= */
 app.use("/api", routes);
 
+/* ================= ERROR HANDLER ================= */
+app.use((err, req, res, next) => {
+  console.error("Express error:", err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({
+    message: err.message || "Internal server error",
+  });
+});
+
 /* ================= APPLICATION BOOT ================= */
 async function boot() {
   try {
@@ -101,6 +123,7 @@ async function boot() {
     server.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
       console.log(`Socket.IO running at ws://localhost:${PORT}/socket.io`);
+      console.log(`CORS origins: ${frontendOrigins.join(", ")}`);
       console.log("Cache policy: GET revalidation, write requests no-store");
     });
   } catch (err) {

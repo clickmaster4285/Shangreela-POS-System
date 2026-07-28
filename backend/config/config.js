@@ -4,11 +4,10 @@ dotenv.config();
 
 const isProd = process.env.NODE_ENV === "production";
 
-const primary =
-  process.env.Frontend_URL ||
-  process.env.FRONTEND_ORIGIN;
+const { Frontend_URL, FRONTEND_ORIGIN, FRONTEND_URL } = process.env;
+const primary = FRONTEND_URL || Frontend_URL || FRONTEND_ORIGIN;
 
-let frontendOrigins = String(primary)
+let frontendOrigins = String(primary || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
