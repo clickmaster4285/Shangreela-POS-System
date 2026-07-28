@@ -33,7 +33,7 @@ function initSocket(server) {
     cors: {
       origin: frontendOrigins,
       methods: ["GET", "POST"],
-      credentials: true,
+      credentials: false,
     },
   });
 

@@ -61,16 +61,34 @@ uploadSubfolders.forEach((sub) => {
 app.use("/uploads", express.static(uploadsPath));
 
 /* ================= CORS CONFIGURATION ================= */
-/* Honor FRONTEND_ORIGIN / Frontend_URL from env (same as Socket.IO). */
-const corsOrigin =
-  frontendOrigins.length === 1 ? frontendOrigins[0] : frontendOrigins;
+/*
+ * App uses Bearer tokens (not cookies). credentials:true without
+ * fetch({ credentials:'include' }) makes browsers hide responses → "Failed to fetch".
+ */
+const allowedOrigins = new Set(frontendOrigins);
+for (const origin of frontendOrigins) {
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.replace(/^www\./, "");
+    allowedOrigins.add(`${url.protocol}//${host}`);
+    allowedOrigins.add(`${url.protocol}//www.${host}`);
+  } catch {
+    /* ignore invalid origin strings */
+  }
+}
 
 app.use(
   cors({
-    origin: corsOrigin,
+    origin(origin, callback) {
+      // Non-browser / same-origin / server-to-server
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      console.warn(`CORS blocked origin: ${origin}`);
+      return callback(null, false);
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    credentials: false,
     maxAge: 86400,
   })
 );
