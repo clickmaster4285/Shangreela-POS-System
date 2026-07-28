@@ -1,17 +1,6 @@
 const { Server } = require("socket.io");
 const EVENTS = require("./events");
-
-const frontendPrimary =
-  process.env.Frontend_URL ||
-  process.env.FRONTEND_ORIGIN ||
-  "http://localhost:8080";
-let frontendOrigins = String(frontendPrimary)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-if (!frontendOrigins.length) {
-  frontendOrigins = ["http://localhost:8080"];
-}
+const { frontendOrigins } = require("../config/config");
 
 let ioInstance = null;
 

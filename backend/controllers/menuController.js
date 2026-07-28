@@ -53,132 +53,158 @@ const getMenuItemsWithCache = async () => {
 };
 
 exports.list = async (req, res) => {
-  const { page, limit, skip } = parsePagination(req.query);
-  const q = String(req.query.search || "").trim();
-  const categoryFilter = req.query.category && req.query.category !== "All" ? String(req.query.category) : null;
+  try {
+    const { page, limit, skip } = parsePagination(req.query);
+    const q = String(req.query.search || "").trim();
+    const categoryFilter = req.query.category && req.query.category !== "All" ? String(req.query.category) : null;
 
-  let items = [];
-  let total = 0;
+    let items = [];
+    let total = 0;
 
-  // If no search query, use regular filtering
-  if (!q) {
-    const where = {};
-    if (categoryFilter) where.category = categoryFilter;
+    // If no search query, use regular filtering
+    if (!q) {
+      const where = {};
+      if (categoryFilter) where.category = categoryFilter;
 
-    [items, total] = await Promise.all([
-      MenuItem.find(where).sort({ isFavorite: -1, createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe").populate("bundleItems.menuItem", "name"),
-      MenuItem.countDocuments(where)
-    ]);
+      [items, total] = await Promise.all([
+        MenuItem.find(where).sort({ isFavorite: -1, createdAt: -1 }).skip(skip).limit(limit).lean().populate("recipe").populate("bundleItems.menuItem", "name"),
+        MenuItem.countDocuments(where)
+      ]);
 
-    return res.json(buildPaginatedResponse({
-      items: items.map((i) => ({ ...i, id: String(i._id) })),
-      total,
+      return res.json(buildPaginatedResponse({
+        items: items.map((i) => ({ ...i, id: String(i._id) })),
+        total,
+        page,
+        limit
+      }));
+    }
+
+    // Fuzzy search with Fuse.js
+    const allItems = await getMenuItemsWithCache();
+
+    // Apply category filter first if specified
+    let itemsToSearch = allItems;
+    if (categoryFilter) {
+      itemsToSearch = allItems.filter(item => item.category === categoryFilter);
+    }
+
+    const fuseOptions = {
+      keys: ['name', 'description', 'category'],
+      threshold: 0.4,
+      distance: 100,
+      ignoreLocation: true,
+      minMatchCharLength: 1,
+      includeScore: true,
+      includeMatches: true
+    };
+
+    const fuse = new Fuse(itemsToSearch, fuseOptions);
+    const results = fuse.search(q);
+
+    // Paginate results
+    const start = skip;
+    const end = start + limit;
+    const paginatedResults = results.slice(start, end);
+
+    const populated = await MenuItem.populate(paginatedResults.map(r => r.item), [{ path: "recipe" }, { path: "bundleItems.menuItem", select: "name" }]);
+
+    res.json(buildPaginatedResponse({
+      items: populated.map((item) => ({
+        ...item,
+        id: String(item._id),
+        score: results.find(r => String(r.item._id) === String(item._id))?.score,
+      })),
+      total: results.length,
       page,
       limit
     }));
+  } catch (error) {
+    console.error("List menu error:", error);
+    res.status(500).json({ message: error.message || "Failed to load menu" });
   }
-
-  // Fuzzy search with Fuse.js
-  const allItems = await getMenuItemsWithCache();
-
-  // Apply category filter first if specified
-  let itemsToSearch = allItems;
-  if (categoryFilter) {
-    itemsToSearch = allItems.filter(item => item.category === categoryFilter);
-  }
-
-  const fuseOptions = {
-    keys: ['name', 'description', 'category'],
-    threshold: 0.4,
-    distance: 100,
-    ignoreLocation: true,
-    minMatchCharLength: 1,
-    includeScore: true,
-    includeMatches: true
-  };
-
-  const fuse = new Fuse(itemsToSearch, fuseOptions);
-  const results = fuse.search(q);
-
-  // Paginate results
-  const start = skip;
-  const end = start + limit;
-  const paginatedResults = results.slice(start, end);
-
-  const populated = await MenuItem.populate(paginatedResults.map(r => r.item), [{ path: "recipe" }, { path: "bundleItems.menuItem", select: "name" }]);
-
-  res.json(buildPaginatedResponse({
-    items: populated.map((item) => ({
-      ...item,
-      id: String(item._id),
-      score: results.find(r => String(r.item._id) === String(item._id))?.score,
-    })),
-    total: results.length,
-    page,
-    limit
-  }));
 };
 
 exports.create = async (req, res) => {
-  const payload = {
-    ...req.body,
-    price: Number(req.body.price || 0),
-    kitchenRequired: req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true,
-    isFavorite: req.body.isFavorite === 'true' || req.body.isFavorite === true,
-    image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
-    recipe: req.body.recipe || null,
-    scale: Number(req.body.scale || 1),
-    ingredientOverrides: parseIngredientOverrides(req.body.ingredientOverrides) || [],
-    bundleItems: parseBundleItems(req.body.bundleItems) || [],
-  };
-  const row = await MenuItem.create(payload);
-  // Invalidate cache
-  cachedMenuItems = null;
-  emitPosChange(["menu", "dashboard"]);
-  res.status(201).json({ ...row.toObject(), id: String(row._id) });
+  try {
+    const payload = {
+      ...req.body,
+      price: Number(req.body.price || 0),
+      kitchenRequired: req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true,
+      isFavorite: req.body.isFavorite === 'true' || req.body.isFavorite === true,
+      image: req.file ? `/uploads/menu/${req.file.filename}` : req.body.image || '',
+      recipe: req.body.recipe || null,
+      scale: Number(req.body.scale || 1),
+      ingredientOverrides: parseIngredientOverrides(req.body.ingredientOverrides) || [],
+      bundleItems: parseBundleItems(req.body.bundleItems) || [],
+    };
+    const row = await MenuItem.create(payload);
+    // Invalidate cache
+    cachedMenuItems = null;
+    emitPosChange(["menu", "dashboard"]);
+    res.status(201).json({ ...row.toObject(), id: String(row._id) });
+  } catch (error) {
+    console.error("Create menu item error:", error);
+    res.status(500).json({ message: error.message || "Failed to create menu item" });
+  }
 };
 
 exports.update = async (req, res) => {
-  const payload = {};
-  if (req.body.name !== undefined) payload.name = req.body.name;
-  if (req.body.price !== undefined) payload.price = Number(req.body.price || 0);
-  if (req.body.category !== undefined) payload.category = req.body.category;
-  if (req.body.description !== undefined) payload.description = req.body.description;
-  if (req.body.kitchenRequired !== undefined) payload.kitchenRequired = req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true;
-  if (req.body.isFavorite !== undefined) payload.isFavorite = req.body.isFavorite === 'true' || req.body.isFavorite === true;
-  if (req.body.image !== undefined) payload.image = req.body.image;
-  if (req.file) {
-    payload.image = `/uploads/menu/${req.file.filename}`;
-  }
-  if (req.body.recipe !== undefined) payload.recipe = req.body.recipe || null;
-  if (req.body.scale !== undefined) payload.scale = Number(req.body.scale || 1);
-  if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = parseIngredientOverrides(req.body.ingredientOverrides);
-  if (req.body.bundleItems !== undefined) payload.bundleItems = parseBundleItems(req.body.bundleItems);
+  try {
+    const payload = {};
+    if (req.body.name !== undefined) payload.name = req.body.name;
+    if (req.body.price !== undefined) payload.price = Number(req.body.price || 0);
+    if (req.body.category !== undefined) payload.category = req.body.category;
+    if (req.body.description !== undefined) payload.description = req.body.description;
+    if (req.body.kitchenRequired !== undefined) payload.kitchenRequired = req.body.kitchenRequired === 'true' || req.body.kitchenRequired === true;
+    if (req.body.isFavorite !== undefined) payload.isFavorite = req.body.isFavorite === 'true' || req.body.isFavorite === true;
+    if (req.body.image !== undefined) payload.image = req.body.image;
+    if (req.file) {
+      payload.image = `/uploads/menu/${req.file.filename}`;
+    }
+    if (req.body.recipe !== undefined) payload.recipe = req.body.recipe || null;
+    if (req.body.scale !== undefined) payload.scale = Number(req.body.scale || 1);
+    if (req.body.ingredientOverrides !== undefined) payload.ingredientOverrides = parseIngredientOverrides(req.body.ingredientOverrides);
+    if (req.body.bundleItems !== undefined) payload.bundleItems = parseBundleItems(req.body.bundleItems);
 
-  const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe").populate("bundleItems.menuItem", "name");
-  // Invalidate cache
-  cachedMenuItems = null;
-  emitPosChange(["menu", "dashboard"]);
-  res.json({ ...row.toObject(), id: String(row._id) });
+    const row = await MenuItem.findByIdAndUpdate(req.params.id, payload, { new: true }).populate("recipe").populate("bundleItems.menuItem", "name");
+    if (!row) return res.status(404).json({ message: "Menu item not found" });
+    // Invalidate cache
+    cachedMenuItems = null;
+    emitPosChange(["menu", "dashboard"]);
+    res.json({ ...row.toObject(), id: String(row._id) });
+  } catch (error) {
+    console.error("Update menu item error:", error);
+    res.status(500).json({ message: error.message || "Failed to update menu item" });
+  }
 };
 
 exports.remove = async (req, res) => {
-  await MenuItem.findByIdAndDelete(req.params.id);
-  // Invalidate cache
-  cachedMenuItems = null;
-  emitPosChange(["menu", "dashboard"]);
-  res.json({ ok: true });
+  try {
+    await MenuItem.findByIdAndDelete(req.params.id);
+    // Invalidate cache
+    cachedMenuItems = null;
+    emitPosChange(["menu", "dashboard"]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Delete menu item error:", error);
+    res.status(500).json({ message: error.message || "Failed to delete menu item" });
+  }
 };
 
 exports.categories = async (req, res) => {
-  const [fromMenu, customCategories] = await Promise.all([
-    MenuItem.distinct("category", { category: { $nin: [null, ""] } }),
-    MenuCategory.find().select("name").lean(),
-  ]);
-  const custom = customCategories.map((c) => c.name);
-  const all = Array.from(new Set([...(fromMenu || []).filter(Boolean), ...custom]));
+  try {
+    const [fromMenu, customCategories] = await Promise.all([
+      MenuItem.distinct("category", { category: { $nin: [null, ""] } }),
+      MenuCategory.find().select("name").lean(),
+    ]);
+    const custom = customCategories.map((c) => c.name);
+    const all = Array.from(new Set([...(fromMenu || []).filter(Boolean), ...custom]));
 
-  res.json({ categories: all.sort() });
+    res.json({ categories: all.sort() });
+  } catch (error) {
+    console.error("List categories error:", error);
+    res.status(500).json({ message: error.message || "Failed to load categories" });
+  }
 };
 
 exports.addCategory = async (req, res) => {

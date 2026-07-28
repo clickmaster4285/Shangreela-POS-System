@@ -9,15 +9,20 @@ const broadcastOrderDomain = () => emitPosChange(["orders", "tables", "deliverie
 
 const applyInventoryDeduction = async (order, userId) => {
   if (!order || order.inventoryDeducted) return false;
-  await deductInventoryForOrder(order, userId);
-  order.inventoryDeducted = true;
-  emitPosChange(["inventory", "dashboard"]);
-  return true;
+  try {
+    await deductInventoryForOrder(order, userId);
+    order.inventoryDeducted = true;
+    emitPosChange(["inventory", "dashboard"]);
+    return true;
+  } catch (error) {
+    console.error("Inventory deduction failed for order", order.code || order._id, error);
+    return false;
+  }
 };
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const normalizeTableSearch = (query) => {
+const normalizeTableSearch = (query) => { 
   const q = String(query || "").trim().toUpperCase();
   const match = q.match(/^([MRBE])(\d+)$/);
   if (match) {
