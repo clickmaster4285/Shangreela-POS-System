@@ -43,19 +43,33 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  } catch {
-    throw new Error("Cannot reach API. Check that the backend is running.");
+  if (!API_BASE) {
+    throw new Error("API base URL is not configured (VITE_API_BASE_URL).");
   }
 
-  const body = await response.json().catch(() => ({}));
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      mode: "cors",
+      credentials: "omit",
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach API (network/CORS). Confirm VITE_API_BASE_URL and that the backend is running."
+    );
+  }
+
+  const body = await response.json().catch(() => ({} as Record<string, unknown>));
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error((body as { message?: string })?.message || "Unauthorized. Please log in again.");
+    }
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       throw new Error("API gateway error. Restart the backend service and try again.");
     }
-    throw new Error(body?.message || "Request failed");
+    throw new Error((body as { message?: string })?.message || "Request failed");
   }
   return body as T;
 }
