@@ -13,6 +13,20 @@ export function getBackendOrigin(): string {
   return API_BASE.replace(/\/api\/?$/i, "");
 }
 
+/** Turn `/uploads/...` (or any relative path) into an absolute backend URL. */
+export function resolveUploadUrl(path?: string): string {
+  if (!path) return "";
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("blob:") ||
+    path.startsWith("data:")
+  ) {
+    return path;
+  }
+  return `${getBackendOrigin()}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }

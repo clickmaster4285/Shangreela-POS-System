@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { type MenuItem } from '@/data/pos/mockData';
-import { api, type PaginatedResponse } from '@/lib/api/api';
+import { api, resolveUploadUrl, type PaginatedResponse } from '@/lib/api/api';
 
 export default function FeaturedMenu() {
   const [active, setActive] = useState('All');
@@ -61,7 +61,7 @@ export default function FeaturedMenu() {
               >
                 {item.image ? (
                   <div className="relative overflow-hidden h-44">
-                    <img src={item.image} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 ease-out hover:scale-105" />
+                    <img src={resolveUploadUrl(item.image)} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 ease-out hover:scale-105" />
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
                       <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
                         {item.category}
