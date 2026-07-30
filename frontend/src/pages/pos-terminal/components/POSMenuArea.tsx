@@ -90,12 +90,21 @@ export function POSMenuArea() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
-            type="search"
+            type="text"
             value={folderItemSearch}
             onChange={e => setFolderItemSearch(e.target.value)}
             placeholder="Search menu... (typos supported)"
-            className="w-full bg-background border border-border rounded-lg pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full bg-background border border-border rounded-lg pl-10 pr-24 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           />
+          {folderItemSearch && (
+            <button
+              type="button"
+              onClick={() => setFolderItemSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 shadow-sm transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
         <div className="relative w-full sm:w-44">
