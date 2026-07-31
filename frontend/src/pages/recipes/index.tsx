@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Pencil, X } from 'lucide-react';
+import { Search, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { BASE_UNITS } from '@/pages/inventory/modals/AddItemModal';
@@ -68,6 +68,16 @@ export default function RecipesPage() {
     if (!q) return recipes;
     return recipes.filter(r => r.name.toLowerCase().includes(q));
   }, [recipes, search]);
+
+  const handleDelete = (recipe: Recipe) => {
+    if (!window.confirm(`Delete recipe "${recipe.name}"?`)) return;
+    api(`/recipes/${recipe.id}`, { method: 'DELETE' })
+      .then(() => {
+        toast.success('Recipe deleted');
+        fetchRecipes();
+      })
+      .catch(err => toast.error(err instanceof Error ? err.message : 'Failed to delete recipe'));
+  };
 
   const openEdit = (recipe: Recipe) => {
     setEditing(recipe);
@@ -187,12 +197,20 @@ export default function RecipesPage() {
                       </div>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => openEdit(recipe)}
-                        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(recipe)}
+                          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(recipe)}
+                          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
