@@ -225,6 +225,19 @@ export default function Expenses() {
     }
   };
 
+  const handlePrint = async () => {
+    try {
+      const params = new URLSearchParams({ from: startDate, to: endDate });
+      if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      const res = await api<ExpensesResponse>(`/expenses/all?${params.toString()}`);
+      const allExpenses = res.items || [];
+      printExpenseReport(allExpenses, summary, startDate, endDate);
+    } catch (error) {
+      toast.error('Failed to load expenses for printing');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -244,7 +257,7 @@ export default function Expenses() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => printExpenseReport(expenses, summary, startDate, endDate)}
+            onClick={handlePrint}
             className="px-4 py-2.5 rounded-xl border border-border bg-card text-foreground text-xs font-medium flex items-center gap-2 hover:bg-muted transition-colors"
           >
             <Printer className="w-4 h-4" /> Print Report
@@ -347,6 +360,24 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+
+      {/* Search results */}
+      {debouncedSearch.trim() && (
+        <div className="pos-card p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Search results</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{summary.count} item{summary.count === 1 ? '' : 's'}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium">Rs. {summary.total.toLocaleString()}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {expenses.map((expense, i) => (
+              <span key={expense.id || i} className="text-[11px] px-2 py-1 rounded-lg bg-muted text-muted-foreground font-medium">
+                {expense.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Expenses */}
       {viewMode === 'grid' ? (
