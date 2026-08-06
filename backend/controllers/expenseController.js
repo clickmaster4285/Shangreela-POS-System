@@ -53,6 +53,23 @@ exports.list = async (req, res) => {
   );
 };
 
+exports.all = async (req, res) => {
+  const where = {};
+  if (req.query.category && req.query.category !== "all") where.category = String(req.query.category);
+  if (req.query.from) where.paymentDate = { $gte: new Date(req.query.from) };
+  if (req.query.to) {
+    const toDate = new Date(req.query.to);
+    toDate.setDate(toDate.getDate() + 1);
+    where.paymentDate = { ...where.paymentDate, $lt: toDate };
+  }
+  if (req.query.search) {
+    const searchRegex = new RegExp(String(req.query.search), "i");
+    where.$or = [{ title: searchRegex }, { vendor: searchRegex }, { description: searchRegex }];
+  }
+  const items = await Expense.find(where).sort({ paymentDate: -1 }).lean();
+  res.json({ items: items.map((e) => ({ ...e, id: String(e._id) })) });
+};
+
 exports.create = async (req, res) => {
   const receiptFile = req.file ? `/uploads/expenses/${req.file.filename}` : req.body.receiptFile || "";
   const { totalAmount, status, normalizedPaidAmount } = normalizePaymentFields({
@@ -123,6 +140,11 @@ exports.summary = async (req, res) => {
     const toDate = new Date(req.query.to);
     toDate.setDate(toDate.getDate() + 1);
     where.paymentDate = { ...where.paymentDate, $lt: toDate };
+  }
+  if (req.query.category && req.query.category !== "all") where.category = String(req.query.category);
+  if (req.query.search) {
+    const searchRegex = new RegExp(String(req.query.search), "i");
+    where.$or = [{ title: searchRegex }, { vendor: searchRegex }, { description: searchRegex }];
   }
   const stats = await Expense.aggregate([
     { $match: where },

@@ -18,6 +18,7 @@ const router = Router();
 
 router.get('/', expenseController.list);
 router.post('/', upload.single('receiptFile'), expenseController.create);
+router.get('/all', expenseController.all);
 router.get('/summary', expenseController.summary);
 router.get('/:id', expenseController.getById);
 router.patch('/:id', upload.single('receiptFile'), expenseController.update);
