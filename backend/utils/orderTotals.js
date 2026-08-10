@@ -30,6 +30,7 @@ const getEffectiveTaxRates = async () => {
     gstRate: Number.isFinite(gstRate) ? gstRate : 0.16,
     serviceChargeRate: Number.isFinite(serviceChargeRate) ? serviceChargeRate : 0.05,
     takeawayChargeRate: Number.isFinite(takeawayChargeRate) ? takeawayChargeRate : 0.05,
+    minimumOrderAmount: Math.max(0, Number(row?.minimumOrderAmount ?? 0)),
   };
   taxRatesCache = { value, fetchedAt: now };
   return value;
@@ -37,13 +38,15 @@ const getEffectiveTaxRates = async () => {
 
 /** Service charge applies only to dine-in; takeaway and delivery use subtotal + GST only. 
  *  Takeaway charge applies only to takeaway if enabled.
+ *  If the taxable order amount is below the configured minimum, no GST, service charge,
+ *  or takeaway charge is applied.
  */
 const calculateGrandTotal = (
   items = [],
   tax = 0,
   discount = 0,
   gstEnabled = true,
-  rates = { gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05 },
+  rates = { gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05, minimumOrderAmount: 0 },
   orderType = "dine-in",
   takeawayChargeEnabled = true
 ) => {
@@ -51,15 +54,17 @@ const calculateGrandTotal = (
   const gstRate = Number.isFinite(Number(rates.gstRate)) ? Number(rates.gstRate) : 0.16;
   const serviceChargeRate = Number.isFinite(Number(rates.serviceChargeRate)) ? Number(rates.serviceChargeRate) : 0.05;
   const takeawayChargeRate = Number.isFinite(Number(rates.takeawayChargeRate)) ? Number(rates.takeawayChargeRate) : 0.05;
+  const minimumOrderAmount = Math.max(0, Number(rates.minimumOrderAmount ?? 0));
+  const aboveMinimum = taxableTotal >= minimumOrderAmount;
 
   const applyServiceCharge = String(orderType) === "dine-in";
-  const serviceCharge = applyServiceCharge ? Math.round(taxableTotal * serviceChargeRate) : 0;
+  const serviceCharge = aboveMinimum && applyServiceCharge ? Math.round(taxableTotal * serviceChargeRate) : 0;
 
   const applyTakeawayCharge = String(orderType) === "takeaway" && takeawayChargeEnabled;
-  const takeawayCharge = applyTakeawayCharge ? Math.round(taxableTotal * takeawayChargeRate) : 0;
+  const takeawayCharge = aboveMinimum && applyTakeawayCharge ? Math.round(taxableTotal * takeawayChargeRate) : 0;
 
   const subtotalAfterCharges = taxableTotal + serviceCharge + takeawayCharge;
-  const gstAmount = gstEnabled ? Math.round(subtotalAfterCharges * gstRate) : 0;
+  const gstAmount = aboveMinimum && gstEnabled ? Math.round(subtotalAfterCharges * gstRate) : 0;
   const grandTotal = subtotalAfterCharges + gstAmount;
 
   return {

@@ -72,10 +72,12 @@ const normalizeOrderFinancials = (order, rates = { gstRate: 0.16, serviceChargeR
   const discount = Number(order.discount || 0);
   const serviceChargeRate = Number.isFinite(Number(rates.serviceChargeRate)) ? Number(rates.serviceChargeRate) : 0.05;
   const gstRate = Number.isFinite(Number(rates.gstRate)) ? Number(rates.gstRate) : 0.16;
+  const minimumOrderAmount = Math.max(0, Number(rates.minimumOrderAmount ?? 0));
+  const aboveMinimum = Math.max(0, subtotal - discount) >= minimumOrderAmount;
   const applyServiceCharge = String(order.type || "dine-in") === "dine-in";
-  const computedServiceCharge = applyServiceCharge ? Math.round(Math.max(0, subtotal - discount) * serviceChargeRate) : 0;
+  const computedServiceCharge = aboveMinimum && applyServiceCharge ? Math.round(Math.max(0, subtotal - discount) * serviceChargeRate) : 0;
   const serviceCharge = order.serviceCharge != null ? Number(order.serviceCharge) : computedServiceCharge;
-  const computedGstAmount = order.gstEnabled === false ? 0 : Math.round((Math.max(0, subtotal - discount) + serviceCharge) * gstRate);
+  const computedGstAmount = !aboveMinimum || order.gstEnabled === false ? 0 : Math.round((Math.max(0, subtotal - discount) + serviceCharge) * gstRate);
   const gstAmount = Number(order.gstAmount ?? computedGstAmount);
   const total = Number(order.total ?? Math.max(0, subtotal - discount) + serviceCharge + gstAmount);
   return { subtotal, discount, serviceCharge, gstAmount, total };

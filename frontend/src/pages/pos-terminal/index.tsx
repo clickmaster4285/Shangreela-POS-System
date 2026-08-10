@@ -74,12 +74,13 @@ export default function POSScreen() {
 
   // Tax and Realtime Logic
   const loadTaxRates = useCallback(() => {
-    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number }>('/settings/tax')
+    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number; minimumOrderAmount: number }>('/settings/tax')
       .then((r) => {
         setTaxRates({
           gstRate: Number(r.salesTaxRate ?? 16) / 100,
           serviceChargeRate: Number(r.serviceChargeRate ?? 5) / 100,
           takeawayChargeRate: Number(r.takeawayChargeRate ?? 5) / 100,
+          minimumOrderAmount: Number(r.minimumOrderAmount ?? 0),
         });
       })
       .catch(() => {});

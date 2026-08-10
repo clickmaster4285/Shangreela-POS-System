@@ -5,6 +5,7 @@ const taxConfigSchema = new mongoose.Schema(
     salesTaxRate: Number,
     serviceChargeRate: Number,
     takeawayChargeRate: Number,
+    minimumOrderAmount: Number,
     withholdingLabel: String,
   },
   { timestamps: true }

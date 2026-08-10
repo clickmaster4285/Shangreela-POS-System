@@ -14,6 +14,8 @@ export type PakistanTaxRates = {
   serviceChargeRate: number;
   /** e.g. 0.05 for 5% */
   takeawayChargeRate: number;
+  /** Minimum order subtotal (Rs.) below which no GST / service / takeaway charges apply */
+  minimumOrderAmount?: number;
 };
 
 export type PakistanTaxOptions = {
@@ -49,17 +51,19 @@ export function computePakistanTaxTotals(
   const gstRate = Number.isFinite(rates.gstRate as number) ? Number(rates.gstRate) : PKR_GST_RATE;
   const serviceChargeRate = Number.isFinite(rates.serviceChargeRate as number) ? Number(rates.serviceChargeRate) : SERVICE_CHARGE_RATE;
   const takeawayChargeRate = Number.isFinite(rates.takeawayChargeRate as number) ? Number(rates.takeawayChargeRate) : TAKEAWAY_CHARGE_RATE;
+  const minimumOrderAmount = Math.max(0, Number(rates.minimumOrderAmount ?? 0));
 
   const taxableAmount = Math.max(0, Math.round(subtotal) - Math.round(discountAmount));
+  const aboveMinimum = taxableAmount >= minimumOrderAmount;
 
   const applyServiceCharge = options.applyServiceCharge !== false;
-  const serviceCharge = applyServiceCharge ? Math.round(taxableAmount * serviceChargeRate) : 0;
+  const serviceCharge = aboveMinimum && applyServiceCharge ? Math.round(taxableAmount * serviceChargeRate) : 0;
 
   const applyTakeawayCharge = !!options.applyTakeawayCharge;
-  const takeawayCharge = applyTakeawayCharge ? Math.round(taxableAmount * takeawayChargeRate) : 0;
+  const takeawayCharge = aboveMinimum && applyTakeawayCharge ? Math.round(taxableAmount * takeawayChargeRate) : 0;
 
   const subtotalAfterCharges = taxableAmount + serviceCharge + takeawayCharge;
-  const gstAmount = gstEnabled ? Math.round(subtotalAfterCharges * gstRate) : 0;
+  const gstAmount = aboveMinimum && gstEnabled ? Math.round(subtotalAfterCharges * gstRate) : 0;
   const furtherTaxAmount = 0;
   const totalTaxAmount = gstAmount;
   const grandTotal = subtotalAfterCharges + totalTaxAmount;
