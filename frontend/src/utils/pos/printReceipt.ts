@@ -46,6 +46,7 @@ export interface ReceiptData {
   gstRate?: number;
   serviceChargeRate?: number;
   takeawayChargeRate?: number;
+  minimumOrderAmount?: number;
   tax?: number;
   total?: number;
   paymentMethod?: string;
@@ -147,6 +148,7 @@ export function printReceipt(data: ReceiptData) {
       gstRate: data.gstRate ?? PKR_GST_RATE,
       serviceChargeRate: data.serviceChargeRate,
       takeawayChargeRate: data.takeawayChargeRate,
+      minimumOrderAmount: data.minimumOrderAmount,
     },
     {
       applyServiceCharge: String(data.orderType || '').toLowerCase() === 'dine-in',

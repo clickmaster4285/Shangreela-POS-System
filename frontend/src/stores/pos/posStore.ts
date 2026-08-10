@@ -8,7 +8,7 @@ interface POSState {
   menuItems: MenuItem[];
   floors: { id: string; name: string }[];
   tables: TableInfo[];
-  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number };
+  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number; minimumOrderAmount: number };
 
   // UI State - Navigation
   openFolder: string | null;
@@ -57,7 +57,7 @@ interface POSState {
   setMenuItems: (items: MenuItem[]) => void;
   setFloors: (floors: { id: string; name: string }[]) => void;
   setTables: (tables: TableInfo[]) => void;
-  setTaxRates: (rates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number }) => void;
+  setTaxRates: (rates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number; minimumOrderAmount: number }) => void;
   setCart: (cart: CartItem[] | ((prev: CartItem[]) => CartItem[])) => void;
 
   // Actions - Cart Logic
@@ -119,7 +119,7 @@ export const usePOSStore = create<POSState>((set) => ({
   menuItems: [],
   floors: [],
   tables: [],
-  taxRates: { gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05 },
+  taxRates: { gstRate: 0.16, serviceChargeRate: 0.05, takeawayChargeRate: 0.05, minimumOrderAmount: 0 },
 
   // UI Defaults
   openFolder: 'All',

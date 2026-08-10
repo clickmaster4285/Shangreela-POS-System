@@ -7,13 +7,15 @@ export default function TaxDetails() {
   const [salesTaxRate, setSalesTaxRate] = useState(16);
   const [serviceChargeRate, setServiceChargeRate] = useState(10);
   const [takeawayChargeRate, setTakeawayChargeRate] = useState(5);
+  const [minimumOrderAmount, setMinimumOrderAmount] = useState(0);
   const [withholdingLabel, setWithholdingLabel] = useState('As per FBR');
 
   const loadTax = useCallback(() => {
-    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number; withholdingLabel: string }>('/settings/tax').then(r => {
+    api<{ salesTaxRate: number; serviceChargeRate: number; takeawayChargeRate: number; minimumOrderAmount: number; withholdingLabel: string }>('/settings/tax').then(r => {
       setSalesTaxRate(r.salesTaxRate ?? 16);
       setServiceChargeRate(r.serviceChargeRate ?? 10);
       setTakeawayChargeRate(r.takeawayChargeRate ?? 5);
+      setMinimumOrderAmount(r.minimumOrderAmount ?? 0);
       setWithholdingLabel(r.withholdingLabel ?? 'As per FBR');
     });
   }, []);
@@ -28,6 +30,7 @@ export default function TaxDetails() {
     { name: 'Sales tax (provincial)', rate: `${salesTaxRate}%`, applies: 'Taxable food & beverages (configurable by item)' },
     { name: 'Service / service charge', rate: `${serviceChargeRate}%`, applies: 'Optional service charge on dine-in (before tax)' },
     { name: 'Take-away / packaging charge', rate: `${takeawayChargeRate}%`, applies: 'Optional charge on takeaway orders (boxes, bags, etc)' },
+    { name: 'Minimum order amount', rate: minimumOrderAmount ? `Rs. ${minimumOrderAmount.toLocaleString()}` : 'No minimum', applies: 'Orders below this amount get no GST, service charge, or takeaway charge' },
     { name: 'Withholding (WHT)', rate: withholdingLabel, applies: 'Corporate billing / invoice mode' },
   ];
 
@@ -72,18 +75,37 @@ export default function TaxDetails() {
           <p>FBR integration page links digital invoice references when live API is configured.</p>
         </div>
       </div>
-      <div className="pos-card p-4 grid sm:grid-cols-2 gap-3">
-        <input type="number" value={salesTaxRate} onChange={e => setSalesTaxRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Sales tax %" />
-        <input type="number" value={serviceChargeRate} onChange={e => setServiceChargeRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Service charge %" />
-        <input type="number" value={takeawayChargeRate} onChange={e => setTakeawayChargeRate(Number(e.target.value))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Takeaway charge %" />
-        <input value={withholdingLabel} onChange={e => setWithholdingLabel(e.target.value)} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="Withholding label" />
-        <button
-          type="button"
-          onClick={() => api('/settings/tax', { method: 'PUT', body: JSON.stringify({ salesTaxRate, serviceChargeRate, takeawayChargeRate, withholdingLabel }) })}
-          className="sm:col-span-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium"
-        >
-          Save tax settings
-        </button>
+      <div className="pos-card p-4 grid sm:grid-cols-2 gap-4">
+        <div>
+          <label className="text-xs font-medium text-foreground mb-1 block">Sales Tax Rate (%)</label>
+          <input type="number" value={salesTaxRate} onChange={e => setSalesTaxRate(Number(e.target.value))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="e.g., 16" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-foreground mb-1 block">Service Charge Rate (%)</label>
+          <input type="number" value={serviceChargeRate} onChange={e => setServiceChargeRate(Number(e.target.value))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="e.g., 5" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-foreground mb-1 block">Takeaway Charge Rate (%)</label>
+          <input type="number" value={takeawayChargeRate} onChange={e => setTakeawayChargeRate(Number(e.target.value))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="e.g., 5" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-foreground mb-1 block">Minimum Order Amount (Rs)</label>
+          <input type="number" value={minimumOrderAmount} onChange={e => setMinimumOrderAmount(Number(e.target.value))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="e.g., 1000" />
+          <p className="text-[10px] text-muted-foreground mt-1">Orders below this amount get no GST, service charge, or takeaway charge</p>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-foreground mb-1 block">Withholding Label</label>
+          <input value={withholdingLabel} onChange={e => setWithholdingLabel(e.target.value)} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" placeholder="e.g., As per FBR" />
+        </div>
+        <div className="sm:col-span-2">
+          <button
+            type="button"
+            onClick={() => api('/settings/tax', { method: 'PUT', body: JSON.stringify({ salesTaxRate, serviceChargeRate, takeawayChargeRate, minimumOrderAmount, withholdingLabel }) })}
+            className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium"
+          >
+            Save tax settings
+          </button>
+        </div>
       </div>
     </div>
   );

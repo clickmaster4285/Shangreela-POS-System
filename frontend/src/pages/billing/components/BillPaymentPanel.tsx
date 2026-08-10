@@ -15,7 +15,7 @@ import { TablePicker } from '@/components/pos/TablePicker';
 interface BillPaymentPanelProps {
   order: (Order & { dbId?: string; printed?: boolean }) | null;
   tableMap: Map<number, TableInfo>;
-  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number };
+  taxRates: { gstRate: number; serviceChargeRate: number; takeawayChargeRate: number; minimumOrderAmount: number };
   currentUser: any;
   hasAction: (action: string) => boolean;
   onPaymentComplete: () => Promise<void>;
@@ -245,6 +245,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
       gstRate: taxRates.gstRate,
       serviceChargeRate: taxRates.serviceChargeRate,
       takeawayChargeRate: taxRates.takeawayChargeRate,
+      minimumOrderAmount: taxRates.minimumOrderAmount,
       takeawayChargeEnabled: isCurrentOrder ? takeawayChargeEnabled : targetOrder.takeawayChargeEnabled !== false,
       paymentMethod: targetOrder.status === 'completed'
         ? String(overridePaymentMethod || (targetOrder as any).paymentMethod || paymentLabel)
