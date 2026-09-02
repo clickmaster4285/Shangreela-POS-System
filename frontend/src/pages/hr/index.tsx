@@ -471,57 +471,100 @@ export default function HRManagement() {
       {/* Add Employee Modal */}
       {showAddEmployee && (
         <div className="fixed inset-0 bg-foreground/30 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }}>
-          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-3" onClick={e => e.stopPropagation()}>
+          <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
             <h3 className="font-serif text-lg font-bold text-foreground">{editingEmployee ? 'Edit Employee' : 'Add Employee'}</h3>
+            <p className="text-[11px] text-muted-foreground -mt-2"><span className="text-destructive">*</span> required fields</p>
             <div className="flex flex-col sm:flex-row gap-3 items-start">
-              <div className="w-24 h-24 rounded-3xl border border-border bg-muted overflow-hidden flex items-center justify-center">
+              <div className="w-24 h-24 rounded-3xl border border-border bg-muted overflow-hidden flex items-center justify-center shrink-0">
                 {newEmpAvatarPreview ? (
                   <img src={getAvatarUrl(newEmpAvatarPreview)} alt="Avatar preview" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="text-center text-xs text-muted-foreground px-2">Upload profile image</div>
+                  <div className="text-center text-xs text-muted-foreground px-2">Photo</div>
                 )}
               </div>
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-muted" htmlFor="employee-avatar-input">
-                Select photo
-                <input
-                  id="employee-avatar-input"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={e => {
-                    const file = e.target.files?.[0] ?? null;
-                    if (file) {
-                      if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
-                      setNewEmpAvatar(file);
-                      setNewEmpAvatarPreview(URL.createObjectURL(file));
-                    } else {
-                      setNewEmpAvatar(null);
-                      setNewEmpAvatarPreview('');
-                    }
-                  }}
-                />
-              </label>
+              <div className="space-y-1">
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-muted" htmlFor="employee-avatar-input">
+                  Select photo
+                  <input
+                    id="employee-avatar-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0] ?? null;
+                      if (file) {
+                        if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
+                        setNewEmpAvatar(file);
+                        setNewEmpAvatarPreview(URL.createObjectURL(file));
+                      } else {
+                        setNewEmpAvatar(null);
+                        setNewEmpAvatarPreview('');
+                      }
+                    }}
+                  />
+                </label>
+                {newEmpAvatarPreview && (
+                  <button type="button" onClick={() => { URL.revokeObjectURL(newEmpAvatarPreview); setNewEmpAvatar(null); setNewEmpAvatarPreview(''); }} className="text-[11px] text-destructive hover:underline ml-1">Remove</button>
+                )}
+                <p className="text-[10px] text-muted-foreground/60 ml-1">Optional</p>
+              </div>
             </div>
-            <input value={newEmp.name} onChange={e => setNewEmp(p => ({ ...p, name: e.target.value }))} placeholder="Full name" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
-            <div className="grid grid-cols-2 gap-2">
-              <input value={newEmp.phone} onChange={e => setNewEmp(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
-              <input value={newEmp.email} onChange={e => setNewEmp(p => ({ ...p, email: e.target.value }))} placeholder="Email" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Full Name <span className="text-destructive">*</span></label>
+              <input value={newEmp.name} onChange={e => setNewEmp(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Ahmed Khan" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input value={newEmp.role} onChange={e => setNewEmp(p => ({ ...p, role: e.target.value }))} placeholder="Role (e.g. Waiter)" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
-              <select value={newEmp.department} onChange={e => setNewEmp(p => ({ ...p, department: e.target.value }))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm">
-                <option value="Kitchen">Kitchen</option>
-                <option value="Front">Front</option>
-                <option value="Management">Management</option>
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Phone <span className="text-[10px] text-muted-foreground/60">(Optional)</span></label>
+                <input value={newEmp.phone} onChange={e => setNewEmp(p => ({ ...p, phone: e.target.value }))} placeholder="03XX XXXXXXX" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Email <span className="text-[10px] text-muted-foreground/60">(Optional)</span></label>
+                <input value={newEmp.email} onChange={e => setNewEmp(p => ({ ...p, email: e.target.value }))} placeholder="ahmed@example.com" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={newEmp.joinDate} onChange={e => setNewEmp(p => ({ ...p, joinDate: e.target.value }))} className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
-              <input type="number" value={newEmp.salary} onChange={e => setNewEmp(p => ({ ...p, salary: e.target.value }))} placeholder="Monthly salary (Rs)" className="bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Role <span className="text-destructive">*</span></label>
+                <select value={newEmp.role} onChange={e => setNewEmp(p => ({ ...p, role: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm">
+                  <option value="">Select role</option>
+                  <option value="Waiter">Waiter</option>
+                  <option value="Chef">Chef</option>
+                  <option value="Head Chef">Head Chef</option>
+                  <option value="Sous Chef">Sous Chef</option>
+                  <option value="Line Cook">Line Cook</option>
+                  <option value="Host">Host</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Assistant Manager">Assistant Manager</option>
+                  <option value="Cashier">Cashier</option>
+                  <option value="Bartender">Bartender</option>
+                  <option value="Busser">Busser</option>
+                  <option value="Delivery">Delivery</option>
+                  <option value="Supervisor">Supervisor</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Department</label>
+                <select value={newEmp.department} onChange={e => setNewEmp(p => ({ ...p, department: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm">
+                  <option value="Kitchen">Kitchen</option>
+                  <option value="Front">Front</option>
+                  <option value="Management">Management</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Join Date</label>
+                <input type="date" value={newEmp.joinDate} onChange={e => setNewEmp(p => ({ ...p, joinDate: e.target.value }))} className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground ml-1">Monthly Salary (Rs)</label>
+                <input type="number" value={newEmp.salary} onChange={e => setNewEmp(p => ({ ...p, salary: e.target.value }))} placeholder="e.g. 50000" className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm" />
+              </div>
             </div>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }} className="flex-1 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>
-              <button onClick={handleSaveEmployee} className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">{editingEmployee ? 'Save Changes' : 'Add Employee'}</button>
+              <button onClick={() => { setShowAddEmployee(false); resetNewEmployeeForm(); }} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+              <button onClick={handleSaveEmployee} className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-secondary">{editingEmployee ? 'Save Changes' : 'Add Employee'}</button>
             </div>
           </div>
         </div>
