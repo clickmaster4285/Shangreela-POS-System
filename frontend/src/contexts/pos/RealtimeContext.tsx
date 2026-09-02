@@ -29,6 +29,8 @@ function invalidateForScopes(
   if (hit("orders") || hit("deliveries")) {
     qc.invalidateQueries({ queryKey: ["deliveries"] });
     qc.invalidateQueries({ queryKey: ["orders-management"] });
+    qc.invalidateQueries({ queryKey: ["staff-summary"] });
+    qc.invalidateQueries({ queryKey: ["staff-bills"] });
   }
 
   if (hit("orders") || hit("tables")) {
