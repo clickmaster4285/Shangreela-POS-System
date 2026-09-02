@@ -50,10 +50,9 @@ const roleBadge: Record<Role, string> = {
   fahad: 'bg-accent/30 text-accent-foreground',
   cashier: 'bg-success/10 text-success',
   store_manager: 'bg-amber-100/50 text-amber-700',
-  staff: 'bg-blue-100/50 text-blue-700',
 };
 
-const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'store_manager', 'cashier', 'staff'];
+const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'store_manager', 'cashier'];
 
 export default function PermissionManagement() {
   const { 
@@ -112,9 +111,8 @@ export default function PermissionManagement() {
   };
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email) return;
-    if (newUser.role !== 'staff' && !newUser.password) return;
-    await addUser({ name: newUser.name, email: newUser.email, role: newUser.role }, newUser.password || '');
+    if (!newUser.name || !newUser.email || !newUser.password) return;
+    await addUser({ name: newUser.name, email: newUser.email, role: newUser.role }, newUser.password);
     setShowAddUser(false);
     setNewUser({ name: '', email: '', password: '', role: 'cashier' });
     toast.success('User added');
@@ -166,20 +164,35 @@ export default function PermissionManagement() {
         <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="flex justify-between items-center">
-              <h3 className="font-serif text-lg font-bold">Add Staff Member</h3>
+              <div>
+                <h3 className="font-serif text-lg font-bold">Add Staff Member</h3>
+                <p className="text-[11px] text-muted-foreground"><span className="text-destructive">*</span> required fields</p>
+              </div>
               <button onClick={() => setShowAddUser(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
-            <input className={inputClass} placeholder="Full Name" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
-            <input className={inputClass} placeholder="Email" type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
-            <input className={inputClass} placeholder={newUser.role === 'staff' ? 'Password (optional)' : 'Password'} type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
-            <select className={inputClass} value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as Role })}>
-              {ROLES_ORDER.map(r => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </option>
-              ))}
-            </select>
-            <button onClick={handleAddUser} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Full Name <span className="text-destructive">*</span></label>
+              <input className={inputClass} placeholder="e.g. Ahmed Khan" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Email Address <span className="text-destructive">*</span></label>
+              <input className={inputClass} placeholder="e.g. ahmed@example.com" type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Password <span className="text-destructive">*</span></label>
+              <input className={inputClass} placeholder="Enter password" type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Role <span className="text-destructive">*</span></label>
+              <select className={inputClass} value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as Role })}>
+                {ROLES_ORDER.map(r => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button onClick={handleAddUser} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors mt-2">
               Add Staff
             </button>
           </div>
@@ -191,23 +204,26 @@ export default function PermissionManagement() {
         <div className="fixed inset-0 bg-foreground/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-2xl p-6 w-full max-w-md space-y-4" style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="flex justify-between items-center">
-              <h3 className="font-serif text-lg font-bold">Edit Staff Member</h3>
+              <div>
+                <h3 className="font-serif text-lg font-bold">Edit Staff Member</h3>
+                <p className="text-[11px] text-muted-foreground"><span className="text-destructive">*</span> required fields</p>
+              </div>
               <button onClick={() => setShowEditUser(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground ml-1">Full Name</label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Full Name <span className="text-destructive">*</span></label>
               <input className={inputClass} placeholder="Full Name" value={editUserData.name} onChange={e => setEditUserData({ ...editUserData, name: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground ml-1">Email Address</label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Email Address <span className="text-destructive">*</span></label>
               <input className={inputClass} placeholder="Email" type="email" value={editUserData.email} onChange={e => setEditUserData({ ...editUserData, email: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground ml-1">Password (Leave blank to keep same)</label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Password <span className="text-[10px] text-muted-foreground/60">(Leave blank to keep same)</span></label>
               <input className={inputClass} placeholder="New Password" type="password" value={editUserData.password} onChange={e => setEditUserData({ ...editUserData, password: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground ml-1">Role</label>
+              <label className="text-xs font-medium text-muted-foreground ml-1">Role <span className="text-destructive">*</span></label>
               <select className={inputClass} value={editUserData.role} onChange={e => setEditUserData({ ...editUserData, role: e.target.value as Role })}>
                 {ROLES_ORDER.map(r => (
                   <option key={r} value={r}>

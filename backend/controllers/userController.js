@@ -28,10 +28,7 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const { name, email, role, password } = req.body || {};
-  
-  // Staff role doesn't require password
-  const passwordHash = role === 'staff' ? '' : await bcrypt.hash(String(password || ""), 10);
-  
+  const passwordHash = await bcrypt.hash(String(password || ""), 10);
   const user = await User.create({ name, email: String(email || "").toLowerCase(), role, passwordHash });
   emitPosChange(["users"]);
   res.status(201).json({ id: String(user._id), name: user.name, email: user.email, role: user.role, avatar: user.avatar || "" });

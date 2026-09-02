@@ -79,10 +79,10 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
 
   usePosRealtimeScopes(['settings'], loadPaymentDetails);
 
-  // Fetch staff users for staff assignment
+  // Fetch HR employees for staff assignment
   useEffect(() => {
-    api<{ items: { id: string; name: string; role: string }[] }>('/users?limit=100&role=staff')
-      .then(r => setEmployees(r.items))
+    api<{ items: { id: string; name: string; role: string }[] }>('/hr/employees?limit=100')
+      .then(r => setEmployees(r.items.filter(e => e.status !== 'inactive')))
       .catch(() => setEmployees([]));
   }, []);
 

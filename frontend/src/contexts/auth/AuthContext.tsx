@@ -3,7 +3,7 @@ import { api, setToken } from '@/lib/api/api';
 import { fetchAllPaginatedItems } from '@/lib/api/paginatedFetch';
 import { POS_REALTIME_EVENT } from '@/hooks/pos/use-pos-realtime';
 
-export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier' | 'store_manager' | 'staff';
+export type Role = 'superadmin' | 'hassaan' | 'fahad' | 'cashier' | 'store_manager';
 
 export const ROLE_LABELS: Record<Role, string> = {
   superadmin: 'Superadmin',
@@ -11,7 +11,6 @@ export const ROLE_LABELS: Record<Role, string> = {
   fahad: 'Fahad shb',
   cashier: 'Cashier',
   store_manager: 'Store Manager',
-  staff: 'Staff',
 };
 
 export const MANAGER_ROLES: Role[] = ['superadmin', 'hassaan', 'fahad'];
@@ -131,11 +130,6 @@ const DEFAULT_PERMISSIONS: PermissionsConfig = {
     actionPermissions: ['print_bill', 'apply_discount', 'hold_order', 'change_table_status', 'edit_menu'],
     dataVisibility: ['view_all_orders', 'view_reports', 'view_staff'],
   },
-  staff: {
-    pageAccess: [],
-    actionPermissions: [],
-    dataVisibility: [],
-  },
 };
 
 function normalizeEmail(email: string) {
@@ -153,7 +147,6 @@ function migrateRole(r: string): Role {
     waiter: 'fahad',
     store_manager: 'store_manager',
     manager: 'store_manager',
-    staff: 'staff',
   };
   return map[r] ?? 'cashier';
 }
@@ -215,7 +208,7 @@ function migratePermissionsFromStorage(parsed: Record<string, RolePermissions>):
   if (parsed.hr && !parsed.hassaan) remapped.hassaan = parsed.hr;
   if (parsed.waiter && !parsed.fahad) remapped.fahad = parsed.waiter;
 
-  const roles: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier', 'store_manager', 'staff'];
+  const roles: Role[] = ['superadmin', 'hassaan', 'fahad', 'cashier', 'store_manager'];
   const out = { ...DEFAULT_PERMISSIONS };
   for (const role of roles) {
     const saved = remapped[role];

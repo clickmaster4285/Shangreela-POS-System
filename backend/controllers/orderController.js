@@ -784,18 +784,18 @@ exports.staffSummary = async (req, res) => {
       },
       {
         $lookup: {
-          from: "users",
+          from: "employees",
           localField: "_id",
           foreignField: "_id",
-          as: "user"
+          as: "employee"
         }
       },
-      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$employee", preserveNullAndEmptyArrays: true } },
       {
         $project: {
           _id: 1,
-          name: { $ifNull: ["$user.name", "Unknown"] },
-          role: { $ifNull: ["$user.role", "Staff"] },
+          name: { $ifNull: ["$employee.name", "Unknown"] },
+          role: { $ifNull: ["$employee.role", "Staff"] },
           pendingCount: 1,
           pendingTotal: 1,
           paidCount: 1,

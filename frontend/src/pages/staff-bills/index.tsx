@@ -50,12 +50,12 @@ export default function StaffBills() {
   });
   const floorsData = floorsQuery.data?.items ?? [];
 
-  // Fetch staff users
+  // Fetch HR employees for staff list
   const staffUsersQuery = useQuery({
-    queryKey: ['staff-users'],
-    queryFn: () => api<PaginatedResponse<{ id: string; name: string; role: string }>>('/users?limit=100&role=staff'),
+    queryKey: ['hr-employees'],
+    queryFn: () => api<PaginatedResponse<{ id: string; name: string; role: string; status: string }>>('/hr/employees?limit=100'),
   });
-  const staffUsers = staffUsersQuery.data?.items ?? [];
+  const staffUsers = staffUsersQuery.data?.items?.filter(e => e.status !== 'inactive') ?? [];
 
   // Fetch staff summary
   const staffSummaryQuery = useQuery({
