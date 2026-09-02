@@ -50,9 +50,10 @@ const roleBadge: Record<Role, string> = {
   fahad: 'bg-accent/30 text-accent-foreground',
   cashier: 'bg-success/10 text-success',
   store_manager: 'bg-amber-100/50 text-amber-700',
+  staff: 'bg-blue-100/50 text-blue-700',
 };
 
-const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'store_manager', 'cashier'];
+const ROLES_ORDER: Role[] = ['superadmin', 'hassaan', 'fahad', 'store_manager', 'cashier', 'staff'];
 
 export default function PermissionManagement() {
   const { 
@@ -111,8 +112,9 @@ export default function PermissionManagement() {
   };
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) return;
-    await addUser({ name: newUser.name, email: newUser.email, role: newUser.role }, newUser.password);
+    if (!newUser.name || !newUser.email) return;
+    if (newUser.role !== 'staff' && !newUser.password) return;
+    await addUser({ name: newUser.name, email: newUser.email, role: newUser.role }, newUser.password || '');
     setShowAddUser(false);
     setNewUser({ name: '', email: '', password: '', role: 'cashier' });
     toast.success('User added');
@@ -169,7 +171,7 @@ export default function PermissionManagement() {
             </div>
             <input className={inputClass} placeholder="Full Name" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
             <input className={inputClass} placeholder="Email" type="email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
-            <input className={inputClass} placeholder="Password" type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
+            <input className={inputClass} placeholder={newUser.role === 'staff' ? 'Password (optional)' : 'Password'} type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
             <select className={inputClass} value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as Role })}>
               {ROLES_ORDER.map(r => (
                 <option key={r} value={r}>

@@ -6,6 +6,8 @@ const router = express.Router();
 router.use(authRequired, attachPermissions);
 
 router.get("/", orderController.list);
+router.get("/staff-summary", orderController.staffSummary);
+router.get("/staff-bills", orderController.staffBills);
 router.post("/", orderController.create);
 router.get("/open-by-table/:tableNumber", orderController.openByTable);
 router.patch("/:id/status", orderController.patchStatus);
@@ -14,6 +16,8 @@ router.patch("/:id/switch-type", orderController.switchType);
 router.patch("/:id/add-items", orderController.addItems);
 router.patch("/:id/edit-items", orderController.editItems);
 router.patch("/:id/billing-totals", orderController.patchBillingTotals);
+router.patch("/:id/assign-staff", orderController.assignStaff);
+router.patch("/:id/mark-staff-paid", orderController.markStaffPaid);
 router.post("/:id/payment", orderController.payment);
 router.post("/:id/cancel", orderController.cancel);
 router.delete("/:id", orderController.remove);

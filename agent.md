@@ -67,3 +67,179 @@ The heart of cashier interaction.
 | **Tax & Govt. Logs** | `fbrController.json` & `taxController` | Integrates required FBR tracking logic alongside local taxation math. |
 | **Printers & Tracking** | `printerController.js` | Directs POS and KOT printing tasks locally to hardware. |
 | **Inventory & Staffing** | `inventoryController.js` / `hrController.js` | Logs deductions per-item sold and maps attendance records per shift. |
+
+---
+
+## 6. Staff Bills Module (Planned Feature)
+
+### Overview
+A new module to track orders placed for staff members. Staff selection happens in the **billing page** (not during order placement), keeping the POS terminal workflow clean. A dedicated page shows pending and paid staff bills with date-wise grouping.
+
+### 6.1 Backend Changes
+
+#### Order Model Updates (`backend/models/order.js`)
+Add two new fields:
+```javascript
+staffMember: { type: ObjectId, ref: 'Employee', default: null },
+staffBillPaid: { type: Boolean, default: false }
+```
+
+#### New API Endpoints (`backend/routes/orders.routes.js`)
+
+| Method | Endpoint | Request Body / Query | Purpose |
+|--------|----------|---------------------|---------|
+| `PATCH` | `/orders/:id/assign-staff` | `{ staffMember: employeeId }` | Assign staff member to an order |
+| `GET` | `/orders/staff-bills` | `?employeeId=...&status=pending\|paid&from=...&to=...` | Get staff bills with filters |
+| `PATCH` | `/orders/:id/mark-staff-paid` | `{}` | Mark a staff bill as paid |
+| `GET` | `/orders/staff-summary` | - | Get all staff with pending/paid bill counts and totals |
+
+#### Staff Summary Response Shape
+```json
+{
+  "staff": [
+    {
+      "_id": "employeeId",
+      "name": "Ahmed",
+      "role": "Waiter",
+      "pendingCount": 3,
+      "pendingTotal": 4500,
+      "paidCount": 12,
+      "paidTotal": 18000,
+      "lastOrderDate": "2026-09-01"
+    }
+  ]
+}
+```
+
+#### Staff Bills Response Shape
+```json
+{
+  "bills": [
+    {
+      "_id": "orderId",
+      "code": "ORD-123456",
+      "type": "dine-in",
+      "total": 1500,
+      "status": "completed",
+      "staffBillPaid": false,
+      "createdAt": "2026-09-01T10:30:00Z",
+      "items": [...]
+    }
+  ],
+  "pagination": { "page": 1, "pages": 3, "total": 25, "limit": 10 }
+}
+```
+
+---
+
+### 6.2 Frontend Changes
+
+#### A. Billing Page - Staff Assignment
+**File**: `frontend/src/pages/billing/components/BillPaymentPanel.tsx`
+
+Add a "Assign to Staff" section in the payment panel (before payment buttons):
+- Dropdown fetching employees from `GET /hr/employees`
+- Shows "None (Customer)" as default + list of active employees
+- "Assign" button calls `PATCH /orders/:id/assign-staff`
+- Display currently assigned staff name with badge when already assigned
+- Visual indicator on bill cards in BillList showing "Staff: [Name]"
+
+#### B. New Staff Bills Page
+**File**: `frontend/src/pages/staff-bills/index.tsx` (NEW)
+**Route**: `/pos/staff-bills`
+
+**2-panel layout (desktop) / stacked (mobile):**
+
+**Left Panel - Staff List:**
+- Fetches from `GET /orders/staff-summary`
+- Each staff card shows:
+  - Employee name and role
+  - Pending bills count (highlighted badge)
+  - Pending total amount (PKR)
+  - Paid bills count
+  - Last order date
+- Click to select staff member
+- Filter: All / Has Pending / Has Paid
+
+**Right Panel - Selected Staff's Bills:**
+- Header with staff name and summary stats
+- Bills grouped by calendar day (newest first)
+- Each bill card shows:
+  - Order ID (`ORD-xxxxxx`)
+  - Date and time
+  - Items count and total amount
+  - Status badge (Pending / Paid)
+  - "Mark as Paid" button for pending bills (calls `PATCH /orders/:id/mark-staff-paid`)
+- Bottom summary: Total pending amount, Total paid amount
+
+#### C. Sidebar Navigation
+**File**: `frontend/src/components/pos/POSLayout.tsx`
+
+Add new link in `allLinks` array:
+```javascript
+{ to: '/pos/staff-bills', icon: Users, label: 'Staff Bills', page: 'staffbills' }
+```
+
+#### D. Route Registration
+**File**: `frontend/src/App.tsx`
+
+Add lazy import:
+```javascript
+const StaffBills = lazy(() => import("./pages/staff-bills/index.tsx"));
+```
+
+Add route inside `/pos`:
+```javascript
+<Route path="staff-bills" element={<PageGuard page="staffbills"><StaffBills /></PageGuard>} />
+```
+
+#### E. Page Permissions
+**File**: `frontend/src/contexts/auth/AuthContext.tsx`
+
+Add `'staffbills'` to `PageKey` type union.
+
+---
+
+### 6.3 UI/UX Flow
+
+```
+Billing Page Flow:
+1. Cashier selects a bill from the list
+2. In BillPaymentPanel, scrolls to "Assign to Staff" section
+3. Selects a staff member from dropdown
+4. Clicks "Assign" → order is tagged to that staff member
+5. Bill card now shows "Staff: [Name]" badge
+
+Staff Bills Page Flow:
+1. Cashier navigates to /pos/staff-bills
+2. Sees list of staff with pending/paid stats
+3. Clicks on a staff member
+4. Right panel shows all their bills grouped by date
+5. When staff pays, clicks "Mark as Paid" on each bill
+6. Stats update in real-time via React Query invalidation
+```
+
+---
+
+### 6.4 Files Summary
+
+| File | Action | Description |
+|------|--------|-------------|
+| `backend/models/order.js` | Modify | Add `staffMember` (ObjectId) and `staffBillPaid` (Boolean) fields |
+| `backend/controllers/orderController.js` | Modify | Add 4 new endpoint handlers |
+| `backend/routes/orders.routes.js` | Modify | Register new routes |
+| `frontend/src/contexts/auth/AuthContext.tsx` | Modify | Add `'staffbills'` to PageKey type |
+| `frontend/src/components/pos/POSLayout.tsx` | Modify | Add sidebar link for Staff Bills |
+| `frontend/src/App.tsx` | Modify | Add route and lazy import |
+| `frontend/src/pages/billing/components/BillPaymentPanel.tsx` | Modify | Add staff assignment dropdown |
+| `frontend/src/pages/staff-bills/index.tsx` | **Create** | New Staff Bills page (2-panel layout) |
+
+---
+
+### 6.5 Key Design Decisions
+
+1. **No POS Terminal Changes**: Staff selection happens in billing only, keeping order placement fast
+2. **Uses Existing Employees**: Reuses HR Employee model, no new data source
+3. **Simple Payment Tracking**: No credit/debt logic - just pending vs paid status
+4. **Date-wise Grouping**: Bills organized by calendar day for easy review
+5. **Real-time Updates**: Socket.IO broadcasts on staff assignment and payment marking

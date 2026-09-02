@@ -5,9 +5,16 @@ const { User } = require("../models");
 
 exports.list = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
+  const where = {};
+  
+  // Filter by role if specified
+  if (req.query.role && req.query.role !== 'all') {
+    where.role = req.query.role;
+  }
+  
   const [users, total] = await Promise.all([
-    User.find({}, { passwordHash: 0 }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    User.countDocuments({}),
+    User.find(where, { passwordHash: 0 }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    User.countDocuments(where),
   ]);
   res.json(
     buildPaginatedResponse({
@@ -21,7 +28,10 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const { name, email, role, password } = req.body || {};
-  const passwordHash = await bcrypt.hash(String(password || ""), 10);
+  
+  // Staff role doesn't require password
+  const passwordHash = role === 'staff' ? '' : await bcrypt.hash(String(password || ""), 10);
+  
   const user = await User.create({ name, email: String(email || "").toLowerCase(), role, passwordHash });
   emitPosChange(["users"]);
   res.status(201).json({ id: String(user._id), name: user.name, email: user.email, role: user.role, avatar: user.avatar || "" });

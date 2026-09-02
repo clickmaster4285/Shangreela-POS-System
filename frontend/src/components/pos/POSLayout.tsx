@@ -42,6 +42,7 @@ const allLinks: { to: string; icon: typeof LayoutDashboard; label: string; page:
   { to: '/pos/tables', icon: Grid3X3, label: 'Tables', page: 'tables' },
   { to: '/pos/kitchen', icon: ChefHat, label: 'Kitchen', page: 'kitchen' },
   { to: '/pos/billing', icon: Receipt, label: 'Billing', page: 'billing' },
+  { to: '/pos/staff-bills', icon: Users, label: 'Staff Bills', page: 'staffbills' },
   { to: '/pos/menu', icon: UtensilsCrossed, label: 'Menu', page: 'menu' },
   { to: '/pos/recipes', icon: BookOpen, label: 'Recipes', page: 'recipes' },
   { to: '/pos/inventory', icon: Package, label: 'Inventory', page: 'inventory' },

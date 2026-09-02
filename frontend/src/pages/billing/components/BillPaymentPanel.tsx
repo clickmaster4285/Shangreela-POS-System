@@ -1,7 +1,7 @@
 // In BillPaymentPanel.tsx - FIXED VERSION
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Printer, Wallet, Banknote, CreditCard, Trash2, Repeat, Check, X as XIcon } from 'lucide-react';
+import { Printer, Wallet, Banknote, CreditCard, Trash2, Repeat, Check, X as XIcon, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Order, TableInfo } from '@/data/pos/mockData';
@@ -11,6 +11,7 @@ import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { computePakistanTaxTotals } from '@/utils/pos/pakistanTax';
 import { usePOSStore } from '@/stores/pos/posStore';
 import { TablePicker } from '@/components/pos/TablePicker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface BillPaymentPanelProps {
   order: (Order & { dbId?: string; printed?: boolean }) | null;
@@ -60,6 +61,9 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   const [switchDeliveryPhone, setSwitchDeliveryPhone] = useState('');
   const [switchDeliveryAddress, setSwitchDeliveryAddress] = useState('');
   const [paymentDetails, setPaymentDetails] = useState<ReceiptPaymentDetails | null>(null);
+  const [employees, setEmployees] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<string>('');
+  const [isAssigningStaff, setIsAssigningStaff] = useState(false);
   
   const posStore = usePOSStore();
 
@@ -74,6 +78,38 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   }, [loadPaymentDetails]);
 
   usePosRealtimeScopes(['settings'], loadPaymentDetails);
+
+  // Fetch staff users for staff assignment
+  useEffect(() => {
+    api<{ items: { id: string; name: string; role: string }[] }>('/users?limit=100&role=staff')
+      .then(r => setEmployees(r.items))
+      .catch(() => setEmployees([]));
+  }, []);
+
+  // Reset selected staff when order changes
+  useEffect(() => {
+    if (order) {
+      setSelectedStaff((order as any).staffMember || '');
+    }
+  }, [order?.id]);
+
+  const handleAssignStaff = async (employeeId: string) => {
+    if (!order?.dbId) return;
+    setIsAssigningStaff(true);
+    try {
+      await api(`/orders/${order.dbId}/assign-staff`, {
+        method: 'PATCH',
+        body: JSON.stringify({ staffMember: employeeId || null }),
+      });
+      setSelectedStaff(employeeId);
+      toast.success(employeeId ? 'Staff member assigned' : 'Staff member removed');
+      await onPaymentComplete();
+    } catch (error) {
+      toast.error('Failed to assign staff');
+    } finally {
+      setIsAssigningStaff(false);
+    }
+  };
 
   // Add a ref to track if we've already synced
   const lastSyncedValues = useRef<string>('');
@@ -504,6 +540,38 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
                 <p className="text-[10px] uppercase font-bold text-muted-foreground mt-1">Taken by <span className="text-foreground">{order.orderTaker}</span></p>
               )}
             </div>
+          </div>
+
+          {/* Staff Assignment Section */}
+          <div className="mb-4 shrink-0 rounded-xl border border-border/70 p-3 bg-muted/20">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-primary" />
+                <span className="text-xs font-semibold text-muted-foreground">Assign to Staff</span>
+              </div>
+              <Select
+                value={selectedStaff || 'none'}
+                onValueChange={(v) => handleAssignStaff(v === 'none' ? '' : v)}
+                disabled={isAssigningStaff}
+              >
+                <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-background">
+                  <SelectValue placeholder="None (Customer)" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border shadow-xl max-h-[200px] overflow-y-auto">
+                  <SelectItem value="none" className="text-xs font-medium">None (Customer)</SelectItem>
+                  {employees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id} className="text-xs font-medium">
+                      {emp.name} ({emp.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedStaff && (
+              <p className="text-[10px] text-primary font-bold mt-2">
+                Bill assigned to: {employees.find(e => e.id === selectedStaff)?.name}
+              </p>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
