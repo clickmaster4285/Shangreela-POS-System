@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { exportReportPdf } from '@/utils/common/exportReportPdf';
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const pieColors = ['hsl(340,70%,21%)', 'hsl(340,60%,30%)', 'hsl(15,45%,81%)', 'hsl(40,70%,55%)', 'hsl(15,25%,13%)'];
 const formatPKR = (value: number) => `Rs. ${value.toLocaleString()}`;
@@ -84,11 +85,18 @@ export default function Reports() {
   });
   const [selectedCashier, setSelectedCashier] = useState('all');
   const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const usersQuery = useQuery({
     queryKey: ['users-list'],
     queryFn: () => api<PaginatedResponse<{ name: string, role: string }>>('/users?limit=100'),
   });
+
+  const categoriesQuery = useQuery({
+    queryKey: ['menu-categories'],
+    queryFn: () => api<{ categories: string[] }>('/menu/categories'),
+  });
+  const categories = categoriesQuery.data?.categories ?? [];
 
   useEffect(() => {
     if (usersQuery.data) {
@@ -171,7 +179,7 @@ export default function Reports() {
   const parsedTopSellingItems = useMemo(() => {
     if (!expandBundles) return topSellingItems;
 
-    const expandedMap = new Map<string, { name: string; sold: number; revenue: number }>();
+    const expandedMap = new Map<string, { name: string; sold: number; revenue: number; category?: string }>();
 
     (topSellingItems as TopSellingItem[]).forEach(item => {
       const isBundle = item.category === 'Deals' || item.category === 'Platters';
@@ -199,11 +207,31 @@ export default function Reports() {
     return Array.from(expandedMap.values()).sort((a, b) => b.sold - a.sold);
   }, [topSellingItems, expandBundles]);
 
-  const filteredTopSellingItems = useMemo(() =>
-    parsedTopSellingItems.filter(item =>
+  const categoryStats = useMemo(() => {
+    const stats = new Map<string, { count: number; sold: number; revenue: number }>();
+    parsedTopSellingItems.forEach(item => {
+      const cat = item.category || 'Other';
+      const existing = stats.get(cat) || { count: 0, sold: 0, revenue: 0 };
+      stats.set(cat, {
+        count: existing.count + 1,
+        sold: existing.sold + item.sold,
+        revenue: existing.revenue + item.revenue,
+      });
+    });
+    return Array.from(stats.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [parsedTopSellingItems]);
+
+  const filteredTopSellingItems = useMemo(() => {
+    let items = parsedTopSellingItems.filter(item =>
       item.name.toLowerCase().includes(menuSearch.toLowerCase())
-    ), [parsedTopSellingItems, menuSearch]
-  );
+    );
+    if (selectedCategory !== 'all') {
+      items = items.filter(item => (item.category || 'Other') === selectedCategory);
+    }
+    return items;
+  }, [parsedTopSellingItems, menuSearch, selectedCategory]);
 
   const filteredInventoryUsage = useMemo(() =>
     inventoryUsage.filter(item =>
@@ -629,14 +657,32 @@ export default function Reports() {
                 {expandBundles ? 'View Consolidated' : 'Expand Platters'}
               </button>
             </div>
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search menu items..."
-                value={menuSearch}
-                onChange={(e) => setMenuSearch(e.target.value)}
-                className="pl-8"
-              />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs font-semibold">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border shadow-xl max-h-[300px] overflow-y-auto">
+                  <SelectItem value="all" className="text-xs font-medium">All ({parsedTopSellingItems.length})</SelectItem>
+                  {categories.map(cat => {
+                    const stats = categoryStats.find(s => s.name === cat);
+                    return (
+                      <SelectItem key={cat} value={cat} className="text-xs font-medium">
+                        {cat} ({stats?.count ?? 0})
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search menu items..."
+                  value={menuSearch}
+                  onChange={(e) => setMenuSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -645,6 +691,7 @@ export default function Reports() {
                 <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-3 px-2 font-medium">#</th>
                   <th className="py-3 px-2 font-medium">Item</th>
+                  <th className="py-3 px-2 font-medium">Category</th>
                   <th className="py-3 px-2 font-medium">Units Sold</th>
                   <th className="py-3 px-2 font-medium">Revenue</th>
                  </tr>
@@ -656,13 +703,14 @@ export default function Reports() {
                       <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
                      </td>
                     <td className="py-3 px-2 font-medium text-foreground">{item.name}</td>
+                    <td className="py-3 px-2 text-muted-foreground text-xs">{(item as any).category || '-'}</td>
                     <td className="py-3 px-2 text-muted-foreground">{item.sold}</td>
                     <td className="py-3 px-2 font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
                 {filteredTopSellingItems.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-muted-foreground">No menu items found</td>
+                    <td colSpan={5} className="py-4 text-center text-muted-foreground">No menu items found</td>
                   </tr>
                 )}
               </tbody>

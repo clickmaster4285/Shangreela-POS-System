@@ -242,7 +242,7 @@ export default function Billing() {
   }, [orders, printedOrderIds]);
 
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-0 flex-col gap-4">
+    <div className="flex h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-7rem)] min-h-0 flex-col gap-3 sm:gap-4">
       <POSFilterBar
         searchQuery={tableSearchQuery}
         onSearchChange={setTableSearchQuery}
@@ -259,45 +259,40 @@ export default function Billing() {
         showMyBillsOnly={showMyBillsOnly}
         onMyBillsToggle={setShowMyBillsOnly}
         extraFilters={
-          <div className="flex items-center gap-3">
-            {/* Order Type Filter */}
-            <div className="flex items-center gap-2">
-              <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground whitespace-nowrap">Type</label>
-              <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
-                <SelectTrigger className="w-[130px] h-9 bg-background border-border rounded-xl text-xs font-semibold focus:ring-primary/20">
-                  <div className="flex items-center gap-2">
-                    {selectedOrderType === 'dine-in' && <Utensils className="w-3.5 h-3.5 text-primary" />}
-                    {selectedOrderType === 'takeaway' && <ShoppingBag className="w-3.5 h-3.5 text-primary" />}
-                    {selectedOrderType === 'delivery' && <Truck className="w-3.5 h-3.5 text-primary" />}
-                    <SelectValue placeholder="All types" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-border shadow-xl">
-                  <SelectItem value="all" className="text-xs font-medium">All Types</SelectItem>
-                  <SelectItem value="dine-in" className="text-xs font-medium">Dine-in</SelectItem>
-                  <SelectItem value="takeaway" className="text-xs font-medium">Takeaway</SelectItem>
-                  <SelectItem value="delivery" className="text-xs font-medium">Delivery</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="w-px h-6 bg-border mx-1" />
-
-            {/* Status Filter */}
-            <div className="flex shrink-0 items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border">
-              {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
-                <button key={f} onClick={() => setBillingStatusFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {f} ({stats[f]})
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground whitespace-nowrap">Type</label>
+            <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
+              <SelectTrigger className="w-[110px] sm:w-[130px] h-8 bg-background border-border rounded-xl text-xs font-semibold focus:ring-primary/20">
+                <div className="flex items-center gap-2">
+                  {selectedOrderType === 'dine-in' && <Utensils className="w-3.5 h-3.5 text-primary" />}
+                  {selectedOrderType === 'takeaway' && <ShoppingBag className="w-3.5 h-3.5 text-primary" />}
+                  {selectedOrderType === 'delivery' && <Truck className="w-3.5 h-3.5 text-primary" />}
+                  <SelectValue placeholder="All types" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-border shadow-xl">
+                <SelectItem value="all" className="text-xs font-medium">All Types</SelectItem>
+                <SelectItem value="dine-in" className="text-xs font-medium">Dine-in</SelectItem>
+                <SelectItem value="takeaway" className="text-xs font-medium">Takeaway</SelectItem>
+                <SelectItem value="delivery" className="text-xs font-medium">Delivery</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        }
+        bottomFilters={
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-muted/40 p-0.5 sm:p-1 rounded-xl border border-border overflow-x-auto scrollbar-none">
+            {(['all', 'pending', 'ready', 'paid'] as const).map(f => (
+              <button key={f} onClick={() => setBillingStatusFilter(f)}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all whitespace-nowrap shrink-0 ${billingStatusFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {f} ({stats[f]})
+              </button>
+            ))}
           </div>
         }
       />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:gap-5 overflow-hidden xl:grid-cols-[480px_minmax(0,1fr)]">
         <BillList
           billsByDay={billsByDay}
           activeFilters={{

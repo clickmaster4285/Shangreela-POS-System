@@ -15,7 +15,7 @@ export default function Contact() {
             {[
               { icon: MapPin, title: 'Address', text: '123 Royal Avenue, Downtown, New York, NY 10001' },
               { icon: Phone, title: 'Phone', text: '+1 (555) 123-4567' },
-              { icon: Mail, title: 'Email', text: 'reservations@shirazre.com' },
+              { icon: Mail, title: 'Email', text: 'reservations@gmail.com' },
               { icon: Clock, title: 'Hours', text: 'Mon-Thu: 11AM-10PM | Fri-Sun: 11AM-11PM' },
             ].map(item => (
               <div key={item.title} className="flex gap-4 items-start">

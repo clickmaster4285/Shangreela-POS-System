@@ -6,6 +6,7 @@ import { MAX_LIST_LIMIT } from '@/lib/api/paginatedFetch';
 import { useQuery } from '@tanstack/react-query';
 import { formatOrderDateTime, groupOrdersByCalendarDay } from '@/utils/common/formatOrderDateTime';
 import { POSFilterBar } from '@/components/pos/POSFilterBar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type RecentOrderRow = { id: string; type: string; status: string; items: unknown[]; total: number; createdAt: string };
 type TopSellingItem = {
@@ -29,6 +30,7 @@ export default function POSDashboard() {
   const [selectedCashier, setSelectedCashier] = useState('all');
   const [cashiers, setCashiers] = useState<{ key: string; name: string }[]>([]);
   const [expandBundles, setExpandBundles] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const floorsQuery = useQuery({
     queryKey: ['floors-list'],
@@ -41,6 +43,12 @@ export default function POSDashboard() {
     queryKey: ['users-list'],
     queryFn: () => api<PaginatedResponse<{ name: string, role: string }>>('/users?limit=100'),
   });
+
+  const categoriesQuery = useQuery({
+    queryKey: ['menu-categories'],
+    queryFn: () => api<{ categories: string[] }>('/menu/categories'),
+  });
+  const categories = categoriesQuery.data?.categories ?? [];
 
   useEffect(() => {
     if (usersQuery.data) {
@@ -114,7 +122,7 @@ export default function POSDashboard() {
   const expandedTopItems = useMemo(() => {
     if (!expandBundles) return topSellingItems;
 
-    const map = new Map<string, { sold: number; revenue: number }>();
+    const map = new Map<string, { sold: number; revenue: number; category?: string }>();
     topSellingItems.forEach((item) => {
       if ((item.category === 'Platters' || item.category === 'Deals') && item.bundleItems?.length) {
         const bundleCount = item.bundleItems.length;
@@ -127,7 +135,8 @@ export default function POSDashboard() {
           const existing = map.get(subName) || { sold: 0, revenue: 0 };
           map.set(subName, {
             sold: existing.sold + subQty,
-            revenue: existing.revenue + (item.revenue / bundleCount), // Distribute revenue equally among bundle items
+            revenue: existing.revenue + (item.revenue / bundleCount),
+            category: item.category,
           });
         });
       } else {
@@ -135,6 +144,7 @@ export default function POSDashboard() {
         map.set(item.name, {
           sold: existing.sold + item.sold,
           revenue: existing.revenue + item.revenue,
+          category: item.category,
         });
       }
     });
@@ -143,6 +153,27 @@ export default function POSDashboard() {
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.sold - a.sold);
   }, [topSellingItems, expandBundles]);
+
+  const categoryStats = useMemo(() => {
+    const stats = new Map<string, { count: number; sold: number; revenue: number }>();
+    expandedTopItems.forEach(item => {
+      const cat = item.category || 'Other';
+      const existing = stats.get(cat) || { count: 0, sold: 0, revenue: 0 };
+      stats.set(cat, {
+        count: existing.count + 1,
+        sold: existing.sold + item.sold,
+        revenue: existing.revenue + item.revenue,
+      });
+    });
+    return Array.from(stats.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [expandedTopItems]);
+
+  const filteredTopItems = useMemo(() => {
+    if (selectedCategory === 'all') return expandedTopItems;
+    return expandedTopItems.filter(item => (item.category || 'Other') === selectedCategory);
+  }, [expandedTopItems, selectedCategory]);
 
   const { dineIn, delivery, takeaway } = useMemo(
     () => ({
@@ -303,25 +334,48 @@ export default function POSDashboard() {
         {/* Top selling & Recent orders */}
         <div className="grid items-stretch lg:grid-cols-2 gap-4">
           <div className="pos-card flex min-h-0 flex-col">
-            <div className="flex items-center justify-between mb-4 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 shrink-0">
               <h3 className="font-semibold text-foreground text-sm">Menu Items Sales</h3>
-              <button
-                onClick={() => setExpandBundles(!expandBundles)}
-                className={`text-[10px] px-2 py-1 rounded-md border transition-colors ${
-                  expandBundles 
-                    ? 'bg-primary text-white border-primary' 
-                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
-                }`}
-              >
-                {expandBundles ? 'Bundles Expanded' : 'Expand Bundles'}
-              </button>
+              <div className="flex items-center gap-2">
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs font-semibold">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border shadow-xl max-h-[300px] overflow-y-auto">
+                    <SelectItem value="all" className="text-xs font-medium">All ({expandedTopItems.length})</SelectItem>
+                    {categories.map(cat => {
+                      const stats = categoryStats.find(s => s.name === cat);
+                      return (
+                        <SelectItem key={cat} value={cat} className="text-xs font-medium">
+                          {cat} ({stats?.count ?? 0})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => setExpandBundles(!expandBundles)}
+                  className={`text-[10px] px-2 py-1 rounded-md border transition-colors ${
+                    expandBundles 
+                      ? 'bg-primary text-white border-primary' 
+                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {expandBundles ? 'Bundles Expanded' : 'Expand Bundles'}
+                </button>
+              </div>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 max-h-[28rem] scrollbar-thin lg:max-h-[32rem]">
-              {expandedTopItems.map((item, i) => (
+              {filteredTopItems.map((item, i) => (
                 <div key={item.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                    <span className="text-sm text-foreground">{item.name}</span>
+                    <div>
+                      <span className="text-sm text-foreground">{item.name}</span>
+                      {item.category && (
+                        <span className="ml-2 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{item.category}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-foreground">Rs. {item.revenue.toLocaleString()}</p>
@@ -329,6 +383,9 @@ export default function POSDashboard() {
                   </div>
                 </div>
               ))}
+              {filteredTopItems.length === 0 && (
+                <p className="text-sm text-muted-foreground py-4 text-center">No items found for this category</p>
+              )}
             </div>
           </div>
 

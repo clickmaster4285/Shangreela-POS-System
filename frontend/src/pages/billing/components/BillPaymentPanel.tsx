@@ -426,13 +426,13 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
 
   if (!order) {
     return (
-      <div className="pos-card flex flex-col items-center justify-center p-8 border-dashed">
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <Wallet className="w-8 h-8 text-muted-foreground/30" />
+      <div className="pos-card flex flex-col items-center justify-center p-6 sm:p-8 border-dashed">
+        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-muted flex items-center justify-center mb-3 sm:mb-4">
+          <Wallet className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground/30" />
         </div>
-        <h3 className="text-lg font-serif font-bold text-foreground">No Bill Selected</h3>
-        <p className="text-sm text-muted-foreground max-w-[260px] text-center mt-1 leading-relaxed">
-          Click on a bill from the orders list on the left to view detailed information and process payment here.
+        <h3 className="text-base sm:text-lg font-serif font-bold text-foreground">No Bill Selected</h3>
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-[260px] text-center mt-1 leading-relaxed">
+          Click on a bill from the orders list to view details and process payment.
         </p>
       </div>
     );
