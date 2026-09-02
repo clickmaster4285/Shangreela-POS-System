@@ -11,6 +11,7 @@ function invalidateForScopes(
   const s = new Set(scopes);
   const hit = (x: string) => s.has("all") || s.has(x);
 
+  // ── Dashboard / Reports / Analytics (any data change) ──
   if (
     hit("orders") ||
     hit("tables") ||
@@ -19,13 +20,15 @@ function invalidateForScopes(
     hit("floors") ||
     hit("inventory") ||
     hit("expenses") ||
-    hit("hr")
+    hit("hr") ||
+    hit("settings")
   ) {
     qc.invalidateQueries({ queryKey: ["dashboard-overview"] });
     qc.invalidateQueries({ queryKey: ["reports-dashboard"] });
     qc.invalidateQueries({ queryKey: ["analytics-dashboard"] });
   }
 
+  // ── Orders / Deliveries / Staff Bills ──
   if (hit("orders") || hit("deliveries")) {
     qc.invalidateQueries({ queryKey: ["deliveries"] });
     qc.invalidateQueries({ queryKey: ["orders-management"] });
@@ -33,20 +36,25 @@ function invalidateForScopes(
     qc.invalidateQueries({ queryKey: ["staff-bills"] });
   }
 
+  // ── Orders / Tables ──
   if (hit("orders") || hit("tables")) {
     qc.invalidateQueries({ queryKey: ["pos-tables"] });
     qc.invalidateQueries({ queryKey: ["pos-init-data"] });
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
     qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
+    qc.invalidateQueries({ queryKey: ["orders-management"] });
   }
 
+  // ── Menu ──
   if (hit("menu")) {
     qc.invalidateQueries({ queryKey: ["pos-menu-items"] });
     qc.invalidateQueries({ queryKey: ["pos-init-data"] });
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
     qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
+    qc.invalidateQueries({ queryKey: ["menu-categories"] });
   }
 
+  // ── Floors / Tables ──
   if (hit("floors") || hit("tables")) {
     qc.invalidateQueries({ queryKey: ["floors-list"] });
     qc.invalidateQueries({ queryKey: ["pos-floors"] });
@@ -55,9 +63,34 @@ function invalidateForScopes(
     qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
   }
 
+  // ── Inventory ──
+  if (hit("inventory") || hit("dashboard")) {
+    qc.invalidateQueries({ queryKey: ["inventory-stock"] });
+    qc.invalidateQueries({ queryKey: ["inventory-alerts"] });
+    qc.invalidateQueries({ queryKey: ["inventory-stats"] });
+    qc.invalidateQueries({ queryKey: ["inventory-suppliers"] });
+    qc.invalidateQueries({ queryKey: ["inventory-logs"] });
+    qc.invalidateQueries({ queryKey: ["inventory-transfers"] });
+    qc.invalidateQueries({ queryKey: ["inventory-locations"] });
+    qc.invalidateQueries({ queryKey: ["inventory-transfer-categories"] });
+    qc.invalidateQueries({ queryKey: ["inventory-all"] });
+  }
+
+  // ── Settings ──
+  if (hit("settings")) {
+    qc.invalidateQueries({ queryKey: ["pos-init-data"] });
+  }
+
+  // ── Users ──
   if (hit("users")) {
     qc.invalidateQueries({ queryKey: ["orders-init-data"] });
     qc.invalidateQueries({ queryKey: ["order-mgmt-init"] });
+    qc.invalidateQueries({ queryKey: ["users-list"] });
+  }
+
+  // ── HR ──
+  if (hit("hr")) {
+    qc.invalidateQueries({ queryKey: ["hr-employees"] });
   }
 }
 
