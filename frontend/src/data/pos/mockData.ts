@@ -48,6 +48,8 @@ export interface Order {
   takeawayCharge?: number;
   serviceCharge?: number;
   gstAmount?: number;
+  staffMember?: string | null;
+  staffBillPaid?: boolean;
 }
 
 export interface FloorInfo {

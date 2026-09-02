@@ -89,7 +89,7 @@ export const BillPaymentPanel: React.FC<BillPaymentPanelProps> = ({
   // Reset selected staff when order changes
   useEffect(() => {
     if (order) {
-      setSelectedStaff((order as any).staffMember || '');
+      setSelectedStaff(order.staffMember || '');
     }
   }, [order?.id]);
 
