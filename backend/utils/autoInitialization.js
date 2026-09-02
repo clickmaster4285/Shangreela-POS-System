@@ -213,7 +213,7 @@ async function initializeUsers() {
     {
       role: "cashier",
       name: "Cashier",
-      email: "cashier@shirazre.com",
+      email: "cashier@gmail.com",
       password: "cashier123",
       avatar: "",
     },

@@ -156,14 +156,14 @@ function upgradeLegacyUser(u: User): User {
 
   if (
     role === 'superadmin' &&
-    (normalizedEmail === 'admin@shirazre.com' ||
+    (normalizedEmail === 'admin@gmail.com' ||
       normalizedEmail === 'admin@shiraz.com' ||
       u.name === 'Admin User')
   ) {
     return {
       ...u,
       name: 'Superadmin',
-      email: 'superadmin@shirazre.com',
+      email: 'superadmin@gmail.com',
       role,
     };
   }
@@ -176,10 +176,10 @@ function normalizeUsers(input: User[]): User[] {
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: '1', name: 'Superadmin', email: 'superadmin@shirazre.com', role: 'superadmin', avatar: '' },
-  { id: '2', name: 'Hassaan shb', email: 'hassaan@shirazre.com', role: 'hassaan', avatar: '' },
-  { id: '3', name: 'Fahad shb', email: 'fahad@shirazre.com', role: 'fahad', avatar: '' },
-  { id: '4', name: 'Cashier', email: 'cashier@shirazre.com', role: 'cashier', avatar: '' },
+  { id: '1', name: 'Superadmin', email: 'superadmin@gmail.com', role: 'superadmin', avatar: '' },
+  { id: '2', name: 'Hassaan shb', email: 'hassaan@gmail.com', role: 'hassaan', avatar: '' },
+  { id: '3', name: 'Fahad shb', email: 'fahad@gmail.com', role: 'fahad', avatar: '' },
+  { id: '4', name: 'Cashier', email: 'cashier@gmail.com', role: 'cashier', avatar: '' },
 ];
 
 function uniq<T>(arr: T[]): T[] {
