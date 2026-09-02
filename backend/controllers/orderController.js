@@ -179,7 +179,9 @@ exports.list = async (req, res) => {
           amountPaid: o.amountPaid,
           advanceAmount: o.advanceAmount || 0,
           changeDue: o.changeDue,
-          paymentMethod: o.paymentMethod
+          paymentMethod: o.paymentMethod,
+          staffMember: o.staffMember ? String(o.staffMember) : null,
+          staffBillPaid: o.staffBillPaid || false
         };
       }),
       total,
@@ -861,6 +863,7 @@ exports.markStaffPaid = async (req, res) => {
     if (!order.staffMember) return res.status(400).json({ message: "This order is not assigned to any staff member" });
 
     order.staffBillPaid = true;
+    order.status = "completed";
     await order.save();
 
     broadcastOrderDomain();
