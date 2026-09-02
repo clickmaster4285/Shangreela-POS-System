@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil, X } from 'lucide-react';
+import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil, Trash2, X } from 'lucide-react';
 import {
   type Employee,
   type AttendanceRecord,
@@ -128,6 +128,16 @@ export default function HRManagement() {
 
     setShowAddEmployee(false);
     resetNewEmployeeForm();
+  };
+
+  const handleDeleteEmployee = (emp: Employee) => {
+    if (!confirm(`Delete ${emp.name}? This cannot be undone.`)) return;
+    api(`/hr/employees/${emp.id}`, { method: 'DELETE' })
+      .then(() => {
+        setEmployees(prev => prev.filter(e => e.id !== emp.id));
+        toast.success(`${emp.name} deleted`);
+      })
+      .catch(() => toast.error('Failed to delete employee'));
   };
 
   const handleLeaveAction = (id: string, action: 'approved' | 'rejected') => {
@@ -267,9 +277,12 @@ export default function HRManagement() {
                         <div><span className="text-muted-foreground">Join Date:</span> <span className="text-foreground font-medium">{emp.joinDate}</span></div>
                         <div><span className="text-muted-foreground">Salary:</span> <span className="text-foreground font-medium">Rs {emp.salary.toLocaleString()}</span></div>
                       </div>
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
                         <button onClick={() => openEditEmployee(emp)} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary/20 transition-colors">
                           <Pencil className="w-3.5 h-3.5 inline-block mr-1" /> Edit
+                        </button>
+                        <button onClick={() => handleDeleteEmployee(emp)} className="text-xs bg-destructive/10 text-destructive px-3 py-1.5 rounded-lg font-medium hover:bg-destructive/20 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5 inline-block mr-1" /> Delete
                         </button>
                       </div>
                       {bal && (

@@ -47,6 +47,13 @@ exports.updateEmployee = async (req, res) => {
   res.json({ ...row, id: String(row._id) });
 };
 
+exports.deleteEmployee = async (req, res) => {
+  const row = await Employee.findByIdAndDelete(req.params.id);
+  if (!row) return res.status(404).json({ message: 'Employee not found' });
+  emitPosChange(["hr", "dashboard"]);
+  res.json({ ok: true });
+};
+
 exports.getAttendanceByDate = async (req, res) => {
   const date = String(req.query.date || new Date().toISOString().slice(0, 10));
   const items = await Attendance.find({ date }).lean();

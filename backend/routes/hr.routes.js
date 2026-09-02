@@ -18,6 +18,7 @@ const router = express.Router();
 router.get("/employees", authRequired, hrController.listEmployees);
 router.post("/employees", authRequired, upload.single("avatar"), hrController.createEmployee);
 router.patch("/employees/:id", authRequired, upload.single("avatar"), hrController.updateEmployee);
+router.delete("/employees/:id", authRequired, hrController.deleteEmployee);
 router.get("/attendance", authRequired, hrController.getAttendanceByDate);
 router.get("/leaves", authRequired, hrController.listLeaves);
 router.patch("/leaves/:id/status", authRequired, hrController.patchLeaveStatus);
