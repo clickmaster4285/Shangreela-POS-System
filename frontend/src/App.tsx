@@ -28,6 +28,7 @@ const SalesAnalytics = lazy(() => import("./pages/analytics/index.tsx"));
 const Login = lazy(() => import("./pages/auth/login/index.tsx"));
 const Expenses = lazy(() => import("./pages/expenses/index.tsx"));
 const RecipesPage = lazy(() => import("./pages/recipes/index.tsx"));
+const StaffBills = lazy(() => import("./pages/staff-bills/index.tsx"));
 
 // Settings/Infrastructure
 const PrinterIntegration = lazy(() => import("./pages/settings/printers/index.tsx"));
@@ -75,6 +76,7 @@ const App = () => (
                   <Route path="tables" element={<PageGuard page="tables"><TableManagement /></PageGuard>} />
                   <Route path="kitchen" element={<PageGuard page="kitchen"><KitchenDisplay /></PageGuard>} />
                   <Route path="billing" element={<PageGuard page="billing"><Billing /></PageGuard>} />
+                  <Route path="staff-bills" element={<PageGuard page="staffbills"><StaffBills /></PageGuard>} />
                   <Route path="menu" element={<PageGuard page="menu"><MenuManagement /></PageGuard>} />
                   <Route path="recipes" element={<PageGuard page="recipes"><RecipesPage /></PageGuard>} />
                   <Route path="reports" element={<PageGuard page="reports"><Reports /></PageGuard>} />

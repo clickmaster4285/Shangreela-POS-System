@@ -738,3 +738,135 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: error.message || "Failed to remove order" });
   }
 };
+
+// ─── Staff Bills Endpoints ──────────────────────────────────────────────────
+
+exports.assignStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { staffMember } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.staffMember = staffMember || null;
+    await order.save();
+
+    broadcastOrderDomain();
+    res.json({ ok: true, staffMember: order.staffMember });
+  } catch (error) {
+    console.error("Assign staff error:", error);
+    res.status(500).json({ message: error.message || "Failed to assign staff" });
+  }
+};
+
+exports.staffSummary = async (req, res) => {
+  try {
+    const summary = await Order.aggregate([
+      { $match: { staffMember: { $ne: null }, status: { $ne: "cancelled" } } },
+      {
+        $group: {
+          _id: "$staffMember",
+          pendingCount: {
+            $sum: { $cond: [{ $eq: ["$staffBillPaid", false] }, 1, 0] }
+          },
+          pendingTotal: {
+            $sum: { $cond: [{ $eq: ["$staffBillPaid", false] }, "$total", 0] }
+          },
+          paidCount: {
+            $sum: { $cond: [{ $eq: ["$staffBillPaid", true] }, 1, 0] }
+          },
+          paidTotal: {
+            $sum: { $cond: [{ $eq: ["$staffBillPaid", true] }, "$total", 0] }
+          },
+          lastOrderDate: { $max: "$createdAt" },
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          name: { $ifNull: ["$user.name", "Unknown"] },
+          role: { $ifNull: ["$user.role", "Staff"] },
+          pendingCount: 1,
+          pendingTotal: 1,
+          paidCount: 1,
+          paidTotal: 1,
+          lastOrderDate: 1,
+        }
+      },
+      { $sort: { pendingTotal: -1 } }
+    ]);
+
+    res.json({ staff: summary });
+  } catch (error) {
+    console.error("Staff summary error:", error);
+    res.status(500).json({ message: error.message || "Failed to get staff summary" });
+  }
+};
+
+exports.staffBills = async (req, res) => {
+  try {
+    const { page, limit, skip } = parsePagination(req.query);
+    const where = {
+      staffMember: { $ne: null },
+      status: { $ne: "cancelled" },
+    };
+
+    if (req.query.employeeId) where.staffMember = req.query.employeeId;
+    if (req.query.status && req.query.status !== "all") {
+      where.staffBillPaid = req.query.status === "paid";
+    }
+
+    // Date range filter
+    const { from, to } = req.query;
+    if (from || to) {
+      const dateFilter = {};
+      if (from) dateFilter.$gte = new Date(new Date(from).setHours(0, 0, 0, 0));
+      if (to) dateFilter.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+      if (Object.keys(dateFilter).length) where.createdAt = dateFilter;
+    }
+
+    const [items, total] = await Promise.all([
+      Order.find(where)
+        .populate("staffMember", "name role")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Order.countDocuments(where),
+    ]);
+
+    res.json(buildPaginatedResponse({ items, total, page, limit }));
+  } catch (error) {
+    console.error("Staff bills error:", error);
+    res.status(500).json({ message: error.message || "Failed to get staff bills" });
+  }
+};
+
+exports.markStaffPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order.staffMember) return res.status(400).json({ message: "This order is not assigned to any staff member" });
+
+    order.staffBillPaid = true;
+    await order.save();
+
+    broadcastOrderDomain();
+    res.json({ ok: true, staffBillPaid: true });
+  } catch (error) {
+    console.error("Mark staff paid error:", error);
+    res.status(500).json({ message: error.message || "Failed to mark as paid" });
+  }
+};

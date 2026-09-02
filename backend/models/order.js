@@ -27,6 +27,10 @@ const orderSchema = new mongoose.Schema(
     total: Number,
     /** Set true after recipe ingredients are deducted on payment/completion. */
     inventoryDeducted: { type: Boolean, default: false },
+    /** Staff member (Employee ID) this bill is assigned to */
+    staffMember: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null },
+    /** Whether the staff member has paid this bill */
+    staffBillPaid: { type: Boolean, default: false },
     items: [
       {
         quantity: Number,
@@ -64,5 +68,7 @@ orderSchema.index({ code: 1 }, { unique: true });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ table: 1, status: 1, createdAt: -1 });
 orderSchema.index({ type: 1, status: 1, createdAt: -1 });
+orderSchema.index({ staffMember: 1 });
+orderSchema.index({ staffMember: 1, staffBillPaid: 1 });
 
 module.exports = mongoose.model("Order", orderSchema);
