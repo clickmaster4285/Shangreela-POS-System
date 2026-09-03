@@ -576,6 +576,11 @@ exports.payment = async (req, res) => {
     const patch = { status: "completed", paymentMethod: req.body.paymentMethod || "cash" };
     applyBillingFieldsFromBody(req.body, patch);
 
+    // If order has a staff member, mark staff bill as paid too
+    if (row.staffMember) {
+      patch.staffBillPaid = true;
+    }
+
     // Explicitly set cashierName if provided
     if (req.user) {
       patch.cashierName = req.user.name || req.user.email;
