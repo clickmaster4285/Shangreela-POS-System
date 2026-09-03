@@ -30,7 +30,7 @@ export default function HRManagement() {
   const [adjustDeduction, setAdjustDeduction] = useState('');
   const [adjustLateFine, setAdjustLateFine] = useState('');
   const [employeePage, setEmployeePage] = useState(1);
-  const [employeeMeta, setEmployeeMeta] = useState({ hasNext: false, hasPrev: false });
+  const [employeeMeta, setEmployeeMeta] = useState({ hasNext: false, hasPrev: false, total: 0 });
 
   const loadHrData = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -44,7 +44,7 @@ export default function HRManagement() {
     ])
       .then(([employeesRes, attendanceRes, leavesRes, balancesRes, salaryRes, shiftsRes]) => {
         setEmployees(employeesRes.items);
-        setEmployeeMeta({ hasNext: employeesRes.pagination.hasNext, hasPrev: employeesRes.pagination.hasPrev });
+        setEmployeeMeta({ hasNext: employeesRes.pagination.hasNext, hasPrev: employeesRes.pagination.hasPrev, total: employeesRes.pagination.total });
         setAttendance(attendanceRes.items);
         setLeaveRequests(leavesRes.items);
         setLeaveBalances(balancesRes.items);
@@ -211,7 +211,7 @@ export default function HRManagement() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><Users className="w-3.5 h-3.5" /> Total Staff</div>
-          <p className="text-2xl font-bold text-foreground">{employees.length}</p>
+          <p className="text-2xl font-bold text-foreground">{employeeMeta.total}</p>
         </div>
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-primary text-xs mb-1"><CheckCircle className="w-3.5 h-3.5" /> Present Today</div>
