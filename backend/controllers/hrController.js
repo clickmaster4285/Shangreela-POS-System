@@ -1,13 +1,14 @@
 const { parsePagination, buildPaginatedResponse } = require("../utils/pagination");
 const { emitPosChange } = require("../utils/realtime");
-const { Employee, Attendance, LeaveRequest, LeaveBalance, SalaryRecord, Shift } = require("../models");
+const { Employee, Attendance, LeaveRequest, LeaveBalance, SalaryRecord, Shift, Order } = require("../models");
 
 exports.listEmployees = async (req, res) => {
-  const { page, limit, skip } = parsePagination(req.query);
   const where = {};
+  // By default only show active employees
+  if (!req.query.includeInactive) where.status = "active";
   if (req.query.search) where.$or = [{ name: { $regex: String(req.query.search), $options: "i" } }, { employeeId: { $regex: String(req.query.search), $options: "i" } }];
-  const [items, total] = await Promise.all([Employee.find(where).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Employee.countDocuments(where)]);
-  res.json(buildPaginatedResponse({ items: items.map((i) => ({ ...i, id: String(i._id) })), total, page, limit }));
+  const items = await Employee.find(where).sort({ createdAt: -1 }).lean();
+  res.json({ items: items.map((i) => ({ ...i, id: String(i._id) })) });
 };
 
 exports.createEmployee = async (req, res) => {
@@ -48,8 +49,22 @@ exports.updateEmployee = async (req, res) => {
 };
 
 exports.deleteEmployee = async (req, res) => {
-  const row = await Employee.findByIdAndDelete(req.params.id);
+  const row = await Employee.findById(req.params.id);
   if (!row) return res.status(404).json({ message: 'Employee not found' });
+
+  // Check for pending staff bills
+  const pendingBills = await Order.countDocuments({
+    staffMember: row._id,
+    staffBillPaid: false,
+    status: { $ne: "cancelled" },
+  });
+  if (pendingBills > 0) {
+    return res.status(400).json({ message: `Cannot delete: ${pendingBills} pending bill(s) must be settled first` });
+  }
+
+  // Soft delete
+  row.status = "inactive";
+  await row.save();
   emitPosChange(["hr", "dashboard"]);
   res.json({ ok: true });
 };

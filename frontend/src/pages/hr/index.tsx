@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Timer, Pencil, Trash2, X } from 'lucide-react';
+import { Users, Calendar, DollarSign, Clock, UserPlus, FileText, Award, CheckCircle, XCircle, Search, Timer, Pencil, Trash2, X } from 'lucide-react';
 import {
   type Employee,
   type AttendanceRecord,
@@ -9,7 +9,7 @@ import {
   type ShiftBlock,
 } from '@/data/hr/hrData';
 import { toast } from 'sonner';
-import { api, getBackendOrigin, type PaginatedResponse } from '@/lib/api/api';
+import { api, getBackendOrigin } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 
 type Tab = 'employees' | 'attendance' | 'shifts' | 'leaves' | 'salary';
@@ -24,18 +24,15 @@ export default function HRManagement() {
   const [shifts, setShifts] = useState<ShiftBlock[]>([]);
   const [search, setSearch] = useState('');
   const [showAddEmployee, setShowAddEmployee] = useState(false);
-  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [showSalaryAdjust, setShowSalaryAdjust] = useState<string | null>(null);
   const [adjustBonus, setAdjustBonus] = useState('');
   const [adjustDeduction, setAdjustDeduction] = useState('');
   const [adjustLateFine, setAdjustLateFine] = useState('');
-  const [employeePage, setEmployeePage] = useState(1);
-  const [employeeMeta, setEmployeeMeta] = useState({ hasNext: false, hasPrev: false, total: 0 });
 
   const loadHrData = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     Promise.all([
-      api<PaginatedResponse<Employee>>(`/hr/employees?page=${employeePage}&limit=10&search=${encodeURIComponent(search)}`),
+      api<{ items: Employee[] }>('/hr/employees'),
       api<{ items: AttendanceRecord[] }>(`/hr/attendance?date=${today}`),
       api<{ items: LeaveRequest[] }>('/hr/leaves'),
       api<{ items: LeaveBalance[] }>('/hr/leave-balances'),
@@ -44,7 +41,6 @@ export default function HRManagement() {
     ])
       .then(([employeesRes, attendanceRes, leavesRes, balancesRes, salaryRes, shiftsRes]) => {
         setEmployees(employeesRes.items);
-        setEmployeeMeta({ hasNext: employeesRes.pagination.hasNext, hasPrev: employeesRes.pagination.hasPrev, total: employeesRes.pagination.total });
         setAttendance(attendanceRes.items);
         setLeaveRequests(leavesRes.items);
         setLeaveBalances(balancesRes.items);
@@ -52,7 +48,7 @@ export default function HRManagement() {
         setShifts(shiftsRes.items);
       })
       .catch(() => toast.error('Failed to load HR data'));
-  }, [employeePage, search]);
+  }, []);
 
   useEffect(() => {
     loadHrData();
@@ -121,7 +117,6 @@ export default function HRManagement() {
           toast.success(`${result.name} updated successfully`);
         } else {
           toast.success(`${result.name} added as ${result.role}`);
-          setEmployeePage(1);
         }
       })
       .catch(() => toast.error(`Failed to ${editingEmployee ? 'update' : 'add'} employee`));
@@ -131,13 +126,13 @@ export default function HRManagement() {
   };
 
   const handleDeleteEmployee = (emp: Employee) => {
-    if (!confirm(`Delete ${emp.name}? This cannot be undone.`)) return;
+    if (!confirm(`Remove ${emp.name}? This can be reversed by an admin later.`)) return;
     api(`/hr/employees/${emp.id}`, { method: 'DELETE' })
       .then(() => {
         setEmployees(prev => prev.filter(e => e.id !== emp.id));
-        toast.success(`${emp.name} deleted`);
+        toast.success(`${emp.name} removed`);
       })
-      .catch(() => toast.error('Failed to delete employee'));
+      .catch((err) => toast.error(err.message || 'Failed to remove employee'));
   };
 
   const handleLeaveAction = (id: string, action: 'approved' | 'rejected') => {
@@ -188,7 +183,7 @@ export default function HRManagement() {
   const presentCount = todayAttendance.filter(a => a.status === 'present').length;
   const lateCount = todayAttendance.filter(a => a.status === 'late').length;
   const absentCount = todayAttendance.filter(a => a.status === 'absent').length;
-  const totalSalary = salaryRecords.reduce((sum, s) => sum + s.netSalary, 0);
+  const totalSalary = employees.reduce((sum, e) => sum + (e.salary || 0), 0);
 
   const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
     { key: 'employees', label: 'Employees', icon: Users },
@@ -211,7 +206,7 @@ export default function HRManagement() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><Users className="w-3.5 h-3.5" /> Total Staff</div>
-          <p className="text-2xl font-bold text-foreground">{employeeMeta.total}</p>
+          <p className="text-2xl font-bold text-foreground">{employees.length}</p>
         </div>
         <div className="bg-card rounded-2xl p-4 border border-border">
           <div className="flex items-center gap-2 text-primary text-xs mb-1"><CheckCircle className="w-3.5 h-3.5" /> Present Today</div>
@@ -242,73 +237,65 @@ export default function HRManagement() {
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employees..." className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-xl text-sm" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or ID..." className="w-full pl-9 pr-3 py-2.5 bg-card border border-border rounded-xl text-sm" />
           </div>
-          <div className="grid gap-2">
-            {filteredEmployees.map(emp => {
-              const expanded = expandedEmployee === emp.id;
-              const bal = leaveBalances.find(l => l.employeeId === emp.id);
-              return (
-                <div key={emp.id} className="bg-card rounded-2xl border border-border overflow-hidden">
-                  <button onClick={() => setExpandedEmployee(expanded ? null : emp.id)} className="w-full p-4 flex items-center justify-between text-left">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                        {emp.avatar ? (
-                          <img src={getAvatarUrl(emp.avatar)} alt={`${emp.name} avatar`} className="w-full h-full object-cover" />
-                        ) : (
-                          <span>{emp.name.split(' ').map(n => n[0]).join('')}</span>
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{emp.name}</p>
-                        <p className="text-xs text-muted-foreground">{emp.employeeId} • {emp.role} • {emp.department}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${emp.status === 'active' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{emp.status}</span>
-                      {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                    </div>
-                  </button>
-                  {expanded && (
-                    <div className="px-4 pb-4 pt-0 space-y-3 border-t border-border">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-3">
-                        <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-medium">{emp.phone}</span></div>
-                        <div><span className="text-muted-foreground">Email:</span> <span className="text-foreground font-medium">{emp.email}</span></div>
-                        <div><span className="text-muted-foreground">Join Date:</span> <span className="text-foreground font-medium">{emp.joinDate}</span></div>
-                        <div><span className="text-muted-foreground">Salary:</span> <span className="text-foreground font-medium">Rs {emp.salary.toLocaleString()}</span></div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => openEditEmployee(emp)} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary/20 transition-colors">
-                          <Pencil className="w-3.5 h-3.5 inline-block mr-1" /> Edit
-                        </button>
-                        <button onClick={() => handleDeleteEmployee(emp)} className="text-xs bg-destructive/10 text-destructive px-3 py-1.5 rounded-lg font-medium hover:bg-destructive/20 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5 inline-block mr-1" /> Delete
-                        </button>
-                      </div>
-                      {bal && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Leave Balances</p>
-                          <div className="flex gap-2 flex-wrap">
-                            <span className="text-xs bg-muted px-2 py-1 rounded-lg">Sick: {bal.sick}</span>
-                            <span className="text-xs bg-muted px-2 py-1 rounded-lg">Casual: {bal.casual}</span>
-                            <span className="text-xs bg-muted px-2 py-1 rounded-lg">Annual: {bal.annual}</span>
-                            <span className="text-xs bg-muted px-2 py-1 rounded-lg">Emergency: {bal.emergency}</span>
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employee</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Role</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Department</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Phone</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Salary</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEmployees.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">No employees found</td></tr>
+                  )}
+                  {filteredEmployees.map(emp => (
+                    <tr key={emp.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                            {emp.avatar ? (
+                              <img src={getAvatarUrl(emp.avatar)} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{emp.name.split(' ').map(n => n[0]).join('')}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground truncate">{emp.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{emp.employeeId}</p>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end gap-2">
-            <button disabled={!employeeMeta.hasPrev} onClick={() => setEmployeePage(p => Math.max(1, p - 1))} className="px-3 py-2 rounded-xl border border-border text-xs disabled:opacity-50">
-              Previous
-            </button>
-            <button disabled={!employeeMeta.hasNext} onClick={() => setEmployeePage(p => p + 1)} className="px-3 py-2 rounded-xl border border-border text-xs disabled:opacity-50">
-              Next
-            </button>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{emp.role}</td>
+                      <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">{emp.department}</td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs hidden lg:table-cell">{emp.phone}</td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs hidden xl:table-cell">Rs {emp.salary.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${emp.status === 'active' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{emp.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEditEmployee(emp)} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDeleteEmployee(emp)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Remove">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
