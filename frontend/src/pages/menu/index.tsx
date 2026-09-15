@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { api, type PaginatedResponse } from '@/lib/api/api';
 import { usePosRealtimeScopes } from '@/hooks/pos/use-pos-realtime';
 import { MenuItemFormModal } from './components/MenuItemFormModal';
-import { AddCategoryModal } from './components/AddCategoryModal';
 import { MenuItemsTable } from './components/MenuItemsTable';
 
 type MenuCategory = {
@@ -64,8 +63,6 @@ export default function MenuManagement() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [categoryTree, setCategoryTree] = useState<MenuCategory[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [newCategory, setNewCategory] = useState('');
-  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [meta, setMeta] = useState({ hasNext: false, hasPrev: false });
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -176,12 +173,18 @@ export default function MenuManagement() {
   const allCategories = Array.from(new Set([...categories.map(category => category.name), ...DEFAULT_SPECIAL_CATEGORIES]));
   const childCategories = categories.filter(category => Boolean(category.parentId) && category.isActive);
   const isBundleCategory = form.category === 'Deals' || form.category === 'Platters';
-  const bundleSourceItems = useMemo(
-    () => allMenuItems.filter(
+  const bundleSourceItems = useMemo(() => {
+    let items = allMenuItems.filter(
       (i) => i.id !== editing?.id && i.category && !['deals', 'platters'].includes(i.category.toLowerCase())
-    ),
-    [allMenuItems, editing?.id]
-  );
+    );
+    if (form.categoryId) {
+      items = items.filter(i => String((i as { categoryId?: string }).categoryId || '') === form.categoryId);
+    } else if (form.parentCategoryId) {
+      const childIds = categories.filter(c => c.parentId === form.parentCategoryId).map(c => c.id);
+      items = items.filter(i => childIds.includes(String((i as { categoryId?: string }).categoryId || '')));
+    }
+    return items;
+  }, [allMenuItems, editing?.id, form.categoryId, form.parentCategoryId, categories]);
   const selectedRecipe = useMemo(
     () => recipes.find(r => r.id === selectedRecipeId) || null,
     [recipes, selectedRecipeId]
@@ -345,6 +348,10 @@ export default function MenuManagement() {
       toast.error('Add at least one item for this deal/platter');
       return;
     }
+    if (!isBundleCategory && !form.categoryId && !form.category) {
+      toast.error('Select a category for this menu item');
+      return;
+    }
     const formData = new FormData();
     formData.append('name', form.name);
     formData.append('price', form.price);
@@ -353,14 +360,15 @@ export default function MenuManagement() {
     formData.append('kitchenRequired', String(form.kitchenRequired));
     formData.append('isFavorite', String(form.isFavorite));
     formData.append('image', form.image || '');
-    formData.append('recipe', selectedRecipeId || '');
-    formData.append('scale', scale);
-    formData.append('ingredientOverrides', JSON.stringify(ingredientOverrides));
     if (isBundleCategory) {
       formData.append('bundleItems', JSON.stringify(bundleItems.map(bi => ({
         menuItem: bi.id,
         quantity: bi.quantity
       }))));
+    } else {
+      formData.append('recipe', selectedRecipeId || '');
+      formData.append('scale', scale);
+      formData.append('ingredientOverrides', JSON.stringify(ingredientOverrides));
     }
     if (imageFile) {
       formData.set('image', imageFile);
@@ -445,21 +453,6 @@ export default function MenuManagement() {
     setBundleQty('1');
   };
 
-  const addCategory = () => {
-    const trimmed = newCategory.trim();
-    if (!trimmed) { toast.error('Enter a category name'); return; }
-    if (categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) { toast.error('Category already exists'); return; }
-    api('/menu/categories', { method: 'POST', body: JSON.stringify({ name: trimmed }) }).then(() => {
-      toast.success('Category added');
-      fetchCategories();
-      setNewCategory('');
-      setShowCategoryForm(false);
-      setCategoryFilter(trimmed);
-    }).catch((error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to add category');
-    });
-  };
-
   const toggleAvailability = (id: string) => {
     const row = items.find(i => i.id === id);
     if (!row) return;
@@ -485,13 +478,6 @@ export default function MenuManagement() {
             <p className="text-sm text-muted-foreground">One search for names, descriptions, and categories. Use the list to show one category only.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowCategoryForm(true)}
-              className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Add Category
-            </button>
             <button onClick={() => openNew('Deals')} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:bg-secondary/90 transition-colors">
               <Plus className="w-4 h-4" /> Add Deal/Platter
             </button>
@@ -577,16 +563,6 @@ export default function MenuManagement() {
         setImagePreviewUrl={setImagePreviewUrl}
         save={save}
         saveRecipe={saveRecipe}
-        inputClass={inputClass}
-      />
-
-      {/* Add Category Modal */}
-      <AddCategoryModal
-        showCategoryForm={showCategoryForm}
-        onClose={() => setShowCategoryForm(false)}
-        newCategory={newCategory}
-        setNewCategory={setNewCategory}
-        addCategory={addCategory}
         inputClass={inputClass}
       />
 

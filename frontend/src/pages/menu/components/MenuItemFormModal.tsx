@@ -127,7 +127,7 @@ export function MenuItemFormModal({
         className={`bg-card rounded-2xl p-6 w-full ${!isBundleCategory ? 'max-w-5xl' : 'max-w-2xl'} space-y-4`}
       >
         <div className="flex justify-between items-center">
-          <h3 className="font-serif text-lg font-bold">{editing ? 'Edit Item' : 'New Item'}</h3>
+          <h3 className="font-serif text-lg font-bold">{editing ? (isBundleCategory ? 'Edit Deal / Platter' : 'Edit Menu Item') : (isBundleCategory ? 'New Deal / Platter' : 'New Menu Item')}</h3>
           <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
 
@@ -456,7 +456,7 @@ export function MenuItemFormModal({
         </div>
 
         <button onClick={save} className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
-          {editing ? 'Update' : 'Add'} Item
+          {editing ? 'Update' : 'Add'} {isBundleCategory ? 'Deal / Platter' : 'Menu Item'}
         </button>
       </div>
     </div>
