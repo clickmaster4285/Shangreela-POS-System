@@ -169,7 +169,10 @@ export default function HRManagement() {
       .catch(() => toast.error('Failed to mark salary paid'));
   };
 
-  const filteredEmployees = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.employeeId.toLowerCase().includes(search.toLowerCase()));
+  const filteredEmployees = employees.filter(e => {
+    const q = search.toLowerCase();
+    return (e.name || '').toLowerCase().includes(q) || (e.employeeId || '').toLowerCase().includes(q);
+  });
 
   useEffect(() => {
     return () => {
