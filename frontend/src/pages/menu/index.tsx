@@ -146,6 +146,7 @@ export default function MenuManagement() {
   usePosRealtimeScopes(['menu'], refreshMenuAdmin);
 
   const [editing, setEditing] = useState<MenuItem | null>(null);
+  const [editingIsBundle, setEditingIsBundle] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', price: '', category: 'BBQ', categoryId: '', parentCategoryId: '', description: '', kitchenRequired: true, image: '', isFavorite: false });
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
@@ -172,19 +173,13 @@ export default function MenuManagement() {
 
   const allCategories = Array.from(new Set([...categories.map(category => category.name), ...DEFAULT_SPECIAL_CATEGORIES]));
   const childCategories = categories.filter(category => Boolean(category.parentId) && category.isActive);
-  const isBundleCategory = form.category === 'Deals' || form.category === 'Platters';
-  const bundleSourceItems = useMemo(() => {
-    let items = allMenuItems.filter(
+  const isBundleCategory = editing ? editingIsBundle : (form.category === 'Deals' || form.category === 'Platters');
+  const bundleSourceItems = useMemo(
+    () => allMenuItems.filter(
       (i) => i.id !== editing?.id && i.category && !['deals', 'platters'].includes(i.category.toLowerCase())
-    );
-    if (form.categoryId) {
-      items = items.filter(i => String((i as { categoryId?: string }).categoryId || '') === form.categoryId);
-    } else if (form.parentCategoryId) {
-      const childIds = categories.filter(c => c.parentId === form.parentCategoryId).map(c => c.id);
-      items = items.filter(i => childIds.includes(String((i as { categoryId?: string }).categoryId || '')));
-    }
-    return items;
-  }, [allMenuItems, editing?.id, form.categoryId, form.parentCategoryId, categories]);
+    ),
+    [allMenuItems, editing?.id]
+  );
   const selectedRecipe = useMemo(
     () => recipes.find(r => r.id === selectedRecipeId) || null,
     [recipes, selectedRecipeId]
@@ -266,6 +261,7 @@ export default function MenuManagement() {
     setIngredientSearch('');
     setOverrideIngredientSearch('');
     setEditing(null);
+    setEditingIsBundle(false);
     setShowForm(true);
   };
 
@@ -324,6 +320,7 @@ export default function MenuManagement() {
     setNewRecipeName('');
     setNewRecipeIngredients([]);
     setOverrideIngredientSearch('');
+    setEditingIsBundle(item.category === 'Deals' || item.category === 'Platters');
     setEditing(item);
     setShowForm(true);
   };
